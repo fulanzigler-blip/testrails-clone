@@ -1,0 +1,304 @@
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import jwt from '@fastify/jwt';
+import rateLimit from '@fastify/rate-limit';
+import websocket from '@fastify/websocket';
+import csrf from '@fastify/csrf-protection';
+import helmet from '@fastify/helmet';
+import prisma from './config/database';
+import redis from './config/redis';
+import logger from './utils/logger';
+import * as authMiddleware from './middleware/auth';
+import { generateSecureToken } from './utils/security';
+
+// Import routes
+import authRoutes from './routes/auth';
+import organizationRoutes from './routes/organizations';
+import userRoutes from './routes/users';
+import projectRoutes from './routes/projects';
+import testSuiteRoutes from './routes/test-suites';
+import testCaseRoutes from './routes/test-cases';
+import testRunRoutes from './routes/test-runs';
+import testResultRoutes from './routes/test-results';
+import reportRoutes from './routes/reports';
+import integrationRoutes from './routes/integrations';
+import notificationRoutes from './routes/notifications';
+
+// Create Fastify instance
+const fastify = Fastify({
+  logger: false, // Using Winston instead
+});
+
+// Register plugins
+async function registerPlugins() {
+  // SECURITY: Helmet - Security headers (FIX #7)
+  await fastify.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'", 'wss:', 'ws:'],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'self'"],
+        frameSrc: ["'none'"],
+      },
+    },
+    hsts: {
+      maxAge: 31536000, // 1 year
+      includeSubDomains: true,
+      preload: true,
+    },
+    noSniff: true,
+    xssFilter: true,
+    hidePoweredBy: true,
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  });
+
+  // CORS
+  await fastify.register(cors, {
+    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    credentials: true,
+  });
+
+  // SECURITY: JWT - Use strong secret from environment (FIX #4)
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret || jwtSecret === 'your-super-secret-jwt-key-change-this' || jwtSecret === 'development-jwt-secret-change-in-production') {
+    throw new Error('JWT_SECRET must be set to a strong value in production');
+  }
+
+  await fastify.register(jwt, {
+    secret: jwtSecret,
+    cookie: {
+      cookieName: 'refresh_token',
+      signed: false,
+      options: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+      },
+    },
+    sign: {
+      expiresIn: process.env.JWT_EXPIRES_IN || '15m',
+    },
+  });
+
+  // SECURITY: CSRF Protection for state-changing endpoints (FIX #1)
+  await fastify.register(csrf, {
+    csrfOpts: {
+      secretKey: 'csrf_secret',
+      sessionKey: 'csrf_token',
+    },
+    getToken: (req: any) => {
+      // Get token from header or body
+      return req.headers['x-csrf-token'] || req.body?.csrf_token;
+    },
+  });
+
+  // Global rate limiting
+  await fastify.register(rateLimit, {
+    max: parseInt(process.env.RATE_LIMIT_MAX || '1000'),
+    timeWindow: process.env.RATE_LIMIT_TIME_WINDOW || '1 hour',
+    redis,
+    skipOnError: true,
+    addHeaders: {
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true,
+    },
+    errorResponseBuilder: (req, context) => ({
+      success: false,
+      error: {
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'Too many requests',
+        details: [
+          {
+            limit: context.limit,
+            reset: new Date(Date.now() + context.ttl).toISOString(),
+          },
+        ],
+      },
+    }),
+  });
+
+  // SECURITY: Stricter rate limiting for authentication endpoints (FIX #3)
+  await fastify.register(rateLimit, {
+    max: 5, // 5 attempts
+    timeWindow: '15 minutes', // per 15 minutes
+    redis,
+    skipOnError: true,
+    addHeaders: {
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true,
+    },
+    errorResponseBuilder: (req, context) => ({
+      success: false,
+      error: {
+        code: 'AUTH_RATE_LIMIT_EXCEEDED',
+        message: 'Too many authentication attempts. Please try again later.',
+        details: [
+          {
+            limit: context.limit,
+            reset: new Date(Date.now() + context.ttl).toISOString(),
+          },
+        ],
+      },
+    }),
+  }, { prefix: '/api/v1/auth' });
+
+  // WebSocket
+  await fastify.register(websocket);
+
+  // Attach middleware
+  fastify.decorate('authenticate', authMiddleware.authenticate);
+  fastify.decorate('authorize', authMiddleware.authorize);
+  fastify.decorate('getOrganizationContext', authMiddleware.getOrganizationContext);
+
+  // Attach Prisma and Redis to request
+  fastify.addHook('onRequest', async (request, reply) => {
+    (request.server as any).prisma = prisma;
+  });
+}
+
+// Register routes
+async function registerRoutes() {
+  // Health check
+  fastify.get('/health', async (request, reply) => {
+    try {
+      // Check database connection
+      await prisma.$queryRaw`SELECT 1`;
+      // Check Redis connection
+      await redis.ping();
+
+      return reply.send({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        services: {
+          database: 'connected',
+          redis: 'connected',
+        },
+      });
+    } catch (error) {
+      logger.error('Health check failed:', error);
+      return reply.code(503).send({
+        status: 'error',
+        message: 'Service unavailable',
+      });
+    }
+  });
+
+  // SECURITY: WebSocket connection with authentication (FIX #5)
+  fastify.register(async function (fastify) {
+    fastify.get('/ws', { websocket: true }, async (connection, req) => {
+      try {
+        // Extract JWT from query string or headers
+        const token = (req as any).query?.token || (req as any).headers?.['sec-websocket-protocol'];
+
+        if (!token) {
+          connection.socket.send(JSON.stringify({
+            type: 'error',
+            message: 'Authentication required',
+          }));
+          connection.socket.close(4001, 'Authentication required');
+          return;
+        }
+
+        // Verify JWT token
+        try {
+          const decoded = await fastify.jwt.verify(token);
+          (connection as any).user = decoded;
+          logger.info(`WebSocket connection authenticated for user: ${decoded.userId}`);
+        } catch (error) {
+          logger.warn('WebSocket authentication failed:', error);
+          connection.socket.send(JSON.stringify({
+            type: 'error',
+            message: 'Invalid token',
+          }));
+          connection.socket.close(4003, 'Invalid token');
+          return;
+        }
+
+        connection.socket.on('message', async message => {
+          try {
+            // Process authenticated messages
+            const data = JSON.parse(message.toString());
+            const userId = (connection as any).user?.userId;
+
+            // TODO: Implement real-time update logic
+            connection.socket.send(JSON.stringify({
+              type: 'pong',
+              data: message.toString(),
+              userId,
+            }));
+          } catch (error) {
+            logger.error('Error processing WebSocket message:', error);
+          }
+        });
+
+        connection.socket.on('close', () => {
+          logger.info('WebSocket connection closed');
+        });
+      } catch (error) {
+        logger.error('WebSocket connection error:', error);
+      }
+    });
+  });
+
+  // API routes
+  await fastify.register(authRoutes, { prefix: '/api/v1/auth' });
+  await fastify.register(organizationRoutes, { prefix: '/api/v1/organizations' });
+  await fastify.register(userRoutes, { prefix: '/api/v1/users' });
+  await fastify.register(projectRoutes, { prefix: '/api/v1/projects' });
+  await fastify.register(testSuiteRoutes, { prefix: '/api/v1/test-suites' });
+  await fastify.register(testCaseRoutes, { prefix: '/api/v1/test-cases' });
+  await fastify.register(testRunRoutes, { prefix: '/api/v1/test-runs' });
+  await fastify.register(testResultRoutes, { prefix: '/api/v1' });
+  await fastify.register(reportRoutes, { prefix: '/api/v1/reports' });
+  await fastify.register(integrationRoutes, { prefix: '/api/v1/integrations' });
+  await fastify.register(notificationRoutes, { prefix: '/api/v1/notifications' });
+}
+
+// Start server
+async function start() {
+  try {
+    await registerPlugins();
+    await registerRoutes();
+
+    const port = parseInt(process.env.PORT || '3000');
+    const host = process.env.HOST || '0.0.0.0';
+
+    await fastify.listen({ port, host });
+
+    logger.info(`Server listening on http://${host}:${port}`);
+    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`Security: JWT secret ${jwtSecret ? 'configured' : 'MISSING'}`);
+  } catch (error) {
+    logger.error('Error starting server:', error);
+    process.exit(1);
+  }
+}
+
+// Graceful shutdown
+async function shutdown() {
+  logger.info('Shutting down gracefully...');
+
+  try {
+    await fastify.close();
+    await prisma.$disconnect();
+    await redis.quit();
+    logger.info('Shutdown complete');
+    process.exit(0);
+  } catch (error) {
+    logger.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+// Start the server
+start();
