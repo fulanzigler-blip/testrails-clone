@@ -1,0 +1,254 @@
+2026-02-24 07:00:34,504 - INFO - === STARTING MONITORING CYCLE ===
+2026-02-24 07:00:34,505 - WARNING - Price for BBCA on us_broker_nasdaq not available
+2026-02-24 07:00:34,505 - WARNING - Price for UNVR on us_broker_nasdaq not available
+2026-02-24 07:00:34,505 - WARNING - Price for TLKM on us_broker_nasdaq not available
+2026-02-24 07:00:34,505 - WARNING - Price for GOTO on us_broker_nasdaq not available
+2026-02-24 07:00:34,505 - WARNING - Price for ADRO on us_broker_nasdaq not available
+2026-02-24 07:00:34,505 - INFO - Total peluang: 4
+2026-02-24 07:00:34,506 - INFO - Peluang valid: 0
+2026-02-24 07:00:34,506 - INFO - 
+#1 GOTO:
+2026-02-24 07:00:34,506 - INFO -   Spread: 1.20%
+2026-02-24 07:00:34,506 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:00:34,506 - INFO -   Risk: $0.2994
+2026-02-24 07:00:34,506 - INFO -   Valid: False
+2026-02-24 07:00:34,506 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:00:34,506 - INFO - 
+#2 ADRO:
+2026-02-24 07:00:34,506 - INFO -   Spread: 0.72%
+2026-02-24 07:00:34,506 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:00:34,506 - INFO -   Risk: $0.1792
+2026-02-24 07:00:34,506 - INFO -   Valid: False
+2026-02-24 07:00:34,506 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:00:34,506 - INFO - 
+#3 UNVR:
+2026-02-24 07:00:34,506 - INFO -   Spread: 0.63%
+2026-02-24 07:00:34,506 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:00:34,506 - INFO -   Risk: $0.1567
+2026-02-24 07:00:34,506 - INFO -   Valid: False
+2026-02-24 07:00:34,506 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:00:34,506 - INFO - 
+#4 TLKM:
+2026-02-24 07:00:34,506 - INFO -   Spread: 0.53%
+2026-02-24 07:00:34,506 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:00:34,506 - INFO -   Risk: $0.1337
+2026-02-24 07:00:34,506 - INFO -   Valid: False
+2026-02-24 07:00:34,506 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:00:34,506 - INFO - === MONITORING CYCLE COMPLETE ===
+
+2026-02-24 07:05:34,573 - INFO - === STARTING MONITORING CYCLE ===
+2026-02-24 07:05:34,575 - WARNING - Price for BBCA on us_broker_nasdaq not available
+2026-02-24 07:05:34,576 - WARNING - Price for UNVR on us_broker_nasdaq not available
+2026-02-24 07:05:34,576 - WARNING - Price for TLKM on us_broker_nasdaq not available
+2026-02-24 07:05:34,577 - WARNING - Price for GOTO on us_broker_nasdaq not available
+2026-02-24 07:05:34,577 - WARNING - Price for ADRO on us_broker_nasdaq not available
+2026-02-24 07:05:34,578 - INFO - Total peluang: 4
+2026-02-24 07:05:34,578 - INFO - Peluang valid: 0
+2026-02-24 07:05:34,578 - INFO - 
+#1 GOTO:
+2026-02-24 07:05:34,578 - INFO -   Spread: 1.20%
+2026-02-24 07:05:34,579 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:05:34,579 - INFO -   Risk: $0.2994
+2026-02-24 07:05:34,579 - INFO -   Valid: False
+2026-02-24 07:05:34,579 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:05:34,579 - INFO - 
+#2 ADRO:
+2026-02-24 07:05:34,579 - INFO -   Spread: 0.72%
+2026-02-24 07:05:34,579 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:05:34,580 - INFO -   Risk: $0.1792
+2026-02-24 07:05:34,580 - INFO -   Valid: False
+2026-02-24 07:05:34,580 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:05:34,580 - INFO - 
+#3 UNVR:
+2026-02-24 07:05:34,580 - INFO -   Spread: 0.63%
+2026-02-24 07:05:34,580 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:05:34,580 - INFO -   Risk: $0.1567
+2026-02-24 07:05:34,580 - INFO -   Valid: False
+2026-02-24 07:05:34,581 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:05:34,581 - INFO - 
+#4 TLKM:
+2026-02-24 07:05:34,581 - INFO -   Spread: 0.53%
+2026-02-24 07:05:34,581 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:05:34,581 - INFO -   Risk: $0.1337
+2026-02-24 07:05:34,581 - INFO -   Valid: False
+2026-02-24 07:05:34,581 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:05:34,582 - INFO - === MONITORING CYCLE COMPLETE ===
+
+2026-02-24 07:10:34,643 - INFO - === STARTING MONITORING CYCLE ===
+2026-02-24 07:10:34,645 - WARNING - Price for BBCA on us_broker_nasdaq not available
+2026-02-24 07:10:34,646 - WARNING - Price for UNVR on us_broker_nasdaq not available
+2026-02-24 07:10:34,647 - WARNING - Price for TLKM on us_broker_nasdaq not available
+2026-02-24 07:10:34,648 - WARNING - Price for GOTO on us_broker_nasdaq not available
+2026-02-24 07:10:34,648 - WARNING - Price for ADRO on us_broker_nasdaq not available
+2026-02-24 07:10:34,649 - INFO - Total peluang: 4
+2026-02-24 07:10:34,649 - INFO - Peluang valid: 0
+2026-02-24 07:10:34,649 - INFO - 
+#1 GOTO:
+2026-02-24 07:10:34,649 - INFO -   Spread: 1.20%
+2026-02-24 07:10:34,650 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:10:34,650 - INFO -   Risk: $0.2994
+2026-02-24 07:10:34,650 - INFO -   Valid: False
+2026-02-24 07:10:34,650 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:10:34,651 - INFO - 
+#2 ADRO:
+2026-02-24 07:10:34,651 - INFO -   Spread: 0.72%
+2026-02-24 07:10:34,651 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:10:34,651 - INFO -   Risk: $0.1792
+2026-02-24 07:10:34,651 - INFO -   Valid: False
+2026-02-24 07:10:34,652 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:10:34,652 - INFO - 
+#3 UNVR:
+2026-02-24 07:10:34,652 - INFO -   Spread: 0.63%
+2026-02-24 07:10:34,652 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:10:34,652 - INFO -   Risk: $0.1567
+2026-02-24 07:10:34,652 - INFO -   Valid: False
+2026-02-24 07:10:34,652 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:10:34,653 - INFO - 
+#4 TLKM:
+2026-02-24 07:10:34,653 - INFO -   Spread: 0.53%
+2026-02-24 07:10:34,653 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:10:34,653 - INFO -   Risk: $0.1337
+2026-02-24 07:10:34,653 - INFO -   Valid: False
+2026-02-24 07:10:34,653 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:10:34,653 - INFO - === MONITORING CYCLE COMPLETE ===
+
+2026-02-24 07:15:34,714 - INFO - === STARTING MONITORING CYCLE ===
+2026-02-24 07:15:34,716 - WARNING - Price for BBCA on us_broker_nasdaq not available
+2026-02-24 07:15:34,717 - WARNING - Price for UNVR on us_broker_nasdaq not available
+2026-02-24 07:15:34,718 - WARNING - Price for TLKM on us_broker_nasdaq not available
+2026-02-24 07:15:34,718 - WARNING - Price for GOTO on us_broker_nasdaq not available
+2026-02-24 07:15:34,719 - WARNING - Price for ADRO on us_broker_nasdaq not available
+2026-02-24 07:15:34,719 - INFO - Total peluang: 4
+2026-02-24 07:15:34,719 - INFO - Peluang valid: 0
+2026-02-24 07:15:34,719 - INFO - 
+#1 GOTO:
+2026-02-24 07:15:34,719 - INFO -   Spread: 1.20%
+2026-02-24 07:15:34,719 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:15:34,720 - INFO -   Risk: $0.2994
+2026-02-24 07:15:34,720 - INFO -   Valid: False
+2026-02-24 07:15:34,720 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:15:34,720 - INFO - 
+#2 ADRO:
+2026-02-24 07:15:34,720 - INFO -   Spread: 0.72%
+2026-02-24 07:15:34,720 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:15:34,720 - INFO -   Risk: $0.1792
+2026-02-24 07:15:34,720 - INFO -   Valid: False
+2026-02-24 07:15:34,720 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:15:34,720 - INFO - 
+#3 UNVR:
+2026-02-24 07:15:34,721 - INFO -   Spread: 0.63%
+2026-02-24 07:15:34,721 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:15:34,721 - INFO -   Risk: $0.1567
+2026-02-24 07:15:34,721 - INFO -   Valid: False
+2026-02-24 07:15:34,721 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:15:34,721 - INFO - 
+#4 TLKM:
+2026-02-24 07:15:34,721 - INFO -   Spread: 0.53%
+2026-02-24 07:15:34,721 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:15:34,721 - INFO -   Risk: $0.1337
+2026-02-24 07:15:34,721 - INFO -   Valid: False
+2026-02-24 07:15:34,721 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:15:34,721 - INFO - === MONITORING CYCLE COMPLETE ===
+
+2026-02-24 07:20:34,781 - INFO - === STARTING MONITORING CYCLE ===
+2026-02-24 07:20:34,782 - WARNING - Price for BBCA on us_broker_nasdaq not available
+2026-02-24 07:20:34,782 - WARNING - Price for UNVR on us_broker_nasdaq not available
+2026-02-24 07:20:34,783 - WARNING - Price for TLKM on us_broker_nasdaq not available
+2026-02-24 07:20:34,784 - WARNING - Price for GOTO on us_broker_nasdaq not available
+2026-02-24 07:20:34,784 - WARNING - Price for ADRO on us_broker_nasdaq not available
+2026-02-24 07:20:34,785 - INFO - Total peluang: 4
+2026-02-24 07:20:34,785 - INFO - Peluang valid: 0
+2026-02-24 07:20:34,785 - INFO - 
+#1 GOTO:
+2026-02-24 07:20:34,785 - INFO -   Spread: 1.20%
+2026-02-24 07:20:34,786 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:20:34,786 - INFO -   Risk: $0.2994
+2026-02-24 07:20:34,786 - INFO -   Valid: False
+2026-02-24 07:20:34,786 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:20:34,786 - INFO - 
+#2 ADRO:
+2026-02-24 07:20:34,786 - INFO -   Spread: 0.72%
+2026-02-24 07:20:34,787 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:20:34,787 - INFO -   Risk: $0.1792
+2026-02-24 07:20:34,787 - INFO -   Valid: False
+2026-02-24 07:20:34,787 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:20:34,787 - INFO - 
+#3 UNVR:
+2026-02-24 07:20:34,787 - INFO -   Spread: 0.63%
+2026-02-24 07:20:34,787 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:20:34,787 - INFO -   Risk: $0.1567
+2026-02-24 07:20:34,787 - INFO -   Valid: False
+2026-02-24 07:20:34,787 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:20:34,788 - INFO - 
+#4 TLKM:
+2026-02-24 07:20:34,788 - INFO -   Spread: 0.53%
+2026-02-24 07:20:34,788 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:20:34,788 - INFO -   Risk: $0.1337
+2026-02-24 07:20:34,788 - INFO -   Valid: False
+2026-02-24 07:20:34,788 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:20:34,788 - INFO - === MONITORING CYCLE COMPLETE ===
+
+2026-02-24 07:25:34,851 - INFO - === STARTING MONITORING CYCLE ===
+2026-02-24 07:25:34,853 - WARNING - Price for BBCA on us_broker_nasdaq not available
+2026-02-24 07:25:34,853 - WARNING - Price for UNVR on us_broker_nasdaq not available
+2026-02-24 07:25:34,854 - WARNING - Price for TLKM on us_broker_nasdaq not available
+2026-02-24 07:25:34,854 - WARNING - Price for GOTO on us_broker_nasdaq not available
+2026-02-24 07:25:34,854 - WARNING - Price for ADRO on us_broker_nasdaq not available
+2026-02-24 07:25:34,855 - INFO - Total peluang: 4
+2026-02-24 07:25:34,855 - INFO - Peluang valid: 0
+2026-02-24 07:25:34,855 - INFO - 
+#1 GOTO:
+2026-02-24 07:25:34,855 - INFO -   Spread: 1.20%
+2026-02-24 07:25:34,855 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:25:34,856 - INFO -   Risk: $0.2994
+2026-02-24 07:25:34,856 - INFO -   Valid: False
+2026-02-24 07:25:34,856 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:25:34,856 - INFO - 
+#2 ADRO:
+2026-02-24 07:25:34,856 - INFO -   Spread: 0.72%
+2026-02-24 07:25:34,856 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:25:34,857 - INFO -   Risk: $0.1792
+2026-02-24 07:25:34,857 - INFO -   Valid: False
+2026-02-24 07:25:34,857 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:25:34,857 - INFO - 
+#3 UNVR:
+2026-02-24 07:25:34,857 - INFO -   Spread: 0.63%
+2026-02-24 07:25:34,857 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:25:34,857 - INFO -   Risk: $0.1567
+2026-02-24 07:25:34,857 - INFO -   Valid: False
+2026-02-24 07:25:34,857 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:25:34,858 - INFO - 
+#4 TLKM:
+2026-02-24 07:25:34,858 - INFO -   Spread: 0.53%
+2026-02-24 07:25:34,858 - INFO -   Risk-Reward: 1.60
+2026-02-24 07:25:34,858 - INFO -   Risk: $0.1337
+2026-02-24 07:25:34,858 - INFO -   Valid: False
+2026-02-24 07:25:34,858 - INFO -   Reason: Risk-reward 1.60 < minimum 2.0
+2026-02-24 07:25:34,858 - INFO - === MONITORING CYCLE COMPLETE ===
+
+=== ARBITRAGE CONTINUOUS MONITORING STARTED ===
+Report time: 15:00 WIB (8:00 UTC)
+Press Ctrl+C to stop
+
+[2026-02-24 07:00:34 UTC] Scanning for arbitrage opportunities...
+Next check in 5 minutes...
+
+[2026-02-24 07:05:34 UTC] Scanning for arbitrage opportunities...
+Next check in 5 minutes...
+
+[2026-02-24 07:10:34 UTC] Scanning for arbitrage opportunities...
+Next check in 5 minutes...
+
+[2026-02-24 07:15:34 UTC] Scanning for arbitrage opportunities...
+Next check in 5 minutes...
+
+[2026-02-24 07:20:34 UTC] Scanning for arbitrage opportunities...
+Next check in 5 minutes...
+
+[2026-02-24 07:25:34 UTC] Scanning for arbitrage opportunities...
+Next check in 5 minutes...
+
+
+⚠️  Shutdown signal received...
+
+=== ARBITRAGE CONTINUOUS MONITORING STOPPED ===

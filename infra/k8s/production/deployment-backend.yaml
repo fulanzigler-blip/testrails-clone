@@ -1,0 +1,157 @@
+# Blue deployments
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-blue
+  namespace: testrails-prod
+  labels:
+    app: backend
+    version: blue
+    environment: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: backend
+        version: blue
+        environment: production
+    spec:
+      containers:
+      - name: backend
+        image: ghcr.io/fulanzigler-blip/pilot-openclaw/backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-secrets
+              key: url
+        - name: DJANGO_SETTINGS_MODULE
+          value: config.settings.production
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: secret-key
+        - name: REDIS_URL
+          value: redis://redis:6379/0
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-secrets
+              key: sentry-dsn
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          failureThreshold: 3
+---
+# Green deployments
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-green
+  namespace: testrails-prod
+  labels:
+    app: backend
+    version: green
+    environment: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+      version: green
+  template:
+    metadata:
+      labels:
+        app: backend
+        version: green
+        environment: production
+    spec:
+      containers:
+      - name: backend
+        image: ghcr.io/fulanzigler-blip/pilot-openclaw/backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-secrets
+              key: url
+        - name: DJANGO_SETTINGS_MODULE
+          value: config.settings.production
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: secret-key
+        - name: REDIS_URL
+          value: redis://redis:6379/0
+        - name: SENTRY_DSN
+          valueFrom:
+            secretKeyRef:
+              name: monitoring-secrets
+              key: sentry-dsn
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          failureThreshold: 3
+---
+# Service (switches between blue/green)
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: testrails-prod
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+    version: blue  # Default to blue
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP

@@ -1,0 +1,116 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: database-backup
+  namespace: testrails-prod
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: backup-service-account
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: amazon/aws-cli:latest
+            command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+
+              # Configuration
+              NAMESPACE="testrails-prod"
+              BACKUP_NAME="testrails-$(date +%Y%m%d-%H%M%S)"
+              S3_BUCKET="s3://testrails-backups"
+
+              echo "Starting backup: ${BACKUP_NAME}"
+
+              # Install kubectl
+              curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+              chmod +x kubectl
+              mv kubectl /usr/local/bin/
+
+              # Configure kubectl
+              aws eks update-kubeconfig --name production-cluster --region us-east-1
+
+              # Get postgres pod
+              POSTGRES_POD=$(kubectl get pod -n ${NAMESPACE} -l app=postgres -o jsonpath='{.items[0].metadata.name}')
+
+              if [ -z "$POSTGRES_POD" ]; then
+                echo "Error: Could not find postgres pod"
+                exit 1
+              fi
+
+              echo "Found postgres pod: ${POSTGRES_POD}"
+
+              # Perform backup
+              echo "Running pg_dump..."
+              kubectl exec -n ${NAMESPACE} ${POSTGRES_POD} -- \
+                pg_dump -U testrails testrails | \
+                gzip > /tmp/${BACKUP_NAME}.sql.gz
+
+              # Upload to S3
+              echo "Uploading to S3..."
+              aws s3 cp /tmp/${BACKUP_NAME}.sql.gz ${S3_BUCKET}/${BACKUP_NAME}.sql.gz
+
+              # Clean up local file
+              rm /tmp/${BACKUP_NAME}.sql.gz
+
+              echo "Backup completed: ${S3_BUCKET}/${BACKUP_NAME}.sql.gz"
+
+              # Cleanup old backups (keep last 30 days)
+              echo "Cleaning up old backups..."
+              aws s3 ls ${S3_BUCKET}/ | \
+                grep "testrails-" | \
+                sort | \
+                head -n -30 | \
+                while read -r line; do
+                  FILE_NAME=$(echo $line | awk '{print $4}')
+                  if [ "$FILE_NAME" != "" ]; then
+                    echo "Deleting old backup: ${FILE_NAME}"
+                    aws s3 rm ${S3_BUCKET}/${FILE_NAME}
+                  fi
+                done
+
+              echo "Backup process completed successfully"
+            env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: aws-secret-access-key
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backup-service-account
+  namespace: testrails-prod
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backup-secrets
+  namespace: testrails-prod
+type: Opaque
+stringData:
+  aws-access-key-id: "YOUR_AWS_ACCESS_KEY_ID"
+  aws-secret-access-key: "YOUR_AWS_SECRET_ACCESS_KEY"

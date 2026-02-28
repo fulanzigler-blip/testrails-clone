@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": {
+    "summarize": {
+      "version": "1.0.0",
+      "installedAt": 1771733297248
+    },
+    "mcporter": {
+      "version": "1.0.0",
+      "installedAt": 1771733858332
+    },
+    "github": {
+      "version": "1.0.0",
+      "installedAt": 1772267659832
+    },
+    "linearis": {
+      "version": "1.0.0",
+      "installedAt": 1772267682323
+    },
+    "linear": {
+      "version": "1.0.0",
+      "installedAt": 1772267774086
+    }
+  }
+}

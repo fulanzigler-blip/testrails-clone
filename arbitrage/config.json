@@ -1,0 +1,37 @@
+{
+  "capital": 50.00,
+  "currency": "USD",
+  "risk_management": {
+    "max_loss_per_trade": 0.50,
+    "max_loss_total": 5.00,
+    "max_open_positions": 2,
+    "min_risk_reward_ratio": 2.0
+  },
+  "stocks": {
+    "idx_high_liquidity": ["BBCA", "UNVR", "TLKM", "GOTO", "ADRO"],
+    "watchlist": []
+  },
+  "thresholds": {
+    "min_fx_fluctuation_pct": 1.0,
+    "min_spread_pct": 0.5
+  },
+  "trading_hours": {
+    "idx_open": "08:45",
+    "idx_close": "15:00",
+    "timezone": "WIB"
+  },
+  "brokers": ["idx_broker1", "idx_broker2", "us_broker_nasdaq"],
+  "state": {
+    "current_capital": 50.00,
+    "total_loss": 0.00,
+    "total_profit": 0.00,
+    "open_positions": 0,
+    "trades_executed": 0,
+    "wins": 0,
+    "losses": 0,
+    "opportunities_found": 0
+  },
+  "performance": {
+    "top_stocks": {}
+  }
+}

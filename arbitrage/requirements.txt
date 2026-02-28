@@ -1,0 +1,2 @@
+# Python dependencies for arbitrage monitoring system
+requests>=2.31.0

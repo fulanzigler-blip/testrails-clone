@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: testrails-staging
+  labels:
+    environment: staging
+    project: testrails
