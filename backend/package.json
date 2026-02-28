@@ -1,0 +1,41 @@
+{
+  "name": "testrails-backend",
+  "version": "1.0.0",
+  "description": "Backend API for TestRails clone",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "test": "vitest",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\""
+  },
+  "keywords": ["testrails", "testing", "api"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@fastify/jwt": "^8.0.0",
+    "@fastify/rate-limit": "^9.1.0",
+    "@fastify/websocket": "^10.0.1",
+    "@prisma/client": "^5.19.1",
+    "argon2": "^0.40.3",
+    "fastify": "^4.28.1",
+    "ioredis": "^5.4.1",
+    "winston": "^3.14.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.4.2",
+    "eslint": "^9.9.0",
+    "prettier": "^3.3.3",
+    "prisma": "^5.19.1",
+    "tsx": "^4.18.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}

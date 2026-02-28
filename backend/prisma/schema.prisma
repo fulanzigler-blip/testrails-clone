@@ -1,0 +1,360 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  manager
+  tester
+  viewer
+}
+
+enum TestCaseStatus {
+  draft
+  active
+  archived
+}
+
+enum TestCasePriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum AutomationType {
+  manual
+  automated
+  semi_automated
+}
+
+enum TestRunStatus {
+  pending
+  running
+  completed
+  failed
+}
+
+enum TestResultStatus {
+  passed
+  failed
+  skipped
+  blocked
+  running
+}
+
+enum BugSeverity {
+  trivial
+  minor
+  major
+  critical
+}
+
+enum BugStatus {
+  open
+  in_progress
+  resolved
+  closed
+}
+
+enum BugProvider {
+  jira
+  github
+  gitlab
+  linear
+  custom
+}
+
+enum IntegrationType {
+  jira
+  github
+  slack
+  email
+  webhook
+}
+
+enum NotificationType {
+  test_run_completed
+  bug_created
+  mention
+  assignment
+}
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(255)
+  slug        String   @unique @db.VarChar(100)
+  plan        String   @default("free") @db.VarChar(50)
+  maxUsers    Int      @default(10)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  users       User[]
+  projects    Project[]
+  teams       Team[]
+  integrations Integration[]
+
+  @@index([slug])
+  @@map("organizations")
+}
+
+model User {
+  id           String      @id @default(uuid())
+  email        String      @unique @db.VarChar(255)
+  passwordHash String      @map("password_hash") @db.VarChar(255)
+  firstName    String?     @map("first_name") @db.VarChar(100)
+  lastName     String?     @map("last_name") @db.VarChar(100)
+  role         UserRole    @default(tester)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String     @map("organization_id")
+  lastLoginAt  DateTime?   @map("last_login_at")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  createdTestCases TestCase[] @relation("CreatedBy")
+  createdTestRuns TestRun[]   @relation("CreatedBy")
+  teams          UserTeam[]
+  executedResults TestResult[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+
+  @@index([email])
+  @@index([organizationId])
+  @@map("users")
+}
+
+model Team {
+  id            String        @id @default(uuid())
+  name          String        @db.VarChar(255)
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String        @map("organization_id")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  users UserTeam[]
+
+  @@index([organizationId])
+  @@map("teams")
+}
+
+model UserTeam {
+  userId    String   @map("user_id")
+  teamId    String   @map("team_id")
+  role      String   @default("member") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@id([userId, teamId])
+  @@map("user_teams")
+}
+
+model Project {
+  id           String        @id @default(uuid())
+  name         String        @db.VarChar(255)
+  description  String?       @db.Text
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String     @map("organization_id")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  testSuites TestSuite[]
+  testRuns   TestRun[]
+
+  @@index([organizationId])
+  @@map("projects")
+}
+
+model TestSuite {
+  id          String     @id @default(uuid())
+  name        String     @db.VarChar(255)
+  description String?    @db.Text
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String     @map("project_id")
+  parentSuite TestSuite? @relation("SuiteHierarchy", fields: [parentSuiteId], references: [id], onDelete: Cascade)
+  parentSuiteId String?  @map("parent_suite_id")
+  subSuites   TestSuite[] @relation("SuiteHierarchy")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  testCases TestCase[]
+  members TestSuiteMember[]
+  testRuns TestRun[]
+
+  @@index([projectId])
+  @@index([parentSuiteId])
+  @@map("test_suites")
+}
+
+model TestSuiteMember {
+  testSuiteId String   @map("test_suite_id")
+  testCaseId String   @map("test_case_id")
+  orderIndex Int      @default(0) @map("order_index")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  testSuite TestSuite @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
+  testCase  TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@id([testSuiteId, testCaseId])
+  @@index([testSuiteId])
+  @@index([testCaseId])
+  @@map("test_suite_members")
+}
+
+model TestCase {
+  id             String           @id @default(uuid())
+  title          String           @db.VarChar(500)
+  description    String?          @db.Text
+  steps          Json?
+  expectedResult String?          @map("expected_result") @db.Text
+  priority       TestCasePriority @default(medium)
+  automationType AutomationType   @default(manual) @map("automation_type")
+  suite          TestSuite?       @relation(fields: [suiteId], references: [id], onDelete: SetNull)
+  suiteId        String?          @map("suite_id")
+  createdBy      User             @relation("CreatedBy", fields: [createdById], references: [id])
+  createdById    String           @map("created_by")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  version        Int              @default(1)
+  status         TestCaseStatus   @default(active)
+  customFields   Json?            @map("custom_fields") @default("{}")
+  tags           String[]         @default([])
+
+  suiteMembers TestSuiteMember[]
+  results      TestResult[]
+
+  @@index([suiteId])
+  @@index([status])
+  @@index([tags], type: Gin)
+  @@map("test_cases")
+}
+
+model TestRun {
+  id          String        @id @default(uuid())
+  name        String        @db.VarChar(255)
+  description String?       @db.Text
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String        @map("project_id")
+  suite       TestSuite?    @relation(fields: [suiteId], references: [id], onDelete: SetNull)
+  suiteId     String?       @map("suite_id")
+  createdBy   User          @relation("CreatedBy", fields: [createdById], references: [id])
+  createdById String        @map("created_by")
+  status      TestRunStatus @default(pending)
+  startedAt   DateTime?     @map("started_at")
+  completedAt DateTime?     @map("completed_at")
+  passedCount Int          @default(0) @map("passed_count")
+  failedCount Int          @default(0) @map("failed_count")
+  skippedCount Int         @default(0) @map("skipped_count")
+  blockedCount Int         @default(0) @map("blocked_count")
+  environment String?       @db.VarChar(100)
+  config      Json?         @default("{}")
+
+  results TestResult[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([createdById])
+  @@map("test_runs")
+}
+
+model TestResult {
+  id          String          @id @default(uuid())
+  testRun     TestRun         @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  testRunId   String          @map("test_run_id")
+  testCase    TestCase        @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  testCaseId  String          @map("test_case_id")
+  status      TestResultStatus @default(running)
+  comment     String?         @db.Text
+  executedBy  User?           @relation(fields: [executedById], references: [id])
+  executedById String?        @map("executed_by")
+  executedAt  DateTime?       @map("executed_at")
+  durationMs  Int?            @map("duration_ms")
+  attachments Json?           @default("[]")
+  customFields Json?          @map("custom_fields") @default("{}")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  bugs Bug[]
+
+  @@index([testRunId])
+  @@index([testCaseId])
+  @@index([status])
+  @@map("test_results")
+}
+
+model Bug {
+  id          String      @id @default(uuid())
+  testResult  TestResult? @relation(fields: [testResultId], references: [id], onDelete: SetNull)
+  testResultId String?    @map("test_result_id")
+  title       String      @db.VarChar(500)
+  description String?     @db.Text
+  externalId  String?     @map("external_id") @db.VarChar(255)
+  externalUrl String?     @map("external_url") @db.VarChar(500)
+  provider    BugProvider?
+  status      BugStatus   @default(open)
+  severity    BugSeverity?
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  @@index([testResultId])
+  @@index([status])
+  @@index([externalId])
+  @@map("bugs")
+}
+
+model Integration {
+  id           String         @id @default(uuid())
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String       @map("organization_id")
+  type         IntegrationType
+  name         String?        @db.VarChar(255)
+  config       Json
+  enabled      Boolean        @default(true)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  @@index([organizationId])
+  @@index([type])
+  @@map("integrations")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String?          @db.VarChar(255)
+  message   String?          @db.Text
+  data      Json?            @default("{}")
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([readAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String    @id @default(uuid())
+  user       User?     @relation(fields: [userId], references: [id])
+  userId     String?   @map("user_id")
+  action     String    @db.VarChar(100)
+  entityType String?   @map("entity_type") @db.VarChar(50)
+  entityId   String?   @map("entity_id")
+  changes    Json?
+  ipAddress  String?   @map("ip_address") @db.VarChar(45)
+  userAgent  String?   @map("user_agent") @db.Text
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_log")
+}
