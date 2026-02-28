@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: testrails-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: testrails
+      POSTGRES_USER: testrails
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_secure_password_123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - testrails-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testrails -d testrails"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching & queues
+  redis:
+    image: redis:7-alpine
+    container_name: testrails-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - testrails-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Backend API
+  backend:
+    image: testrails-backend:latest
+    container_name: testrails-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://testrails:${DB_PASSWORD:-changeme_secure_password_123}@postgres:5432/testrails
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-changeme_jwt_secret_123}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-changeme_refresh_secret_123}
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - testrails-network
+    volumes:
+      - ./uploads:/app/uploads
+    command: ["node", "dist/index.js"]
+
+  # Frontend (Nginx)
+  frontend:
+    image: testrails-frontend:latest
+    container_name: testrails-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - testrails-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  testrails-network:
+    driver: bridge
