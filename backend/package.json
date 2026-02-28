@@ -16,6 +16,7 @@
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
     "db:setup:test": "./scripts/setup-test-db.sh",
+    "prisma:seed": "ts-node prisma/seed.ts",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\""
   },
