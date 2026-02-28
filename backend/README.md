@@ -202,18 +202,99 @@ x-ratelimit-reset: 1705317600
 | `tester` | Execute tests, update results |
 | `viewer` | Read-only access |
 
+## Testing
+
+The backend has comprehensive test coverage with both unit and integration tests.
+
+### Coverage Goal
+>70% coverage across lines, functions, branches, and statements.
+
+### Test Structure
+```
+tests/
+├── setup.ts                 # Global test setup/teardown
+├── helpers/
+│   ├── api.ts               # API testing utilities
+│   └── test-data.ts         # Test data factories
+├── unit/
+│   ├── auth.test.ts         # Auth utilities tests
+│   └── test-data.test.ts    # Test data factory tests
+└── integration/
+    ├── auth.test.ts         # Authentication endpoints
+    ├── organizations.test.ts # Organization endpoints
+    ├── users.test.ts        # User endpoints
+    ├── projects.test.ts     # Projects & test suites
+    ├── test-cases-runs.test.ts # Test cases, runs, results
+    └── integrations-notifications.test.ts # Integrations & notifications
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run tests with UI
+npm run test:ui
+
+# Run tests once (CI mode)
+npm run test:run
+```
+
+### Test Database Setup
+
+Before running tests, set up the test database:
+
+```bash
+# Create test database
+./scripts/setup-test-db.sh
+
+# Run migrations
+./scripts/migrate-test-db.sh
+```
+
+Or manually:
+```bash
+# Create database
+createdb testrails_test
+
+# Run migrations
+DATABASE_URL=postgresql://test:test@localhost:5432/testrails_test npm run prisma:migrate
+```
+
+### Test Documentation
+
+For detailed testing guide, see [tests/README.md](tests/README.md).
+
 ## Scripts
 
 ```bash
-npm run dev          # Start development server with watch
-npm run build        # Build TypeScript to JavaScript
-npm run start        # Start production server
-npm run test         # Run tests
-npm run lint         # Lint code
-npm run format       # Format code
-npm run prisma:generate # Generate Prisma client
+npm run dev              # Start development server with watch
+npm run build            # Build TypeScript to JavaScript
+npm run start            # Start production server
+
+# Testing
+npm run test             # Run tests
+npm run test:watch       # Run tests in watch mode
+npm run test:coverage    # Run tests with coverage
+npm run test:ui          # Run tests with UI
+npm run test:run         # Run tests once (CI mode)
+
+# Database
+npm run prisma:generate  # Generate Prisma client
 npm run prisma:migrate   # Run database migrations
 npm run prisma:studio    # Open Prisma Studio
+npm run db:setup:test    # Setup test database
+
+# Code quality
+npm run lint             # Lint code
+npm run format           # Format code
 ```
 
 ## WebSocket

@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
-import api from '../../lib/api'
+import { api } from '../../lib/api'
 
 interface TestStep {
   order: number

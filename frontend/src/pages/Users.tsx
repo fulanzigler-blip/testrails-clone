@@ -194,7 +194,8 @@ const Users: React.FC = () => {
                   </div>
 
                   <div>
-                    <Label htmlFor="last_name">Last Name</Label                    <Input
+                    <Label htmlFor="last_name">Last Name</Label>
+                    <Input
                       id="last_name"
                       value={formData.last_name}
                       onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
