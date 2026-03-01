@@ -11,6 +11,12 @@ declare module 'fastify' {
   interface FastifyRequest {
     organizationId?: string;
     userRole?: string;
+    cookies?: Record<string, string>;
+  }
+
+  interface FastifyReply {
+    setCookie: (name: string, value: string, options?: any) => FastifyReply;
+    clearCookie: (name: string) => FastifyReply;
   }
 }
 

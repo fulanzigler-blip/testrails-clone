@@ -82,10 +82,6 @@ async function registerPlugins() {
 
   // SECURITY: CSRF Protection for state-changing endpoints (FIX #1)
   await fastify.register(csrf, {
-    csrfOpts: {
-      secretKey: 'csrf_secret',
-      sessionKey: 'csrf_token',
-    },
     getToken: (req: any) => {
       // Get token from header or body
       return req.headers['x-csrf-token'] || req.body?.csrf_token;

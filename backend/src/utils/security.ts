@@ -1,4 +1,4 @@
-import * as zxcvbn from 'zxcvbn';
+import zxcvbn from 'zxcvbn';
 
 /**
  * Validate password strength

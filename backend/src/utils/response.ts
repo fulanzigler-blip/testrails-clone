@@ -19,6 +19,7 @@ export interface ErrorResponse {
     code: string;
     message: string;
     details?: any[];
+    [key: string]: any; // Allow additional properties
   };
 }
 
