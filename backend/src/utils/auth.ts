@@ -34,10 +34,11 @@ export async function verifyPassword(
 export function generateAccessToken(
   fastify: FastifyInstance,
   userId: string,
-  emailVerified: boolean = true
+  emailVerified: boolean = true,
+  userRole: string = 'tester'
 ): string {
   return fastify.jwt.sign(
-    { userId, emailVerified },
+    { userId, emailVerified, role: userRole },
     { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
   );
 }

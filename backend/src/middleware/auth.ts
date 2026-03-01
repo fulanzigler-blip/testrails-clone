@@ -24,24 +24,45 @@ export async function authenticate(
 // Authorization middleware - check if user has required role
 export function authorize(...allowedRoles: string[]) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    const userRole = (request.user as any)?.role;
-    
+    let userRole = (request.user as any)?.role;
+    const userId = (request.user as any)?.userId;
+
+    // If role is not in JWT, fetch it from database for backward compatibility
+    if (!userRole && userId) {
+      try {
+        const prisma = (request.server as any).prisma;
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { role: true },
+        });
+
+        if (user) {
+          userRole = user.role;
+        }
+      } catch (error) {
+        logger.error('Error fetching user role:', error);
+      }
+    }
+
     if (!userRole) {
       return reply.code(403).send({
         success: false,
         error: {
           code: 'PERMISSION_DENIED',
           message: 'Insufficient permissions',
+          details: 'User role not found',
         },
       });
     }
 
     if (!hasRole(userRole, allowedRoles)) {
+      logger.warn(`Authorization failed for user ${userId} with role ${userRole}. Required roles: ${allowedRoles.join(', ')}`);
       return reply.code(403).send({
         success: false,
         error: {
           code: 'PERMISSION_DENIED',
           message: 'Insufficient permissions',
+          details: `This action requires one of the following roles: ${allowedRoles.join(', ')}`,
         },
       });
     }

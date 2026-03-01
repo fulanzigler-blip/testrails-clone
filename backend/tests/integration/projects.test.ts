@@ -37,7 +37,7 @@ describe('Project & Test Suite Endpoints', () => {
 
     // Generate access token
     accessToken = app.jwt.sign(
-      { userId: user.id, type: 'access' },
+      { userId: user.id, type: 'access', role: user.role },
       { expiresIn: '15m' }
     );
   });

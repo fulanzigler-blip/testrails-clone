@@ -48,11 +48,19 @@ export function errorResponse(
 
 // Common error responses
 export const errorResponses = {
-  unauthorized: (reply: FastifyReply, message?: string) =>
-    errorResponse(reply, 'AUTH_INVALID', message || 'Invalid authentication credentials', 401),
+  unauthorized: (reply: FastifyReply, messageOrDetails?: string | { message?: string; details?: any }) => {
+    if (typeof messageOrDetails === 'string') {
+      return errorResponse(reply, 'AUTH_INVALID', messageOrDetails || 'Invalid authentication credentials', 401);
+    }
+    return errorResponse(reply, 'AUTH_INVALID', messageOrDetails?.message || 'Invalid authentication credentials', 401, messageOrDetails?.details);
+  },
 
-  forbidden: (reply: FastifyReply, message?: string) =>
-    errorResponse(reply, 'PERMISSION_DENIED', message || 'Insufficient permissions', 403),
+  forbidden: (reply: FastifyReply, messageOrDetails?: string | { message?: string; details?: any }) => {
+    if (typeof messageOrDetails === 'string') {
+      return errorResponse(reply, 'PERMISSION_DENIED', messageOrDetails || 'Insufficient permissions', 403);
+    }
+    return errorResponse(reply, 'PERMISSION_DENIED', messageOrDetails?.message || 'Insufficient permissions', 403, messageOrDetails?.details);
+  },
 
   notFound: (reply: FastifyReply, resource: string = 'Resource') =>
     errorResponse(reply, 'NOT_FOUND', `${resource} not found`, 404),
@@ -60,14 +68,22 @@ export const errorResponses = {
   conflict: (reply: FastifyReply, message: string) =>
     errorResponse(reply, 'CONFLICT', message, 409),
 
-  badRequest: (reply: FastifyReply, message?: string) =>
-    errorResponse(reply, 'BAD_REQUEST', message || 'Bad request', 400),
+  badRequest: (reply: FastifyReply, messageOrDetails?: string | { message?: string; details?: any }) => {
+    if (typeof messageOrDetails === 'string') {
+      return errorResponse(reply, 'BAD_REQUEST', messageOrDetails || 'Bad request', 400);
+    }
+    return errorResponse(reply, 'BAD_REQUEST', messageOrDetails?.message || 'Bad request', 400, messageOrDetails?.details);
+  },
 
   validation: (reply: FastifyReply, details: any[]) =>
     errorResponse(reply, 'VALIDATION_ERROR', 'Invalid input data', 400, details),
 
-  tooManyRequests: (reply: FastifyReply, message?: string) =>
-    errorResponse(reply, 'TOO_MANY_REQUESTS', message || 'Too many requests', 429),
+  tooManyRequests: (reply: FastifyReply, messageOrDetails?: string | { message?: string; details?: any }) => {
+    if (typeof messageOrDetails === 'string') {
+      return errorResponse(reply, 'TOO_MANY_REQUESTS', messageOrDetails || 'Too many requests', 429);
+    }
+    return errorResponse(reply, 'TOO_MANY_REQUESTS', messageOrDetails?.message || 'Too many requests', 429, messageOrDetails?.details);
+  },
 
   rateLimit: (reply: FastifyReply) =>
     errorResponse(reply, 'RATE_LIMIT_EXCEEDED', 'Too many requests', 429),

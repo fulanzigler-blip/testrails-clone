@@ -83,9 +83,9 @@ export async function createTestApp() {
   return app;
 }
 
-export async function generateAccessToken(app: FastifyInstance, userId: string) {
+export async function generateAccessToken(app: FastifyInstance, userId: string, userRole: string = 'tester') {
   return app.jwt.sign(
-    { userId, type: 'access' },
+    { userId, type: 'access', role: userRole },
     { expiresIn: '15m' }
   );
 }

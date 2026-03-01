@@ -74,11 +74,6 @@ async function registerPlugins() {
     cookie: {
       cookieName: 'refresh_token',
       signed: false,
-      options: {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-      },
     },
     sign: {
       expiresIn: process.env.JWT_EXPIRES_IN || '15m',
@@ -115,8 +110,8 @@ async function registerPlugins() {
         message: 'Too many requests',
         details: [
           {
-            limit: context.limit,
-            reset: new Date(Date.now() + context.ttl).toISOString(),
+            max: context.max,
+            reset: new Date(Date.now() + context.after).toISOString(),
           },
         ],
       },
@@ -125,8 +120,8 @@ async function registerPlugins() {
 
   // SECURITY: Stricter rate limiting for authentication endpoints (FIX #3)
   await fastify.register(rateLimit, {
-    max: 5, // 5 attempts
-    timeWindow: '15 minutes', // per 15 minutes
+    max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '5'),
+    timeWindow: process.env.AUTH_RATE_LIMIT_TIME_WINDOW || '15 minutes',
     redis,
     skipOnError: true,
     addHeaders: {
@@ -141,13 +136,14 @@ async function registerPlugins() {
         message: 'Too many authentication attempts. Please try again later.',
         details: [
           {
-            limit: context.limit,
-            reset: new Date(Date.now() + context.ttl).toISOString(),
+            max: context.max,
+            reset: new Date(Date.now() + context.after).toISOString(),
           },
         ],
       },
     }),
-  }, { prefix: '/api/v1/auth' });
+    continueExceeding: true,
+  });
 
   // WebSocket
   await fastify.register(websocket);
@@ -269,6 +265,7 @@ async function start() {
 
     const port = parseInt(process.env.PORT || '3000');
     const host = process.env.HOST || '0.0.0.0';
+    const jwtSecret = process.env.JWT_SECRET;
 
     await fastify.listen({ port, host });
 

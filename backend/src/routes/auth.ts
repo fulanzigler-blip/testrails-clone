@@ -27,10 +27,12 @@ import redis from '../config/redis';
 import logger from '../utils/logger';
 import { successResponse, errorResponses } from '../utils/response';
 
-const MAX_LOGIN_ATTEMPTS = 5;
-const ACCOUNT_LOCKOUT_DURATION_MINUTES = 30;
-const EMAIL_VERIFICATION_EXPIRY_HOURS = 24;
-const PASSWORD_RESET_EXPIRY_MINUTES = 30;
+// SECURITY: Configurable security thresholds from environment variables
+const MAX_LOGIN_ATTEMPTS = parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5');
+const ACCOUNT_LOCKOUT_DURATION_MINUTES = parseInt(process.env.ACCOUNT_LOCKOUT_DURATION_MINUTES || '30');
+const EMAIL_VERIFICATION_EXPIRY_HOURS = parseInt(process.env.EMAIL_VERIFICATION_EXPIRY_HOURS || '24');
+const PASSWORD_RESET_EXPIRY_MINUTES = parseInt(process.env.PASSWORD_RESET_EXPIRY_MINUTES || '30');
+const LOGIN_ATTEMPTS_WINDOW_MINUTES = parseInt(process.env.LOGIN_ATTEMPTS_WINDOW_MINUTES || '30');
 
 export default async function authRoutes(fastify: FastifyInstance) {
   // SECURITY: Register with email verification (FIX #6, #8)
@@ -100,7 +102,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       logger.info(`Verification email sent to ${input.email} with token: ${verificationToken}`);
 
       // Generate tokens (but mark user as unverified)
-      const accessToken = generateAccessToken(fastify, user.id, false);
+      const accessToken = generateAccessToken(fastify, user.id, false, user.role);
       const refreshToken = generateRefreshToken(fastify, user.id);
 
       await redis.set(`refresh_token:${user.id}`, refreshToken, 'EX', 7 * 24 * 60 * 60);
@@ -156,7 +158,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       if (!user) {
         // Track failed attempts for non-existent user
         const attempts = await redis.incr(getLoginAttemptsKey(input.email));
-        await redis.expire(getLoginAttemptsKey(input.email), ACCOUNT_LOCKOUT_DURATION_MINUTES * 60);
+        await redis.expire(getLoginAttemptsKey(input.email), LOGIN_ATTEMPTS_WINDOW_MINUTES * 60);
 
         if (attempts >= MAX_LOGIN_ATTEMPTS) {
           logger.warn(`IP ${ip} exceeded login attempts for ${input.email}`);
@@ -171,7 +173,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       if (!isValidPassword) {
         // Track failed attempts
         const attempts = await redis.incr(getLoginAttemptsKey(input.email));
-        await redis.expire(getLoginAttemptsKey(input.email), ACCOUNT_LOCKOUT_DURATION_MINUTES * 60);
+        await redis.expire(getLoginAttemptsKey(input.email), LOGIN_ATTEMPTS_WINDOW_MINUTES * 60);
 
         logger.warn(`Failed login attempt ${attempts}/${MAX_LOGIN_ATTEMPTS} for ${input.email} from IP ${ip}`);
 
@@ -212,7 +214,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       });
 
       // Generate tokens
-      const accessToken = generateAccessToken(fastify, user.id, true);
+      const accessToken = generateAccessToken(fastify, user.id, true, user.role);
       const refreshToken = generateRefreshToken(fastify, user.id);
 
       await redis.set(`refresh_token:${user.id}`, refreshToken, 'EX', 7 * 24 * 60 * 60);
@@ -490,7 +492,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       }
 
       // Generate new access token
-      const accessToken = generateAccessToken(fastify, user.id, user.emailVerified);
+      const accessToken = generateAccessToken(fastify, user.id, user.emailVerified, user.role);
 
       return successResponse(reply, { accessToken }, undefined);
     } catch (error: any) {

@@ -37,7 +37,7 @@ describe('User Endpoints', () => {
 
     // Generate admin access token
     adminAccessToken = app.jwt.sign(
-      { userId: adminUser.id, type: 'access' },
+      { userId: adminUser.id, type: 'access', role: adminUser.role },
       { expiresIn: '15m' }
     );
   });

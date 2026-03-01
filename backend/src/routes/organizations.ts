@@ -5,7 +5,46 @@ import logger from '../utils/logger';
 import { successResponse, errorResponses } from '../utils/response';
 
 export default async function organizationRoutes(fastify: FastifyInstance) {
-  // Get organization details
+  // Get current user's organization (fixes AGE-17)
+  fastify.get('/', {
+    onRequest: [fastify.authenticate, fastify.getOrganizationContext],
+  }, async (request: any, reply) => {
+    try {
+      const organizationId = request.organizationId;
+
+      const organization = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        include: {
+          _count: {
+            select: {
+              users: true,
+              projects: true,
+            },
+          },
+        },
+      });
+
+      if (!organization) {
+        return errorResponses.notFound(reply, 'Organization');
+      }
+
+      return successResponse(reply, {
+        id: organization.id,
+        name: organization.name,
+        slug: organization.slug,
+        plan: organization.plan,
+        maxUsers: organization.maxUsers,
+        usersCount: organization._count.users,
+        projectsCount: organization._count.projects,
+        createdAt: organization.createdAt,
+      }, undefined);
+    } catch (error) {
+      logger.error('Error getting organization:', error);
+      return errorResponses.internal(reply);
+    }
+  });
+
+  // Get organization details by ID
   fastify.get('/:id', {
     onRequest: [fastify.authenticate, fastify.getOrganizationContext],
   }, async (request: any, reply) => {

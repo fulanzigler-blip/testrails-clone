@@ -116,6 +116,8 @@ model User {
   organizationId String     @map("organization_id")
   lastLoginAt  DateTime?   @map("last_login_at")
   emailVerified Boolean   @default(false) @map("email_verified")
+  passwordResetToken String? @map("password_reset_token") @db.VarChar(255)
+  passwordResetExpires DateTime? @map("password_reset_expires")
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
@@ -256,6 +258,7 @@ model TestRun {
   blockedCount Int         @default(0) @map("blocked_count")
   environment String?       @db.VarChar(100)
   config      Json?         @default("{}")
+  createdAt   DateTime      @default(now()) @map("created_at")
 
   results TestResult[]
 
