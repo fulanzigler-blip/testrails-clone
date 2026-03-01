@@ -70,7 +70,8 @@ export default async function projectRoutes(fastify: FastifyInstance) {
 
       const project = await prisma.project.create({
         data: {
-          ...input,
+          name: input.name,
+          description: input.description,
           organizationId,
         },
       });

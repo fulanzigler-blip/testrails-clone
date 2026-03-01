@@ -5,6 +5,7 @@ export interface PaginationMeta {
   perPage: number;
   total: number;
   totalPages?: number;
+  unreadCount?: number;
 }
 
 export interface SuccessResponse<T = any> {
@@ -49,18 +50,30 @@ export function errorResponse(
 
 // Common error responses
 export const errorResponses = {
-  unauthorized: (reply: FastifyReply, messageOrDetails?: string | { message?: string; details?: any }) => {
+  unauthorized: (reply: FastifyReply, messageOrDetails?: string | { message?: string; details?: any; [key: string]: any }) => {
     if (typeof messageOrDetails === 'string') {
       return errorResponse(reply, 'AUTH_INVALID', messageOrDetails || 'Invalid authentication credentials', 401);
     }
-    return errorResponse(reply, 'AUTH_INVALID', messageOrDetails?.message || 'Invalid authentication credentials', 401, messageOrDetails?.details);
+    const { message, details, ...extra } = messageOrDetails || {};
+    const errorObj: any = { code: 'AUTH_INVALID', message: message || 'Invalid authentication credentials', details };
+    Object.assign(errorObj, extra);
+    return reply.code(401).send({
+      success: false,
+      error: errorObj,
+    });
   },
 
-  forbidden: (reply: FastifyReply, messageOrDetails?: string | { message?: string; details?: any }) => {
+  forbidden: (reply: FastifyReply, messageOrDetails?: string | { message?: string; details?: any; [key: string]: any }) => {
     if (typeof messageOrDetails === 'string') {
       return errorResponse(reply, 'PERMISSION_DENIED', messageOrDetails || 'Insufficient permissions', 403);
     }
-    return errorResponse(reply, 'PERMISSION_DENIED', messageOrDetails?.message || 'Insufficient permissions', 403, messageOrDetails?.details);
+    const { message, details, ...extra } = messageOrDetails || {};
+    const errorObj: any = { code: 'PERMISSION_DENIED', message: message || 'Insufficient permissions', details };
+    Object.assign(errorObj, extra);
+    return reply.code(403).send({
+      success: false,
+      error: errorObj,
+    });
   },
 
   notFound: (reply: FastifyReply, resource: string = 'Resource') =>
@@ -79,11 +92,17 @@ export const errorResponses = {
   validation: (reply: FastifyReply, details: any[]) =>
     errorResponse(reply, 'VALIDATION_ERROR', 'Invalid input data', 400, details),
 
-  tooManyRequests: (reply: FastifyReply, messageOrDetails?: string | { message?: string; details?: any }) => {
+  tooManyRequests: (reply: FastifyReply, messageOrDetails?: string | { message?: string; details?: any; [key: string]: any }) => {
     if (typeof messageOrDetails === 'string') {
       return errorResponse(reply, 'TOO_MANY_REQUESTS', messageOrDetails || 'Too many requests', 429);
     }
-    return errorResponse(reply, 'TOO_MANY_REQUESTS', messageOrDetails?.message || 'Too many requests', 429, messageOrDetails?.details);
+    const { message, details, ...extra } = messageOrDetails || {};
+    const errorObj: any = { code: 'TOO_MANY_REQUESTS', message: message || 'Too many requests', details };
+    Object.assign(errorObj, extra);
+    return reply.code(429).send({
+      success: false,
+      error: errorObj,
+    });
   },
 
   rateLimit: (reply: FastifyReply) =>

@@ -136,9 +136,16 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
 
       const testCase = await prisma.testCase.create({
         data: {
-          ...input,
-          ...sanitizedInput,
+          title: input.title,
+          description: input.description,
+          steps: input.steps,
+          expectedResult: input.expectedResult,
+          priority: input.priority,
+          automationType: input.automationType,
+          suiteId: input.suiteId || null,
           createdById: userId,
+          tags: input.tags,
+          customFields: input.customFields,
         },
       });
 
@@ -253,7 +260,16 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
       const updatedCase = await prisma.testCase.update({
         where: { id },
         data: {
-          ...input,
+          title: input.title,
+          description: input.description,
+          steps: input.steps,
+          expectedResult: input.expectedResult,
+          priority: input.priority,
+          automationType: input.automationType,
+          suiteId: input.suiteId !== undefined ? input.suiteId : undefined,
+          tags: input.tags,
+          status: input.status,
+          customFields: input.customFields,
           version: { increment: 1 },
         },
       });

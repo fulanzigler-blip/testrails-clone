@@ -200,7 +200,7 @@ async function registerRoutes() {
 
         // Verify JWT token
         try {
-          const decoded = await fastify.jwt.verify(token);
+          const decoded = await fastify.jwt.verify<{ userId: string }>(token);
           (connection as any).user = decoded;
           logger.info(`WebSocket connection authenticated for user: ${decoded.userId}`);
         } catch (error) {

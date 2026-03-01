@@ -75,7 +75,12 @@ export default async function testSuiteRoutes(fastify: FastifyInstance) {
       }
 
       const suite = await prisma.testSuite.create({
-        data: input,
+        data: {
+          name: input.name,
+          description: input.description,
+          projectId: input.projectId as string,
+          parentSuiteId: input.parentSuiteId || null,
+        },
       });
 
       logger.info(`Test suite created: ${suite.id}`);

@@ -21,13 +21,7 @@ export default async function integrationRoutes(fastify: FastifyInstance) {
           enabled: true,
           createdAt: true,
           updatedAt: true,
-          // Don't return full config for security
-          config: {
-            select: {
-              url: true,
-              project: true,
-            },
-          },
+          config: true,
         },
         orderBy: { createdAt: 'desc' },
       });
