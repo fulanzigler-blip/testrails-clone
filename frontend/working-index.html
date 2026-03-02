@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TestRails - Minimal Working Version</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+      h1 { color: #333; }
+      .status { padding: 15px; border-radius: 5px; background: #3b82f6; color: white; }
+      .ok { color: green; }
+      .error { color: red; }
+      button { padding: 10px 20px; font-size: 16px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer; }
+      button:hover { background: #2d5f48; }
+    </style>
+  </head>
+  <body>
+    <h1>TestRails Clone - Minimal Working Version</h1>
+    <div class="status">
+      <h2>Backend Status</h2>
+      <p id="health-status">Loading...</p>
+    </div>
+    <div class="status">
+      <h2>Authentication Test</h2>
+      <button onclick="testLogin()">Test Login</button>
+      <p id="login-result">Click button above</p>
+    </div>
+    <script>
+      async function testLogin() {
+        const statusEl = document.getElementById('health-status');
+        const resultEl = document.getElementById('login-result');
+        try {
+          const res = await fetch('/health');
+          const data = await res.json();
+          statusEl.textContent = 'Health: ' + (data.status || 'unknown');
+          if (data.status === 'ok') {
+            statusEl.className = 'status ok';
+          } else {
+            statusEl.className = 'status error';
+          }
+        } catch (err) {
+          statusEl.textContent = 'Error: ' + err.message;
+          statusEl.className = 'status error';
+        }
+      }
+      async function testAuth() {
+        try {
+          const res = await fetch('/api/v1/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: 'deployfinal@example.com',
+              password: 'Tr0ngP@ssw0rd!2024'
+            })
+          });
+          const data = await res.json();
+          resultEl.textContent = 'Login: ' + (data.success ? 'Success!' : 'Failed - ' + (data.error || 'unknown'));
+          if (data.success) {
+            resultEl.className = 'ok';
+          } else {
+            resultEl.className = 'error';
+          }
+        } catch (err) {
+          resultEl.textContent = 'Error: ' + err.message;
+          resultEl.className = 'error';
+        }
+      }
+    </script>
+  </body>
+</html>
