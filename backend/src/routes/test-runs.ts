@@ -56,8 +56,8 @@ export default async function testRunRoutes(fastify: FastifyInstance) {
             },
           },
           // FIX: Use parsed integers instead of strings to avoid 500 errors
-      skip: (parsedPage - 1) * parsedPerPage,
-          take: perPage,
+          skip: (parsedPage - 1) * parsedPerPage,
+          take: parsedPerPage,
           orderBy: { createdAt: 'desc' },
         }),
         prisma.testRun.count({ where }),
