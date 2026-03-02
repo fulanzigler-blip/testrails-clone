@@ -99,37 +99,6 @@ async function registerPlugins() {
       'x-ratelimit-remaining': true,
       'x-ratelimit-reset': true,
     },
-    onExceeded: (req, res) => res.status(429).send({
-      success: false,
-      error: {
-        code: 'RATE_LIMIT_EXCEEDED',
-        message: 'Too many requests. Please try again later.',
-      },
-    }),
-  });
-
-  // SECURITY: Stricter rate limiting for authentication endpoints (FIX #3)
-  // Scoped to auth routes only to avoid affecting health and other endpoints
-  await fastify.register(authRoutes, { prefix: '/api/v1/auth' }, async (instance) => {
-    await instance.register(rateLimit, {
-      max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '5'),
-      timeWindow: process.env.AUTH_RATE_LIMIT_TIME_WINDOW || '15 minutes',
-      redis: instance.redis,
-      skipOnError: true,
-      addHeaders: {
-        'x-ratelimit-limit': true,
-        'x-ratelimit-remaining': true,
-        'x-ratelimit-reset': true,
-      },
-      onExceeded: (req, res) => res.status(429).send({
-        success: false,
-        error: {
-          code: 'AUTH_RATE_LIMIT_EXCEEDED',
-          message: 'Too many authentication attempts. Please try again later.',
-        },
-      }),
-      continueExceeding: true,
-    });
   });
 
   // WebSocket
