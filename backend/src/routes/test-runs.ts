@@ -22,6 +22,10 @@ export default async function testRunRoutes(fastify: FastifyInstance) {
         perPage = 20,
       } = request.query as any;
 
+      // FIX: Parse page and perPage as integers to avoid 500 errors
+      const parsedPage = parseInt(page || '1');
+      const parsedPerPage = parseInt(perPage || '20');
+
       const where: any = {
         project: { organizationId },
       };
@@ -51,7 +55,8 @@ export default async function testRunRoutes(fastify: FastifyInstance) {
               select: { results: true },
             },
           },
-          skip: (page - 1) * perPage,
+          // FIX: Use parsed integers instead of strings to avoid 500 errors
+      skip: (parsedPage - 1) * parsedPerPage,
           take: perPage,
           orderBy: { createdAt: 'desc' },
         }),
@@ -81,8 +86,8 @@ export default async function testRunRoutes(fastify: FastifyInstance) {
       }));
 
       return successResponse(reply, mappedRuns, {
-        page,
-        perPage,
+        page: parsedPage,
+        perPage: parsedPerPage,
         total,
         totalPages: Math.ceil(total / perPage),
       });
