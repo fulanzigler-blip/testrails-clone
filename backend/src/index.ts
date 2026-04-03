@@ -26,6 +26,7 @@ import reportRoutes from './routes/reports';
 import integrationRoutes from './routes/integrations';
 import notificationRoutes from './routes/notifications';
 import uploadRoutes from './routes/uploads';
+import maestroRoutes from './routes/maestro';
 
 // Create Fastify instance
 const fastify = Fastify({
@@ -233,6 +234,7 @@ async function registerRoutes() {
   await fastify.register(integrationRoutes, { prefix: '/api/v1/integrations' });
   await fastify.register(notificationRoutes, { prefix: '/api/v1/notifications' });
   await fastify.register(uploadRoutes, { prefix: '/api/v1/uploads' });
+  await fastify.register(maestroRoutes, { prefix: '/api/v1/maestro' });
 }
 
 // Start server

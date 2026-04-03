@@ -189,6 +189,39 @@ export const paginationSchema = z.object({
   search: z.string().optional(),
 });
 
+// Maestro schemas
+// Flow paths must be relative YAML file paths only — no shell metacharacters
+const safeFlowPathRegex = /^[\w.\-/]+\.yaml$/;
+
+export const triggerMaestroSchema = z.object({
+  testRunId: z.string().uuid(),
+  flowPaths: z
+    .array(z.string().regex(safeFlowPathRegex, 'Flow path must be a relative .yaml file path'))
+    .min(1),
+});
+
+// Screenshot filePaths must be relative image paths — no traversal or protocol-relative URLs
+const safeScreenshotPathRegex = /^[\w.\-/]+\.(png|jpg|jpeg|webp)$/;
+
+export const maestroWebhookSchema = z.object({
+  runId: z.string().min(1),
+  status: z.enum(["passed", "failed", "error"]),
+  flowCount: z.number().int().min(0),
+  passCount: z.number().int().min(0),
+  failCount: z.number().int().min(0),
+  logUrl: z.string().url().optional(),
+  screenshots: z
+    .array(
+      z.object({
+        testCaseId: z.string().uuid().optional(),
+        stepIndex: z.number().int().min(0),
+        filePath: z.string().regex(safeScreenshotPathRegex, 'Screenshot path must be a relative image file'),
+        takenAt: z.string().datetime(),
+      })
+    )
+    .optional(),
+});
+
 // Export types
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

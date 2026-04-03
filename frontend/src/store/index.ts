@@ -7,6 +7,7 @@ import usersReducer from './slices/usersSlice'
 import notificationsReducer from './slices/notificationsSlice'
 import testSuitesReducer from './slices/testSuitesSlice'
 import reportsReducer from './slices/reportsSlice'
+import maestroReducer from './slices/maestroSlice'
 
 export const store = configureStore({
   reducer: {
@@ -18,6 +19,7 @@ export const store = configureStore({
     notifications: notificationsReducer,
     testSuites: testSuitesReducer,
     reports: reportsReducer,
+    maestro: maestroReducer,
   },
 })
 
