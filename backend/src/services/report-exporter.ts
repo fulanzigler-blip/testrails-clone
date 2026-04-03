@@ -30,6 +30,9 @@ export async function exportToPDF(
       );
 
       const doc = new PDFDocument({ margin: 50 });
+      // Attach finish/error listeners BEFORE doc.end() to avoid missing the event
+      reply.raw.on('finish', () => resolve());
+      reply.raw.on('error', (err: Error) => reject(err));
       doc.pipe(reply.raw);
 
       // Title
@@ -110,9 +113,6 @@ export async function exportToPDF(
       }
 
       doc.end();
-
-      reply.raw.on('finish', () => resolve());
-      reply.raw.on('error', (err: Error) => reject(err));
     } catch (err) {
       reject(err);
     }

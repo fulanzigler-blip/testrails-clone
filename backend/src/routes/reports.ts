@@ -290,6 +290,7 @@ export default async function reportRoutes(fastify: FastifyInstance) {
       const failedResults = await prisma.testResult.findMany({
         where: { status: 'failed', testRun: { project: { organizationId } } },
         include: { testCase: true },
+        take: 500, // cap to prevent unbounded memory usage
       });
       const failureCounts: Record<string, { count: number; title: string }> = {};
       failedResults.forEach(r => {
@@ -407,7 +408,7 @@ export default async function reportRoutes(fastify: FastifyInstance) {
           testCase: r.testCase.title,
           status: r.status,
           comment: r.comment,
-          executedBy: r.executedBy?.firstName + ' ' + r.executedBy?.lastName,
+          executedBy: r.executedBy ? `${r.executedBy.firstName} ${r.executedBy.lastName}` : '',
           executedAt: r.executedAt,
         })),
       };
@@ -424,11 +425,16 @@ export default async function reportRoutes(fastify: FastifyInstance) {
             r.testCase.title,
             r.status,
             r.comment || '',
-            r.executedBy?.firstName + ' ' + r.executedBy?.lastName || '',
+            r.executedBy ? `${r.executedBy.firstName} ${r.executedBy.lastName}` : '',
             r.executedAt?.toISOString() || '',
           ]),
         ]
-          .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+          .map(row => row.map(cell => {
+            // Neutralise CSV formula injection: prefix cells starting with =,+,-,@ with a tab
+            const s = String(cell).replace(/"/g, '""');
+            const safe = /^[=+\-@]/.test(s) ? `\t${s}` : s;
+            return `"${safe}"`;
+          }).join(','))
           .join('\n');
 
         reply.type('text/csv');
