@@ -162,9 +162,9 @@ const AIGenerateModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
             title: c.title,
             description: c.description,
             steps: c.steps,
-            expected_result: c.expectedResult,
+            expectedResult: c.expectedResult,
             priority: c.priority,
-            automation_type: c.automationType,
+            automationType: c.automationType,
             tags: c.tags,
             projectId: selectedProjectId,
           })
