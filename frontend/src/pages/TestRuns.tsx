@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
+import MaestroRunPanel from '../components/MaestroRunPanel'
 import { fetchTestRuns, createTestRun, startTestRun, completeTestRun, deleteTestRun, fetchTestRun, updateTestResult } from '../store/slices/testRunsSlice'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
@@ -407,6 +408,10 @@ const TestRuns: React.FC = () => {
                     </Button>
                   </div>
                 )}
+
+                <div className="mt-6 pt-6 border-t">
+                  <MaestroRunPanel testRunId={currentRun.id} />
+                </div>
               </CardContent>
             </Card>
           </div>

@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { connect, disconnect, subscribe } from '../lib/socket'
 import { addNotification } from '../store/slices/notificationsSlice'
+import { updateMaestroRun } from '../store/slices/maestroSlice'
 
 const useWebSocket = () => {
   const dispatch = useAppDispatch()
@@ -21,9 +22,14 @@ const useWebSocket = () => {
         console.log('test_run_update', data)
       })
 
+      const unsubscribeMaestroRunUpdate = subscribe('maestro_run_update', (data) => {
+        dispatch(updateMaestroRun(data as Parameters<typeof updateMaestroRun>[0]))
+      })
+
       return () => {
         unsubscribeNotification()
         unsubscribeTestRunUpdate()
+        unsubscribeMaestroRunUpdate()
         disconnect()
       }
     }
