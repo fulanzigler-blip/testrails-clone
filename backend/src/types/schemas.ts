@@ -189,6 +189,31 @@ export const paginationSchema = z.object({
   search: z.string().optional(),
 });
 
+// Maestro schemas
+export const triggerMaestroSchema = z.object({
+  testRunId: z.string().uuid(),
+  flowPaths: z.array(z.string().min(1)).min(1),
+});
+
+export const maestroWebhookSchema = z.object({
+  runId: z.string().min(1),
+  status: z.enum(["passed", "failed", "error"]),
+  flowCount: z.number().int().min(0),
+  passCount: z.number().int().min(0),
+  failCount: z.number().int().min(0),
+  logUrl: z.string().url().optional(),
+  screenshots: z
+    .array(
+      z.object({
+        testCaseId: z.string().uuid().optional(),
+        stepIndex: z.number().int().min(0),
+        filePath: z.string().min(1),
+        takenAt: z.string().datetime(),
+      })
+    )
+    .optional(),
+});
+
 // Export types
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

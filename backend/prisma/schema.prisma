@@ -261,6 +261,7 @@ model TestRun {
   createdAt   DateTime      @default(now()) @map("created_at")
 
   results TestResult[]
+  maestroRuns MaestroRun[]
 
   @@index([projectId])
   @@index([status])
@@ -343,6 +344,50 @@ model Notification {
   @@index([userId])
   @@index([readAt])
   @@map("notifications")
+}
+
+enum MaestroRunStatus {
+  pending
+  running
+  passed
+  failed
+  error
+}
+
+model MaestroRun {
+  id            String           @id @default(uuid())
+  testRun       TestRun          @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  testRunId     String           @map("test_run_id")
+  runId         String           @unique @map("run_id") @db.VarChar(255)
+  status        MaestroRunStatus @default(pending)
+  triggeredAt   DateTime         @default(now()) @map("triggered_at")
+  completedAt   DateTime?        @map("completed_at")
+  flowCount     Int              @default(0) @map("flow_count")
+  passCount     Int              @default(0) @map("pass_count")
+  failCount     Int              @default(0) @map("fail_count")
+  logUrl        String?          @map("log_url") @db.VarChar(500)
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  screenshots   MaestroScreenshot[]
+
+  @@index([testRunId])
+  @@index([status])
+  @@map("maestro_runs")
+}
+
+model MaestroScreenshot {
+  id           String     @id @default(uuid())
+  maestroRun   MaestroRun @relation(fields: [maestroRunId], references: [id], onDelete: Cascade)
+  maestroRunId String     @map("maestro_run_id")
+  testCaseId   String?    @map("test_case_id")
+  stepIndex    Int        @map("step_index")
+  filePath     String     @map("file_path") @db.VarChar(500)
+  takenAt      DateTime   @map("taken_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@index([maestroRunId])
+  @@map("maestro_screenshots")
 }
 
 model AuditLog {
