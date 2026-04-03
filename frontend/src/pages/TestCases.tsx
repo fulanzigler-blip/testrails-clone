@@ -8,6 +8,7 @@ import { Label } from '../components/ui/label'
 import { Badge } from '../components/ui/badge'
 import { Plus, Search, Edit, Trash2, Filter, Wand2 } from 'lucide-react'
 import AIGenerateModal from '../components/AIGenerateModal'
+import GitHubSyncPanel from '../components/GitHubSyncPanel'
 
 interface TestCaseFormData {
   title: string
@@ -24,6 +25,7 @@ const TestCases: React.FC = () => {
   const dispatch = useAppDispatch()
   const { testCases, loading, filters } = useAppSelector((state) => state.testCases)
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedProject, setSelectedProject] = useState<string>('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [aiModalOpen, setAiModalOpen] = useState(false)
   const [editingCase, setEditingCase] = useState<any>(null)
@@ -167,6 +169,12 @@ const TestCases: React.FC = () => {
                 className="pl-10"
               />
             </div>
+            <Input
+              placeholder="Project ID (for GitHub sync)"
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              className="w-72"
+            />
             <Button type="submit" variant="outline">
               <Filter className="mr-2 h-4 w-4" />
               Filters
@@ -174,6 +182,9 @@ const TestCases: React.FC = () => {
           </form>
         </CardContent>
       </Card>
+
+      {/* GitHub Sync Panel */}
+      {selectedProject && <GitHubSyncPanel projectId={selectedProject} />}
 
       {/* Test Cases Table */}
       <Card>
