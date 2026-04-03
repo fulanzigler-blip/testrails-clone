@@ -6,7 +6,8 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Badge } from '../components/ui/badge'
-import { Plus, Search, Edit, Trash2, Filter } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Filter, Wand2 } from 'lucide-react'
+import AIGenerateModal from '../components/AIGenerateModal'
 
 interface TestCaseFormData {
   title: string
@@ -24,6 +25,7 @@ const TestCases: React.FC = () => {
   const { testCases, loading, filters } = useAppSelector((state) => state.testCases)
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [aiModalOpen, setAiModalOpen] = useState(false)
   const [editingCase, setEditingCase] = useState<any>(null)
   const [formData, setFormData] = useState<TestCaseFormData>({
     title: '',
@@ -140,10 +142,16 @@ const TestCases: React.FC = () => {
           <h1 className="text-3xl font-bold tracking-tight">Test Cases</h1>
           <p className="text-muted-foreground">Manage your test cases</p>
         </div>
-        <Button onClick={handleCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Test Case
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setAiModalOpen(true)}>
+            <Wand2 className="w-4 h-4 mr-2" />
+            Generate with AI
+          </Button>
+          <Button onClick={handleCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Test Case
+          </Button>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -224,6 +232,13 @@ const TestCases: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* AI Generate Modal */}
+      <AIGenerateModal
+        open={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        onSaved={() => { setAiModalOpen(false); dispatch(fetchTestCases({})) }}
+      />
 
       {/* Create/Edit Modal */}
       {isModalOpen && (
