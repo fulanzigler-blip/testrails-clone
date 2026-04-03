@@ -42,7 +42,6 @@ const TestSuites: React.FC = () => {
 
   useEffect(() => {
     dispatch(fetchProjects())
-    dispatch(fetchTestSuites())
   }, [dispatch])
 
   useEffect(() => {

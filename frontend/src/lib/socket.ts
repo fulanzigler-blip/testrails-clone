@@ -21,9 +21,10 @@ export function connect(token: string): void {
   }
 
   const baseUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001';
-  const url = `${baseUrl}/ws?token=${encodeURIComponent(token)}`;
+  const url = `${baseUrl}/ws`;
 
-  ws = new WebSocket(url);
+  // Send token via Sec-WebSocket-Protocol to avoid token in URL/logs
+  ws = new WebSocket(url, [`bearer.${token}`]);
 
   ws.onopen = () => {
     console.info('[socket] connected');

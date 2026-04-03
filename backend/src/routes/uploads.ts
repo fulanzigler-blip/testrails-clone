@@ -37,9 +37,16 @@ export default async function uploadsRoutes(fastify: FastifyInstance) {
 
         fs.mkdirSync(uploadDir, { recursive: true });
 
-        const ext = path.extname(data.filename || '');
-        const baseName = path.basename(data.filename || 'file', ext);
-        const filename = `${crypto.randomUUID()}-${baseName}${ext}`;
+        // Derive extension from validated MIME type, not client-supplied filename
+        const MIME_TO_EXT: Record<string, string> = {
+          'image/jpeg': '.jpg',
+          'image/png': '.png',
+          'image/gif': '.gif',
+          'image/webp': '.webp',
+          'application/pdf': '.pdf',
+        };
+        const ext = MIME_TO_EXT[data.mimetype];
+        const filename = `${crypto.randomUUID()}${ext}`;
         const filePath = path.join(uploadDir, filename);
 
         const buffer = await data.toBuffer();

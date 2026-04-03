@@ -155,8 +155,9 @@ async function registerRoutes() {
   fastify.register(async function (fastify) {
     fastify.get('/ws', { websocket: true }, async (connection, req) => {
       try {
-        // Extract JWT from query string or headers
-        const token = (req as any).query?.token || (req as any).headers?.['sec-websocket-protocol'];
+        // Extract JWT from Sec-WebSocket-Protocol header only (never from URL to avoid log exposure)
+        const proto = (req as any).headers?.['sec-websocket-protocol'] as string | undefined;
+        const token = proto?.startsWith('bearer.') ? proto.slice('bearer.'.length) : undefined;
 
         if (!token) {
           connection.socket.send(JSON.stringify({
@@ -184,7 +185,11 @@ async function registerRoutes() {
 
         // Register connection in registry by organizationId
         const userCtx = (connection as any).user as { userId: string; organizationId?: string };
-        const organizationId = userCtx.organizationId || userCtx.userId;
+        if (!userCtx.organizationId) {
+          connection.socket.close(4002, 'Missing organizationId in token');
+          return;
+        }
+        const organizationId = userCtx.organizationId;
         registerConnection(organizationId, connection.socket);
 
         connection.socket.on('message', async message => {

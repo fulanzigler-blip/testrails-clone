@@ -7,6 +7,7 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import { Download, Calendar, TrendingUp, TrendingDown } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { fetchReportSummary } from '../store/slices/reportsSlice'
+import api from '../lib/api'
 
 const COLORS = ['#10b981', '#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899']
 
@@ -50,12 +51,21 @@ const Reports: React.FC = () => {
       percentage: f.failCount,
     })) ?? []
 
-  const handleExport = (format: string) => {
-    window.open(
-      (import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1') +
-        '/reports/export?format=' +
-        format
-    )
+  const handleExport = async (format: string) => {
+    try {
+      const response = await api.get(`/reports/export?format=${format}`, {
+        responseType: 'blob',
+      })
+      const ext = format === 'excel' ? 'xlsx' : format
+      const url = URL.createObjectURL(response.data as Blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `report-${dateRange.from}-${dateRange.to}.${ext}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      console.error('Export failed')
+    }
   }
 
   const handleDateChange = (field: 'from' | 'to', value: string) => {
