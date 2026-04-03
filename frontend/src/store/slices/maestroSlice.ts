@@ -25,13 +25,13 @@ export interface MaestroRun {
 }
 
 interface MaestroState {
-  runs: MaestroRun[];
+  runsByTestRunId: Record<string, MaestroRun[]>;
   loading: boolean;
   error: string | null;
 }
 
 const initialState: MaestroState = {
-  runs: [],
+  runsByTestRunId: {},
   loading: false,
   error: null,
 };
@@ -78,13 +78,16 @@ const maestroSlice = createSlice({
   reducers: {
     updateMaestroRun(
       state,
-      action: PayloadAction<Partial<MaestroRun> & { id: string }>
+      action: PayloadAction<Partial<MaestroRun> & { id: string; testRunId?: string }>
     ) {
-      const index = state.runs.findIndex(
-        (run) => run.id === action.payload.id
-      );
-      if (index !== -1) {
-        state.runs[index] = { ...state.runs[index], ...action.payload };
+      // Update run in whichever testRunId bucket it lives in
+      for (const testRunId of Object.keys(state.runsByTestRunId)) {
+        const runs = state.runsByTestRunId[testRunId];
+        const index = runs.findIndex(r => r.id === action.payload.id);
+        if (index !== -1) {
+          runs[index] = { ...runs[index], ...action.payload };
+          break;
+        }
       }
     },
   },
@@ -96,7 +99,11 @@ const maestroSlice = createSlice({
       })
       .addCase(fetchMaestroRuns.fulfilled, (state, action) => {
         state.loading = false;
-        state.runs = action.payload;
+        // Key by testRunId — won't clobber other test runs' data
+        if (action.payload.length > 0) {
+          const testRunId = action.payload[0].testRunId;
+          state.runsByTestRunId[testRunId] = action.payload;
+        }
         state.error = null;
       })
       .addCase(fetchMaestroRuns.rejected, (state, action) => {
@@ -109,7 +116,11 @@ const maestroSlice = createSlice({
       })
       .addCase(triggerMaestroRun.fulfilled, (state, action) => {
         state.loading = false;
-        state.runs.unshift(action.payload);
+        const { testRunId } = action.payload;
+        if (!state.runsByTestRunId[testRunId]) {
+          state.runsByTestRunId[testRunId] = [];
+        }
+        state.runsByTestRunId[testRunId].unshift(action.payload);
         state.error = null;
       })
       .addCase(triggerMaestroRun.rejected, (state, action) => {

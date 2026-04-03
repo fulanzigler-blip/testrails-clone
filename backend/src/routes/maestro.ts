@@ -36,21 +36,20 @@ export default async function maestroRoutes(fastify: FastifyInstance) {
         },
       });
 
-      // Fire-and-forget: trigger SSH run, then update status and broadcast
-      triggerMaestroRun(runId, flowPaths)
-        .then(async () => {
-          await prisma.maestroRun.update({
-            where: { id: createdRun.id },
-            data: { status: 'running' },
-          });
-          broadcastToOrg(organizationId, 'maestro_run_update', {
-            maestroRunId: createdRun.id,
-            status: 'running',
-          });
-        })
-        .catch((err) => {
-          logger.error('Failed to trigger maestro run:', err);
+      // Fire-and-forget: trigger SSH run
+      // onRunning fires inside client.on('ready') — before exec returns — so status is accurate
+      triggerMaestroRun(runId, flowPaths, async () => {
+        await prisma.maestroRun.update({
+          where: { id: createdRun.id },
+          data: { status: 'running' },
         });
+        broadcastToOrg(organizationId, 'maestro_run_update', {
+          maestroRunId: createdRun.id,
+          status: 'running',
+        });
+      }).catch((err) => {
+        logger.error('Failed to trigger maestro run:', err);
+      });
 
       return successResponse(reply, {
         maestroRunId: createdRun.id,
@@ -70,7 +69,11 @@ export default async function maestroRoutes(fastify: FastifyInstance) {
   fastify.post('/webhook', async (request: any, reply) => {
     try {
       const secret = request.headers['x-maestro-secret'];
-      if (secret !== MAESTRO_WEBHOOK_SECRET) {
+      const secretBuf = Buffer.from(typeof secret === 'string' ? secret : '');
+      const expectedBuf = Buffer.from(MAESTRO_WEBHOOK_SECRET);
+      const valid = secretBuf.length === expectedBuf.length &&
+        crypto.timingSafeEqual(secretBuf, expectedBuf);
+      if (!valid) {
         return errorResponses.unauthorized(reply, 'Invalid webhook secret');
       }
 

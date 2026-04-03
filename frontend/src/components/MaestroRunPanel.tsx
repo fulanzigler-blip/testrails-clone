@@ -61,14 +61,13 @@ function formatDate(dateStr: string): string {
 
 const MaestroRunPanel: React.FC<MaestroRunPanelProps> = ({ testRunId }) => {
   const dispatch = useAppDispatch();
-  const { runs, loading } = useAppSelector((state) => state.maestro);
+  const { runsByTestRunId, loading } = useAppSelector((state) => state.maestro);
+  const filteredRuns: MaestroRun[] = runsByTestRunId[testRunId] ?? [];
 
   const [showModal, setShowModal] = useState(false);
   const [flowPathsText, setFlowPathsText] = useState("");
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [triggering, setTriggering] = useState(false);
-
-  const filteredRuns = runs.filter((run: MaestroRun) => run.testRunId === testRunId);
 
   useEffect(() => {
     dispatch(fetchMaestroRuns(testRunId));

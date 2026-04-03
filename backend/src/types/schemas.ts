@@ -190,10 +190,18 @@ export const paginationSchema = z.object({
 });
 
 // Maestro schemas
+// Flow paths must be relative YAML file paths only — no shell metacharacters
+const safeFlowPathRegex = /^[\w.\-/]+\.yaml$/;
+
 export const triggerMaestroSchema = z.object({
   testRunId: z.string().uuid(),
-  flowPaths: z.array(z.string().min(1)).min(1),
+  flowPaths: z
+    .array(z.string().regex(safeFlowPathRegex, 'Flow path must be a relative .yaml file path'))
+    .min(1),
 });
+
+// Screenshot filePaths must be relative image paths — no traversal or protocol-relative URLs
+const safeScreenshotPathRegex = /^[\w.\-/]+\.(png|jpg|jpeg|webp)$/;
 
 export const maestroWebhookSchema = z.object({
   runId: z.string().min(1),
@@ -207,7 +215,7 @@ export const maestroWebhookSchema = z.object({
       z.object({
         testCaseId: z.string().uuid().optional(),
         stepIndex: z.number().int().min(0),
-        filePath: z.string().min(1),
+        filePath: z.string().regex(safeScreenshotPathRegex, 'Screenshot path must be a relative image file'),
         takenAt: z.string().datetime(),
       })
     )

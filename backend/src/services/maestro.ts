@@ -7,17 +7,25 @@ const SSH_HOST: string = process.env.MAESTRO_RUNNER_HOST || '100.76.181.104';
 const SSH_USER: string = process.env.MAESTRO_RUNNER_USER || 'clawbot';
 const SSH_KEY_PATH: string = process.env.MAESTRO_RUNNER_KEY_PATH || '/home/clawdbot/.ssh/id_ed25519';
 
-export async function triggerMaestroRun(runId: string, flowPaths: string[]): Promise<void> {
+export async function triggerMaestroRun(
+  runId: string,
+  flowPaths: string[],
+  onRunning?: () => void,
+): Promise<void> {
   try {
     const privateKey: Buffer = fs.readFileSync(SSH_KEY_PATH);
 
-    const flowArgs: string = flowPaths.join(' ');
-    const command: string = `/Users/clawbot/.maestro/bin/maestro test ${flowArgs} --format junit --output /tmp/maestro-${runId}.xml 2>&1`;
+    // flowPaths are already validated by Zod to match /^[\w.\-/]+\.yaml$/ before reaching here
+    const quotedArgs = flowPaths.map(p => `'${p}'`).join(' ');
+    const command: string = `/Users/clawbot/.maestro/bin/maestro test ${quotedArgs} --format junit --output /tmp/maestro-${runId}.xml 2>&1`;
 
     await new Promise<void>((resolve, reject) => {
       const client: Client = new Client();
 
       client.on('ready', () => {
+        // Notify caller that run has started (before exec returns)
+        if (onRunning) onRunning();
+
         client.exec(command, (err: Error | undefined, stream: NodeJS.ReadableStream & { stderr: NodeJS.ReadableStream; on: (event: string, callback: (...args: any[]) => void) => any }) => {
           if (err) {
             client.end();
