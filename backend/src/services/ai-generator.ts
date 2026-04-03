@@ -53,9 +53,9 @@ export async function generateTestCases(
     )
   }
 
-  const data = await response.json()
+  const data = await response.json() as { choices?: { message?: { content?: string } }[] }
 
-  const content: string = data.choices?.[0]?.message?.content
+  const content: string = data.choices?.[0]?.message?.content ?? ''
   if (!content) {
     throw new Error('GENERATION_FAILED: No content in response')
   }

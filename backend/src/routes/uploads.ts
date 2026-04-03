@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import path from 'path';
 import fs from 'fs';
 import { successResponse, errorResponses } from '../utils/response';
@@ -17,19 +17,18 @@ export default async function uploadsRoutes(fastify: FastifyInstance) {
     {
       onRequest: [fastify.authenticate],
     },
-    async (request, reply) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const data = await request.file();
+        const data = await (request as any).file();
 
         if (!data) {
-          return errorResponses(reply, 'No file uploaded', 400);
+          return errorResponses.badRequest(reply, 'No file uploaded');
         }
 
         if (!ALLOWED_MIME_TYPES.includes(data.mimetype)) {
-          return errorResponses(
+          return errorResponses.badRequest(
             reply,
-            `Invalid file type: ${data.mimetype}. Allowed types: ${ALLOWED_MIME_TYPES.join(', ')}`,
-            400
+            `Invalid file type: ${data.mimetype}. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}`
           );
         }
 
@@ -58,7 +57,7 @@ export default async function uploadsRoutes(fastify: FastifyInstance) {
         });
       } catch (error) {
         request.log.error(error);
-        return errorResponses(reply, 'File upload failed', 500);
+        return errorResponses.internal(reply);
       }
     }
   );
