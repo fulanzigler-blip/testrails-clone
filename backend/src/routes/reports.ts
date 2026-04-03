@@ -232,6 +232,124 @@ export default async function reportRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Export summary report as PDF or Excel
+  fastify.get('/export', {
+    onRequest: [fastify.authenticate, fastify.getOrganizationContext],
+  }, async (request: any, reply) => {
+    try {
+      const organizationId = request.organizationId;
+      const { format, projectId, fromDate, toDate } = request.query as any;
+
+      if (!format || !['pdf', 'excel'].includes(format)) {
+        return errorResponses.validation(reply, [
+          { field: 'format', message: 'format must be pdf or excel' },
+        ]);
+      }
+
+      const where: any = {
+        project: { organizationId },
+      };
+      if (projectId) where.projectId = projectId;
+      if (fromDate || toDate) {
+        where.createdAt = {};
+        if (fromDate) where.createdAt.gte = new Date(fromDate);
+        if (toDate) where.createdAt.lte = new Date(toDate);
+      }
+
+      const [testRuns, totalTestCases, totalProjects, recentRuns] = await Promise.all([
+        prisma.testRun.count({ where }),
+        prisma.testCase.count({
+          where: { suite: { project: { organizationId } } },
+        }),
+        prisma.project.count({ where: { organizationId } }),
+        prisma.testRun.findMany({
+          where,
+          include: { _count: { select: { results: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: 30,
+        }),
+      ]);
+
+      let totalExecuted = 0;
+      let totalPassed = 0;
+      recentRuns.forEach(run => {
+        totalExecuted += run._count.results;
+        totalPassed += run.passedCount;
+      });
+      const passRate = totalExecuted > 0 ? Math.round((totalPassed / totalExecuted) * 100) : 0;
+      const failRate = 100 - passRate;
+
+      // Status distribution
+      const statusCounts: Record<string, number> = {};
+      recentRuns.forEach(run => {
+        statusCounts[run.status] = (statusCounts[run.status] || 0) + 1;
+      });
+      const testRunsByStatus = Object.entries(statusCounts).map(([status, count]) => ({ status, count }));
+
+      // Top failures
+      const failedResults = await prisma.testResult.findMany({
+        where: { status: 'failed', testRun: { project: { organizationId } } },
+        include: { testCase: true },
+      });
+      const failureCounts: Record<string, { count: number; title: string }> = {};
+      failedResults.forEach(r => {
+        if (!failureCounts[r.testCaseId]) {
+          failureCounts[r.testCaseId] = { count: 0, title: r.testCase.title };
+        }
+        failureCounts[r.testCaseId].count++;
+      });
+      const topFailures = Object.entries(failureCounts)
+        .map(([id, data]) => ({ testCaseId: id, title: data.title, failCount: data.count }))
+        .sort((a, b) => b.failCount - a.failCount)
+        .slice(0, 10);
+
+      // Trend data (last 7 days)
+      const trendData: { date: string; passed: number; failed: number }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        date.setHours(0, 0, 0, 0);
+        const dateStr = date.toISOString().split('T')[0];
+        const endDate = new Date(date);
+        endDate.setDate(endDate.getDate() + 1);
+        const dayRuns = await prisma.testRun.findMany({
+          where: { ...where, createdAt: { gte: date, lt: endDate } },
+          include: { _count: { select: { results: true } } },
+        });
+        let dayPassed = 0;
+        let dayFailed = 0;
+        dayRuns.forEach(r => {
+          dayPassed += r.passedCount;
+          dayFailed += r.failedCount;
+        });
+        trendData.push({ date: dateStr, passed: dayPassed, failed: dayFailed });
+      }
+
+      const reportData = {
+        totalTestRuns: testRuns,
+        totalTestCases,
+        totalTestsExecuted: totalExecuted,
+        passRate,
+        failRate,
+        activeProjects: totalProjects,
+        testRunsByStatus,
+        trendData,
+        topFailures,
+      };
+
+      if (format === 'pdf') {
+        await exportToPDF(reportData, reply);
+        return;
+      } else {
+        await exportToExcel(reportData, reply);
+        return;
+      }
+    } catch (error) {
+      logger.error('Error exporting summary report:', error);
+      return errorResponses.internal(reply);
+    }
+  });
+
   // Export report (simplified - returns summary for now)
   fastify.get('/export/:type', {
     onRequest: [fastify.authenticate, fastify.getOrganizationContext],
