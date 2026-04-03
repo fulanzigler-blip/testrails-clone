@@ -231,3 +231,11 @@ export type CreateTestRunInput = z.infer<typeof createTestRunSchema>;
 export type UpdateTestResultInput = z.infer<typeof updateTestResultSchema>;
 export type CreateBugInput = z.infer<typeof createBugSchema>;
 export type CreateIntegrationInput = z.infer<typeof createIntegrationSchema>;
+
+// AI Test Case Generation schema
+export const generateTestCasesSchema = z.object({
+  projectId: z.string().uuid(),
+  flutterCode: z.string().min(10).max(10000),
+  suiteId: z.string().uuid().optional(),
+  autoSave: z.boolean().default(false),
+});
