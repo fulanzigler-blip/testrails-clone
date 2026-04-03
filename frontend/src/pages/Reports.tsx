@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { Download, Calendar, TrendingUp, TrendingDown } from 'lucide-react'
+import { FileDown, Calendar, TrendingUp, TrendingDown } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { fetchReportSummary } from '../store/slices/reportsSlice'
 import api from '../lib/api'
@@ -16,6 +16,7 @@ const Reports: React.FC = () => {
     from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     to: new Date().toISOString().split('T')[0],
   })
+  const [exportingFormat, setExportingFormat] = useState<string | null>(null)
 
   const dispatch = useAppDispatch()
   const { summary, loading } = useAppSelector((state) => state.reports)
@@ -53,6 +54,7 @@ const Reports: React.FC = () => {
 
   const handleExport = async (format: string) => {
     try {
+      setExportingFormat(format)
       const response = await api.get(`/reports/export?format=${format}`, {
         responseType: 'blob',
       })
@@ -65,6 +67,8 @@ const Reports: React.FC = () => {
       URL.revokeObjectURL(url)
     } catch {
       console.error('Export failed')
+    } finally {
+      setExportingFormat(null)
     }
   }
 
@@ -80,17 +84,17 @@ const Reports: React.FC = () => {
           <p className="text-muted-foreground">Test execution analytics and insights</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => handleExport('csv')}>
-            <Download className="mr-2 h-4 w-4" />
-            CSV
+          <Button variant="outline" onClick={() => handleExport('csv')} disabled={exportingFormat !== null}>
+            <FileDown className="mr-2 h-4 w-4" />
+            {exportingFormat === 'csv' ? 'Exporting...' : 'CSV'}
           </Button>
-          <Button variant="outline" onClick={() => handleExport('xlsx')}>
-            <Download className="mr-2 h-4 w-4" />
-            Excel
+          <Button variant="outline" onClick={() => handleExport('excel')} disabled={exportingFormat !== null}>
+            <FileDown className="mr-2 h-4 w-4" />
+            {exportingFormat === 'excel' ? 'Exporting...' : 'Excel'}
           </Button>
-          <Button variant="outline" onClick={() => handleExport('pdf')}>
-            <Download className="mr-2 h-4 w-4" />
-            PDF
+          <Button variant="outline" onClick={() => handleExport('pdf')} disabled={exportingFormat !== null}>
+            <FileDown className="mr-2 h-4 w-4" />
+            {exportingFormat === 'pdf' ? 'Exporting...' : 'PDF'}
           </Button>
         </div>
       </div>
