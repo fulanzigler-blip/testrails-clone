@@ -79,6 +79,7 @@ enum IntegrationType {
   slack
   email
   webhook
+  github_scenarios
 }
 
 enum NotificationType {
