@@ -8,11 +8,14 @@ import GitHubScenariosService, { YamlTestCase } from '../services/github-scenari
 export default async function githubScenariosRoutes(fastify: FastifyInstance) {
   const syncBodySchema = z.object({
     projectId: z.string().uuid(),
+    suiteId: z.string().uuid(), // required — new test cases must belong to a suite
+    branch: z.string().default('main'),
   });
 
   const pushBodySchema = z.object({
     projectId: z.string().uuid(),
     suiteId: z.string().uuid().optional(),
+    branch: z.string().default('main'),
   });
 
   // POST /sync — pull scenarios from GitHub and upsert into DB
@@ -41,7 +44,7 @@ export default async function githubScenariosRoutes(fastify: FastifyInstance) {
       const { token, owner, repo } = config;
 
       const service = new GitHubScenariosService(token, owner, repo);
-      const scenarios = await service.pullScenarios();
+      const scenarios = await service.pullScenarios(input.branch);
 
       let created = 0;
       let updated = 0;
@@ -50,9 +53,7 @@ export default async function githubScenariosRoutes(fastify: FastifyInstance) {
         const existingTestCase = await prisma.testCase.findFirst({
           where: {
             title: scenario.title,
-            suite: {
-              projectId: input.projectId,
-            },
+            suiteId: input.suiteId,
           },
         });
 
@@ -77,8 +78,8 @@ export default async function githubScenariosRoutes(fastify: FastifyInstance) {
               expectedResult: scenario.expectedResult,
               priority: scenario.priority as any,
               tags: scenario.tags,
-              suiteId: null,
-              createdById: request.user.userId,
+              suiteId: input.suiteId,
+              createdById: (request.user as any).userId,
             },
           });
           created++;
@@ -141,7 +142,8 @@ export default async function githubScenariosRoutes(fastify: FastifyInstance) {
       const service = new GitHubScenariosService(token, owner, repo);
       const commitUrl = await service.pushScenarios(
         yamlCases,
-        'Update test scenarios from TestRails'
+        'Update test scenarios from TestRails',
+        input.branch,
       );
 
       return successResponse(reply, { exported: yamlCases.length, commitUrl }, undefined);

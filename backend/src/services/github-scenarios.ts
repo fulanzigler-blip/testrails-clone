@@ -33,7 +33,8 @@ export class GitHubScenariosService {
 
       if ('content' in data && 'encoding' in data && data.encoding === 'base64') {
         const yamlContent = Buffer.from(data.content, 'base64').toString('utf-8')
-        const parsed = yaml.load(yamlContent)
+        // Use JSON_SCHEMA to prevent !!js/function and other unsafe YAML types
+        const parsed = yaml.load(yamlContent, { schema: yaml.JSON_SCHEMA })
 
         if (Array.isArray(parsed)) {
           return parsed as YamlTestCase[]
@@ -56,7 +57,7 @@ export class GitHubScenariosService {
     }
   }
 
-  async pushScenarios(cases: YamlTestCase[], commitMessage: string): Promise<string> {
+  async pushScenarios(cases: YamlTestCase[], commitMessage: string, branch = 'main'): Promise<string> {
     const yamlContent = yaml.dump(cases)
     const encodedContent = Buffer.from(yamlContent).toString('base64')
 
@@ -67,7 +68,7 @@ export class GitHubScenariosService {
         owner: this.owner,
         repo: this.repo,
         path: 'scenarios.yaml',
-        ref: 'main',
+        ref: branch,
       })
 
       if ('sha' in data) {
@@ -93,7 +94,7 @@ export class GitHubScenariosService {
       message: commitMessage,
       content: encodedContent,
       sha: sha,
-      branch: 'main',
+      branch,
     })
 
     return response.data.commit.html_url

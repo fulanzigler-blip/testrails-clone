@@ -37,11 +37,15 @@ const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({ projectId }) => {
     }
   }, []);
 
-  const scheduleAutoClear = useCallback(() => {
-    clearTimers();
-    successTimerRef.current = setTimeout(() => setSuccessMessage(null), 5000);
-    errorTimerRef.current = setTimeout(() => setErrorMessage(null), 5000);
-  }, [clearTimers]);
+  const scheduleAutoClear = useCallback((which: 'success' | 'error') => {
+    if (which === 'success') {
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+      successTimerRef.current = setTimeout(() => setSuccessMessage(null), 5000);
+    } else {
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = setTimeout(() => setErrorMessage(null), 5000);
+    }
+  }, []);
 
   useEffect(() => {
     return () => clearTimers();
@@ -58,12 +62,12 @@ const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({ projectId }) => {
       );
       const { synced, created, updated } = response.data.data;
       setSuccessMessage(`Synced ${synced} test cases (${created} created, ${updated} updated)`);
-      scheduleAutoClear();
+      scheduleAutoClear('success');
     } catch (error: unknown) {
       const msg =
         error instanceof Error ? error.message : 'Failed to pull from GitHub';
       setErrorMessage(msg);
-      scheduleAutoClear();
+      scheduleAutoClear('error');
     } finally {
       setSyncLoading(false);
     }
@@ -80,12 +84,12 @@ const GitHubSyncPanel: React.FC<GitHubSyncPanelProps> = ({ projectId }) => {
       );
       const { exported } = response.data.data;
       setSuccessMessage(`Exported ${exported} test cases to GitHub`);
-      scheduleAutoClear();
+      scheduleAutoClear('success');
     } catch (error: unknown) {
       const msg =
         error instanceof Error ? error.message : 'Failed to push to GitHub';
       setErrorMessage(msg);
-      scheduleAutoClear();
+      scheduleAutoClear('error');
     } finally {
       setPushLoading(false);
     }
