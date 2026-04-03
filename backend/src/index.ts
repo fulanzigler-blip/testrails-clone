@@ -5,11 +5,13 @@ import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import csrf from '@fastify/csrf-protection';
 import helmet from '@fastify/helmet';
+import path from 'path';
 import prisma from './config/database';
 import redis from './config/redis';
 import logger from './utils/logger';
 import * as authMiddleware from './middleware/auth';
 import { generateSecureToken } from './utils/security';
+import { registerConnection, removeConnection, broadcastToOrg } from './utils/websocket';
 
 // Import routes
 import authRoutes from './routes/auth';
@@ -23,6 +25,7 @@ import testResultRoutes from './routes/test-results';
 import reportRoutes from './routes/reports';
 import integrationRoutes from './routes/integrations';
 import notificationRoutes from './routes/notifications';
+import uploadRoutes from './routes/uploads';
 
 // Create Fastify instance
 const fastify = Fastify({
@@ -104,6 +107,12 @@ async function registerPlugins() {
   // WebSocket
   await fastify.register(websocket);
 
+  // File uploads
+  await fastify.register(require('@fastify/multipart'), { limits: { fileSize: 10 * 1024 * 1024 } });
+
+  // Serve uploaded files
+  await fastify.register(require('@fastify/static'), { root: path.join(__dirname, '../uploads'), prefix: '/files' });
+
   // Attach middleware
   fastify.decorate('authenticate', authMiddleware.authenticate);
   fastify.decorate('authorize', authMiddleware.authorize);
@@ -146,8 +155,9 @@ async function registerRoutes() {
   fastify.register(async function (fastify) {
     fastify.get('/ws', { websocket: true }, async (connection, req) => {
       try {
-        // Extract JWT from query string or headers
-        const token = (req as any).query?.token || (req as any).headers?.['sec-websocket-protocol'];
+        // Extract JWT from Sec-WebSocket-Protocol header only (never from URL to avoid log exposure)
+        const proto = (req as any).headers?.['sec-websocket-protocol'] as string | undefined;
+        const token = proto?.startsWith('bearer.') ? proto.slice('bearer.'.length) : undefined;
 
         if (!token) {
           connection.socket.send(JSON.stringify({
@@ -173,24 +183,35 @@ async function registerRoutes() {
           return;
         }
 
+        // Register connection in registry by organizationId
+        const userCtx = (connection as any).user as { userId: string; organizationId?: string };
+        if (!userCtx.organizationId) {
+          connection.socket.close(4002, 'Missing organizationId in token');
+          return;
+        }
+        const organizationId = userCtx.organizationId;
+        registerConnection(organizationId, connection.socket);
+
         connection.socket.on('message', async message => {
           try {
             // Process authenticated messages
             const data = JSON.parse(message.toString());
-            const userId = (connection as any).user?.userId;
 
-            // TODO: Implement real-time update logic
-            connection.socket.send(JSON.stringify({
-              type: 'pong',
-              data: message.toString(),
-              userId,
-            }));
+            if (data.type === 'subscribe' && data.room) {
+              // Store room subscription info on connection
+              (connection as any).room = data.room;
+              connection.socket.send(JSON.stringify({
+                type: 'subscribed',
+                room: data.room,
+              }));
+            }
           } catch (error) {
             logger.error('Error processing WebSocket message:', error);
           }
         });
 
         connection.socket.on('close', () => {
+          removeConnection(organizationId, connection.socket);
           logger.info('WebSocket connection closed');
         });
       } catch (error) {
@@ -211,6 +232,7 @@ async function registerRoutes() {
   await fastify.register(reportRoutes, { prefix: '/api/v1/reports' });
   await fastify.register(integrationRoutes, { prefix: '/api/v1/integrations' });
   await fastify.register(notificationRoutes, { prefix: '/api/v1/notifications' });
+  await fastify.register(uploadRoutes, { prefix: '/api/v1/uploads' });
 }
 
 // Start server
