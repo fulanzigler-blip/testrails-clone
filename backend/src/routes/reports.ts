@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import prisma from '../config/database';
 import logger from '../utils/logger';
 import { successResponse, errorResponses } from '../utils/response';
+import { exportToPDF, exportToExcel } from '../services/report-exporter';
 
 export default async function reportRoutes(fastify: FastifyInstance) {
   // Get summary report for organization
