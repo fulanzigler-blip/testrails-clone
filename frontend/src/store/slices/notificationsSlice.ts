@@ -1,4 +1,4 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
 import { api } from '../../lib/api'
 
 interface Notification {
@@ -56,7 +56,14 @@ export const markAllAsRead = createAsyncThunk(
 const notificationsSlice = createSlice({
   name: 'notifications',
   initialState,
-  reducers: {},
+  reducers: {
+    addNotification(state, action: PayloadAction<Notification>) {
+      state.notifications.unshift(action.payload)
+      if (action.payload.read_at === null) {
+        state.unreadCount += 1
+      }
+    },
+  },
   extraReducers: (builder) => {
     builder
       .addCase(fetchNotifications.pending, (state) => {
@@ -88,4 +95,5 @@ const notificationsSlice = createSlice({
   },
 })
 
+export const { addNotification } = notificationsSlice.actions
 export default notificationsSlice.reducer

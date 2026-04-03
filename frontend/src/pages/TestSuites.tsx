@@ -1,24 +1,35 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Badge } from '../components/ui/badge'
 import { Plus, ChevronRight, FolderOpen, Edit, Trash2 } from 'lucide-react'
+import { useAppDispatch, useAppSelector } from '../store/hooks'
+import {
+  fetchTestSuites,
+  createTestSuite,
+  updateTestSuite,
+  deleteTestSuite,
+} from '../store/slices/testSuitesSlice'
+import { fetchProjects } from '../store/slices/projectsSlice'
 
 interface TestSuite {
   id: string
   name: string
-  description?: string
-  project_id: string
-  parent_suite_id: string | null
-  test_cases_count: number
-  created_at: string
-  children?: TestSuite[]
+  description: string | null
+  projectId: string
+  parentSuiteId: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 const TestSuites: React.FC = () => {
-  const [suites, setSuites] = useState<TestSuite[]>([])
+  const dispatch = useAppDispatch()
+  const { suites, loading } = useAppSelector((state) => state.testSuites)
+  const { projects } = useAppSelector((state) => state.projects)
+
+  const [selectedProject, setSelectedProject] = useState<string>('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingSuite, setEditingSuite] = useState<TestSuite | null>(null)
   const [expandedSuites, setExpandedSuites] = useState<Set<string>>(new Set())
@@ -26,16 +37,29 @@ const TestSuites: React.FC = () => {
     name: '',
     description: '',
     project_id: '',
-    parent_suite_id: ''
+    parent_suite_id: '',
   })
+
+  useEffect(() => {
+    dispatch(fetchProjects())
+    dispatch(fetchTestSuites())
+  }, [dispatch])
+
+  useEffect(() => {
+    dispatch(
+      fetchTestSuites({
+        projectId: selectedProject || undefined,
+      })
+    )
+  }, [selectedProject, dispatch])
 
   const handleCreate = () => {
     setEditingSuite(null)
     setFormData({
       name: '',
       description: '',
-      project_id: '',
-      parent_suite_id: ''
+      project_id: selectedProject || '',
+      parent_suite_id: '',
     })
     setIsModalOpen(true)
   }
@@ -45,23 +69,19 @@ const TestSuites: React.FC = () => {
     setFormData({
       name: suite.name,
       description: suite.description || '',
-      project_id: suite.project_id,
-      parent_suite_id: suite.parent_suite_id || ''
+      project_id: suite.projectId,
+      parent_suite_id: suite.parentSuiteId || '',
     })
     setIsModalOpen(true)
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this suite? All child suites will also be deleted.')) {
-      const deleteRecursive = (suites: TestSuite[], suiteId: string): TestSuite[] => {
-        return suites
-          .filter(suite => suite.id !== suiteId)
-          .map(suite => ({
-            ...suite,
-            children: suite.children ? deleteRecursive(suite.children, suiteId) : undefined
-          }))
+      try {
+        await dispatch(deleteTestSuite(id)).unwrap()
+      } catch (error) {
+        console.error('Failed to delete test suite:', error)
       }
-      setSuites(deleteRecursive(suites, id))
     }
   }
 
@@ -75,16 +95,46 @@ const TestSuites: React.FC = () => {
     setExpandedSuites(newExpanded)
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Here you would make an API call to create/update the suite
-    console.log('Submitting suite:', formData)
-    setIsModalOpen(false)
+    try {
+      if (editingSuite) {
+        await dispatch(
+          updateTestSuite({
+            id: editingSuite.id,
+            name: formData.name,
+            description: formData.description || undefined,
+            parentSuiteId: formData.parent_suite_id || undefined,
+          })
+        ).unwrap()
+      } else {
+        await dispatch(
+          createTestSuite({
+            name: formData.name,
+            description: formData.description || undefined,
+            projectId: formData.project_id,
+            parentSuiteId: formData.parent_suite_id || undefined,
+          })
+        ).unwrap()
+      }
+      setIsModalOpen(false)
+    } catch (error) {
+      console.error('Failed to save test suite:', error)
+    }
+  }
+
+  const getChildSuites = (parentId: string): TestSuite[] => {
+    return suites.filter((s) => s.parentSuiteId === parentId)
+  }
+
+  const getRootSuites = (): TestSuite[] => {
+    return suites.filter((s) => s.parentSuiteId === null || s.parentSuiteId === undefined)
   }
 
   const renderSuite = (suite: TestSuite, level: number = 0) => {
     const isExpanded = expandedSuites.has(suite.id)
-    const hasChildren = suite.children && suite.children.length > 0
+    const children = getChildSuites(suite.id)
+    const hasChildren = children.length > 0
 
     return (
       <div key={suite.id}>
@@ -105,7 +155,7 @@ const TestSuites: React.FC = () => {
                   </Button>
                 )}
                 {!hasChildren && <div className="w-6" />}
-                
+
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <FolderOpen className="h-5 w-5 text-muted-foreground" />
@@ -115,7 +165,7 @@ const TestSuites: React.FC = () => {
                     <p className="text-sm text-muted-foreground mt-1">{suite.description}</p>
                   )}
                   <div className="flex items-center gap-2 mt-2">
-                    <Badge variant="secondary">{suite.test_cases_count} test cases</Badge>
+                    <Badge variant="secondary">{children.length} sub-suites</Badge>
                   </div>
                 </div>
               </div>
@@ -134,7 +184,7 @@ const TestSuites: React.FC = () => {
 
         {hasChildren && isExpanded && (
           <div>
-            {suite.children!.map(child => renderSuite(child, level + 1))}
+            {children.map((child) => renderSuite(child, level + 1))}
           </div>
         )}
       </div>
@@ -154,24 +204,51 @@ const TestSuites: React.FC = () => {
         </Button>
       </div>
 
-      {/* Suites Tree */}
-      <div className="space-y-4">
-        {suites.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <FolderOpen className="h-16 w-16 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No test suites yet</h3>
-              <p className="text-muted-foreground mb-4">Create your first test suite to get started</p>
-              <Button onClick={handleCreate}>
-                <Plus className="mr-2 h-4 w-4" />
-                Create Suite
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          suites.map(suite => renderSuite(suite))
-        )}
+      {/* Project Filter */}
+      <div className="flex items-center gap-2">
+        <Label htmlFor="project-filter">Filter by Project:</Label>
+        <select
+          id="project-filter"
+          value={selectedProject}
+          onChange={(e) => setSelectedProject(e.target.value)}
+          className="border rounded-md px-3 py-1.5 text-sm"
+        >
+          <option value="">All Projects</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
       </div>
+
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center h-32">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      )}
+
+      {/* Suites Tree */}
+      {!loading && (
+        <div className="space-y-4">
+          {getRootSuites().length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <FolderOpen className="h-16 w-16 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No test suites yet</h3>
+                <p className="text-muted-foreground mb-4">Create your first test suite to get started</p>
+                <Button onClick={handleCreate}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Suite
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            getRootSuites().map((suite) => renderSuite(suite))
+          )}
+        </div>
+      )}
 
       {/* Create/Edit Modal */}
       {isModalOpen && (
@@ -214,7 +291,11 @@ const TestSuites: React.FC = () => {
                       required
                     >
                       <option value="">Select Project</option>
-                      {/* Add project options from API */}
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -227,7 +308,13 @@ const TestSuites: React.FC = () => {
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
                       <option value="">Root Level</option>
-                      {/* Add suite options from API */}
+                      {suites
+                        .filter((s) => !editingSuite || s.id !== editingSuite.id)
+                        .map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
                     </select>
                   </div>
 

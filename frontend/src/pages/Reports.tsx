@@ -5,58 +5,61 @@ import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Download, Calendar, TrendingUp, TrendingDown } from 'lucide-react'
+import { useAppDispatch, useAppSelector } from '../store/hooks'
+import { fetchReportSummary } from '../store/slices/reportsSlice'
+
+const COLORS = ['#10b981', '#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899']
 
 const Reports: React.FC = () => {
   const [dateRange, setDateRange] = useState({
     from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    to: new Date().toISOString().split('T')[0]
+    to: new Date().toISOString().split('T')[0],
   })
 
-  // Sample data - in production, this would come from the API
-  const summaryData = {
-    total_test_runs: 45,
-    total_test_cases: 150,
-    total_tests_executed: 900,
-    average_pass_rate: 87.5,
-    active_projects: 10,
-    top_failures: [
-      { test_case_title: 'Payment gateway timeout', failure_count: 15, percentage: 10.5 },
-      { test_case_title: 'Login API returns 500', failure_count: 12, percentage: 8.4 },
-      { test_case_title: 'Inventory sync fails', failure_count: 10, percentage: 7.0 },
-      { test_case_title: 'User profile update', failure_count: 8, percentage: 5.6 },
-      { test_case_title: 'Cart calculation error', failure_count: 7, percentage: 4.9 },
-    ],
-    trend: {
-      dates: ['Jan 1', 'Jan 2', 'Jan 3', 'Jan 4', 'Jan 5', 'Jan 6', 'Jan 7'],
-      pass_rates: [85, 87, 90, 88, 91, 86, 87.5],
-      total_tests: [120, 115, 140, 130, 150, 135, 110],
-    }
-  }
+  const dispatch = useAppDispatch()
+  const { summary, loading } = useAppSelector((state) => state.reports)
 
-  const priorityData = [
-    { name: 'Critical', passed: 20, failed: 5, total: 25 },
-    { name: 'High', passed: 45, failed: 8, total: 53 },
-    { name: 'Medium', passed: 80, failed: 12, total: 92 },
-    { name: 'Low', passed: 35, failed: 3, total: 38 },
-  ]
+  useEffect(() => {
+    dispatch(fetchReportSummary({ fromDate: dateRange.from, toDate: dateRange.to }))
+  }, [dispatch, dateRange])
 
-  const trendComparisonData = [
-    { name: 'This Week', passRate: 87.5, testsExecuted: 900 },
-    { name: 'Last Week', passRate: 85.2, testsExecuted: 850 },
-    { name: '2 Weeks Ago', passRate: 82.1, testsExecuted: 780 },
-    { name: '3 Weeks Ago', passRate: 79.8, testsExecuted: 720 },
-  ]
+  const trendChartData =
+    summary?.trendData.map((d) => ({
+      name: d.date,
+      passed: d.passed,
+      failed: d.failed,
+    })) ?? []
 
   const passFailDistribution = [
-    { name: 'Passed', value: summaryData.total_tests_executed * (summaryData.average_pass_rate / 100), color: '#10b981' },
-    { name: 'Failed', value: summaryData.total_tests_executed * (1 - summaryData.average_pass_rate / 100), color: '#ef4444' },
+    {
+      name: 'Passed',
+      value: Math.round((summary?.totalTestsExecuted ?? 0) * ((summary?.passRate ?? 0) / 100)),
+      color: '#10b981',
+    },
+    {
+      name: 'Failed',
+      value: Math.round((summary?.totalTestsExecuted ?? 0) * ((summary?.failRate ?? 0) / 100)),
+      color: '#ef4444',
+    },
   ]
 
-  const COLORS = ['#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#3b82f6']
+  const topFailures =
+    summary?.topFailures.map((f) => ({
+      test_case_title: f.title,
+      failure_count: f.failCount,
+      percentage: f.failCount,
+    })) ?? []
 
   const handleExport = (format: string) => {
-    console.log(`Exporting report in ${format} format`)
-    // In production, this would call an API endpoint to generate and download the report
+    window.open(
+      (import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1') +
+        '/reports/export?format=' +
+        format
+    )
+  }
+
+  const handleDateChange = (field: 'from' | 'to', value: string) => {
+    setDateRange((prev) => ({ ...prev, [field]: value }))
   }
 
   return (
@@ -92,7 +95,7 @@ const Reports: React.FC = () => {
                 id="from_date"
                 type="date"
                 value={dateRange.from}
-                onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
+                onChange={(e) => handleDateChange('from', e.target.value)}
               />
             </div>
             <div className="flex-1">
@@ -101,7 +104,7 @@ const Reports: React.FC = () => {
                 id="to_date"
                 type="date"
                 value={dateRange.to}
-                onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
+                onChange={(e) => handleDateChange('to', e.target.value)}
               />
             </div>
             <Button>
@@ -112,6 +115,13 @@ const Reports: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center h-32">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      )}
+
       {/* Summary Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -120,7 +130,7 @@ const Reports: React.FC = () => {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summaryData.total_test_runs}</div>
+            <div className="text-2xl font-bold">{summary?.totalTestRuns ?? 0}</div>
             <p className="text-xs text-muted-foreground">+12% from previous period</p>
           </CardContent>
         </Card>
@@ -131,7 +141,7 @@ const Reports: React.FC = () => {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summaryData.total_tests_executed}</div>
+            <div className="text-2xl font-bold">{summary?.totalTestsExecuted ?? 0}</div>
             <p className="text-xs text-muted-foreground">+8% from previous period</p>
           </CardContent>
         </Card>
@@ -142,7 +152,7 @@ const Reports: React.FC = () => {
             <TrendingUp className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summaryData.average_pass_rate}%</div>
+            <div className="text-2xl font-bold">{(summary?.passRate ?? 0).toFixed(1)}%</div>
             <p className="text-xs text-green-500">+2.3% from previous period</p>
           </CardContent>
         </Card>
@@ -153,7 +163,7 @@ const Reports: React.FC = () => {
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summaryData.active_projects}</div>
+            <div className="text-2xl font-bold">{summary?.activeProjects ?? 0}</div>
             <p className="text-xs text-muted-foreground">No change</p>
           </CardContent>
         </Card>
@@ -164,22 +174,18 @@ const Reports: React.FC = () => {
         <Card>
           <CardHeader>
             <CardTitle>Pass Rate Trend</CardTitle>
-            <CardDescription>Test execution pass rate over time</CardDescription>
+            <CardDescription>Test execution pass/fail over time</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={summaryData.trend.dates.map((date, i) => ({
-                name: date,
-                passRate: summaryData.trend.pass_rates[i],
-                total: summaryData.trend.total_tests[i]
-              }))}>
+              <LineChart data={trendChartData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="passRate" stroke="#10b981" name="Pass Rate %" />
-                <Line type="monotone" dataKey="total" stroke="#3b82f6" name="Total Tests" />
+                <Line type="monotone" dataKey="passed" stroke="#10b981" name="Passed" />
+                <Line type="monotone" dataKey="failed" stroke="#ef4444" name="Failed" />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -217,19 +223,20 @@ const Reports: React.FC = () => {
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Results by Priority</CardTitle>
-            <CardDescription>Test results grouped by priority level</CardDescription>
+            <CardTitle>Test Runs by Status</CardTitle>
+            <CardDescription>Distribution of test runs across statuses</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={priorityData}>
+              <BarChart data={summary?.testRunsByStatus ?? []}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
+                <XAxis dataKey="status" />
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="passed" fill="#10b981" name="Passed" />
-                <Bar dataKey="failed" fill="#ef4444" name="Failed" />
+                {(summary?.testRunsByStatus ?? []).map((_, index) => (
+                  <Bar key={index} dataKey="count" fill={COLORS[index % COLORS.length]} name="Count" />
+                ))}
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -242,7 +249,7 @@ const Reports: React.FC = () => {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={trendComparisonData}>
+              <BarChart data={[]}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis yAxisId="left" orientation="left" />
@@ -264,35 +271,44 @@ const Reports: React.FC = () => {
           <CardDescription>Most frequently failing test cases</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {summaryData.top_failures.map((failure, index) => (
-              <div key={index} className="flex items-center justify-between border-b pb-3 last:border-0">
-                <div className="flex items-center gap-4">
-                  <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center text-red-600 font-semibold">
-                    {index + 1}
+          {topFailures.length === 0 ? (
+            <div className="flex items-center justify-center h-24 text-muted-foreground">
+              No failure data available for the selected period.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {topFailures.map((failure, index) => (
+                <div key={index} className="flex items-center justify-between border-b pb-3 last:border-0">
+                  <div className="flex items-center gap-4">
+                    <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center text-red-600 font-semibold">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <div className="font-medium">{failure.test_case_title}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {failure.failure_count} failures
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-medium">{failure.test_case_title}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {failure.failure_count} failures ({failure.percentage}%)
+                  <div className="w-32">
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div
+                        className="bg-red-500 h-2 rounded-full"
+                        style={{
+                          width: `${Math.min(
+                            (failure.percentage /
+                              Math.max(...topFailures.map((f) => f.percentage), 1)) *
+                              100,
+                            100
+                          )}%`,
+                        }}
+                      />
                     </div>
                   </div>
                 </div>
-                <div className="w-32">
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-muted-foreground">Failure rate</span>
-                    <span className="font-medium text-red-600">{failure.percentage}%</span>
-                  </div>
-                  <div className="w-full bg-muted rounded-full h-2">
-                    <div
-                      className="bg-red-500 h-2 rounded-full"
-                      style={{ width: `${failure.percentage}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

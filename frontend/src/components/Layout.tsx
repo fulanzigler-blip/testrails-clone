@@ -1,13 +1,17 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { Bell, LayoutDashboard, TestTube, Play, FolderTree, Users, BarChart3, Settings, LogOut } from 'lucide-react'
 import { useAppSelector } from '../store/hooks'
 import { Badge } from './ui/badge'
+import NotificationsDrawer from './NotificationsDrawer'
+import useWebSocket from '../hooks/useWebSocket'
 
 const Layout: React.FC = () => {
   const location = useLocation()
   const { user } = useAppSelector((state) => state.auth)
   const { unreadCount } = useAppSelector((state) => state.notifications)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  useWebSocket()
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -95,7 +99,7 @@ const Layout: React.FC = () => {
             {navigation.find((item) => item.href === location.pathname)?.name || 'TestRails'}
           </h1>
           <div className="flex items-center gap-4">
-            <button className="relative rounded-full p-2 hover:bg-muted transition-colors">
+            <button className="relative rounded-full p-2 hover:bg-muted transition-colors" onClick={() => setDrawerOpen(true)}>
               <Bell className="h-5 w-5" />
               {unreadCount > 0 && (
                 <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
@@ -111,6 +115,7 @@ const Layout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+      <NotificationsDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   )
 }

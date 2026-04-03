@@ -5,6 +5,8 @@ import testCasesReducer from './slices/testCasesSlice'
 import testRunsReducer from './slices/testRunsSlice'
 import usersReducer from './slices/usersSlice'
 import notificationsReducer from './slices/notificationsSlice'
+import testSuitesReducer from './slices/testSuitesSlice'
+import reportsReducer from './slices/reportsSlice'
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +16,8 @@ export const store = configureStore({
     testRuns: testRunsReducer,
     users: usersReducer,
     notifications: notificationsReducer,
+    testSuites: testSuitesReducer,
+    reports: reportsReducer,
   },
 })
 
