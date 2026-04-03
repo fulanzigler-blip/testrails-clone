@@ -434,6 +434,7 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
     try {
       const body = generateTestCasesSchema.parse(request.body);
       const { projectId, flutterCode, autoSave, suiteId } = body;
+      const userId = (request.user as any).userId;
 
       // Validate projectId belongs to organization
       const project = await prisma.project.findFirst({
@@ -462,6 +463,7 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
             tags: testCase.tags,
             suiteId: suiteId,
             automationType: 'automated' as const,
+            createdById: userId,
           })),
         });
 

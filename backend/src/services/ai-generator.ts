@@ -12,10 +12,16 @@ export async function generateTestCases(
   projectId: string,
   flutterCode: string
 ): Promise<GeneratedTestCase[]> {
+  if (!process.env.ZAI_API_KEY) {
+    throw new Error('ZAI_API_KEY environment variable is not set');
+  }
+
   const systemPrompt =
     'You are a QA engineer. Given Flutter/Dart source code, generate comprehensive test cases as a JSON array. Each test case must include: title (string), description (string), steps (array of {order: number, description: string, expected: string}), expectedResult (string), priority (one of: low/medium/high/critical), automationType (always "automated"), tags (string array). Output ONLY valid JSON array, no markdown, no explanation.'
 
-  const userMessage = `Project: ${projectId}\n\nFlutter code:\n\`\`\`dart\n${flutterCode}\n\`\`\`\n\nGenerate test cases as a JSON array.`
+  // Escape backtick sequences that could break the code fence delimiter
+  const sanitizedCode = flutterCode.replace(/```/g, "'''")
+  const userMessage = `Project: ${projectId}\n\nFlutter code:\n\`\`\`dart\n${sanitizedCode}\n\`\`\`\n\nGenerate test cases as a JSON array.`
 
   const body = {
     model: 'glm-5.1',
