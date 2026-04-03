@@ -3,7 +3,9 @@ import {
   createTestCaseSchema,
   updateTestCaseSchema,
   bulkDeleteSchema,
+  generateTestCasesSchema,
 } from '../types/schemas';
+import { generateTestCases } from '../services/ai-generator';
 import prisma from '../config/database';
 import logger from '../utils/logger';
 import { successResponse, errorResponses } from '../utils/response';
@@ -417,6 +419,75 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
         return errorResponses.validation(reply, error.errors);
       }
       logger.error('Error bulk deleting test cases:', error);
+      return errorResponses.internal(reply);
+    }
+  });
+
+  // Generate test cases using AI
+  fastify.post('/generate', {
+    onRequest: [
+      fastify.authenticate,
+      fastify.getOrganizationContext,
+      fastify.authorize('admin', 'manager', 'tester'),
+    ],
+  }, async (request: any, reply) => {
+    try {
+      const body = generateTestCasesSchema.parse(request.body);
+      const { projectId, flutterCode, autoSave, suiteId } = body;
+
+      // Validate projectId belongs to organization
+      const project = await prisma.project.findFirst({
+        where: {
+          id: projectId,
+          organizationId: request.organizationId,
+        },
+      });
+
+      if (!project) {
+        return errorResponses.notFound(reply, 'Project');
+      }
+
+      // Generate test cases using AI
+      const generated = await generateTestCases(projectId, flutterCode);
+
+      // Auto-save if requested and suiteId is provided
+      if (autoSave && suiteId) {
+        await prisma.testCase.createMany({
+          data: generated.map((testCase) => ({
+            title: testCase.title,
+            description: testCase.description,
+            steps: testCase.steps as any,
+            expectedResult: testCase.expectedResult,
+            priority: testCase.priority,
+            tags: testCase.tags,
+            suiteId: suiteId,
+            automationType: 'automated' as const,
+          })),
+        });
+
+        logger.info(`AI generated and saved ${generated.length} test cases for project ${projectId}`);
+
+        return successResponse(reply, {
+          generated,
+          saved: true,
+          count: generated.length,
+        }, undefined);
+      }
+
+      logger.info(`AI generated ${generated.length} test cases for project ${projectId}`);
+
+      return successResponse(reply, {
+        generated,
+        saved: false,
+      }, undefined);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return errorResponses.validation(reply, error.errors);
+      }
+      logger.error('Failed to generate test cases', { error: error.message });
+      if (error.message?.startsWith('GENERATION_FAILED')) {
+        return reply.code(422).send({ error: error.message });
+      }
       return errorResponses.internal(reply);
     }
   });
