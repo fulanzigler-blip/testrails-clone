@@ -390,6 +390,7 @@ export default async function maestroRoutes(fastify: FastifyInstance) {
       }> = [];
 
       const seenTexts = new Set<string>();
+      let prevContentDesc: string = '';
 
       // Match all <node .../> or <node ...> tags
       const nodeRegex = /<node\s+([^>]*)\/?>/g;
@@ -417,8 +418,19 @@ export default async function maestroRoutes(fastify: FastifyInstance) {
         const bounds = attrMap.bounds || '';
         const naf = attrMap.NAF === 'true';
 
-        // Include EditText (input fields) even without text — they're important interactive elements
+        // For EditText/input fields with empty content-desc, inherit label from preceding sibling
+        // (Flutter labels are usually sibling Views above the input field)
         const isInputField = className.includes('EditText') || className.includes('TextInput');
+        if (isInputField && !text && prevContentDesc && prevContentDesc.length >= 2 && prevContentDesc.length < 50) {
+          text = prevContentDesc;
+        }
+
+        // Store current content-desc for next iteration (for label inheritance)
+        if (contentDesc && contentDesc.length >= 2 && contentDesc.length < 100) {
+          prevContentDesc = contentDesc;
+        }
+
+        // Include EditText (input fields) even without text — they're important interactive elements
         const hasBounds = bounds && bounds !== '[0,0][0,0]';
 
         // Parse bounds to get center coordinates: "[left,top][right,bottom]" → center as %
@@ -440,8 +452,11 @@ export default async function maestroRoutes(fastify: FastifyInstance) {
         }
 
         // Only include elements with meaningful text OR interactive input fields
-        if (text && text.length >= 2 && text.length < 100 && !seenTexts.has(text)) {
-          seenTexts.add(text);
+        const isInputFieldForSeen = isInputField && text === prevContentDesc;
+        const seenKey = isInputFieldForSeen ? `[input:${text}]` : text;
+
+        if (text && text.length >= 2 && text.length < 100 && !seenTexts.has(seenKey)) {
+          seenTexts.add(seenKey);
           elements.push({
             text,
             resourceId: resourceId || undefined,

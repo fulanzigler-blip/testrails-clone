@@ -266,3 +266,24 @@ export const crawlGenerateSchema = z.object({
   credentials: z.record(z.string().min(1), z.string().max(200)).optional(),
   maxScreens: z.number().int().min(1).max(8).default(4),
 });
+
+// Integration Test schemas
+export const generateIntegrationTestSchema = z.object({
+  appId: z.string().min(1).max(200),
+  scenario: z.string().min(1, 'Scenario description is required'),
+  credentials: z.record(z.string()).optional(),
+});
+
+export const runIntegrationTestSchema = z.object({
+  appId: z.string().min(1).max(200),
+  scenario: z.string().min(1, 'Scenario description is required'),
+  credentials: z.record(z.string()).optional(),
+});
+
+export const saveIntegrationTestSchema = z.object({
+  name: z.string().min(1, 'Test name is required').max(255),
+  dartCode: z.string().min(1, 'Dart code is required'),
+  appId: z.string().min(1).max(255),
+  scenario: z.string().min(1),
+  suiteId: z.string().uuid().optional(),
+});

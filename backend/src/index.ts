@@ -28,6 +28,7 @@ import notificationRoutes from './routes/notifications';
 import uploadRoutes from './routes/uploads';
 import maestroRoutes from './routes/maestro'
 import githubScenariosRoutes from './routes/github-scenarios';
+import integrationTestRoutes from './routes/integration-tests';
 
 // Create Fastify instance
 const fastify = Fastify({
@@ -271,6 +272,7 @@ async function registerRoutes() {
   await fastify.register(uploadRoutes, { prefix: '/api/v1/uploads' });
   await fastify.register(maestroRoutes, { prefix: '/api/v1/maestro' });
   await fastify.register(githubScenariosRoutes, { prefix: '/api/v1/integrations/github-scenarios' });
+  await fastify.register(integrationTestRoutes, { prefix: '/api/v1/integration-tests' });
 }
 
 // Start server

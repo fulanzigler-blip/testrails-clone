@@ -424,3 +424,16 @@ model MaestroFlow {
   @@index([testSuiteId])
   @@map("maestro_flows")
 }
+
+model IntegrationTest {
+  id        String   @id @default(uuid())
+  name      String   @db.VarChar(255)
+  dartCode  String   @db.Text
+  appId     String   @db.VarChar(255)
+  scenario  String   @db.Text
+  suiteId   String?  @map("suite_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("integration_tests")
+}

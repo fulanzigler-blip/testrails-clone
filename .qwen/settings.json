@@ -11,7 +11,9 @@
       "Bash(docker inspect *)",
       "Bash(ssh *)",
       "Bash(curl *)",
-      "Bash(docker exec *)"
+      "Bash(docker exec *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   },
   "$version": 3

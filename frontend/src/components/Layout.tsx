@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Bell, LayoutDashboard, TestTube, Play, FolderTree, Users, BarChart3, Settings, LogOut, FolderOpen, Smartphone } from 'lucide-react'
+import { Bell, LayoutDashboard, TestTube, Play, FolderTree, Users, BarChart3, Settings, LogOut, FolderOpen, Smartphone, Cpu } from 'lucide-react'
 import { useAppSelector } from '../store/hooks'
 import { Badge } from './ui/badge'
 import NotificationsDrawer from './NotificationsDrawer'
@@ -20,6 +20,7 @@ const Layout: React.FC = () => {
     { name: 'Test Runs', href: '/test-runs', icon: Play },
     { name: 'Test Suites', href: '/test-suites', icon: FolderTree },
     { name: 'Page Automation', href: '/page-automation', icon: Smartphone },
+    { name: 'AI Integration Tests', href: '/ai-integration-tests', icon: Cpu },
     { name: 'Users', href: '/users', icon: Users },
     { name: 'Reports', href: '/reports', icon: BarChart3 },
   ]

@@ -264,11 +264,8 @@ const PageAutomation: React.FC = () => {
     let prevAction = '';
 
     for (const step of enabledSteps) {
-      // CRITICAL: After EVERY inputText, hide keyboard before next action
-      // (except if next action is also inputText for same field)
-      if (prevAction === 'inputText' && step.action !== 'inputText') {
-        lines.push('- hideKeyboard');
-      }
+      // DON'T auto-hide keyboard after inputText - let Maestro handle focus naturally
+      // (tapping next field automatically dismisses keyboard on most apps)
 
       switch (step.action) {
         case 'tapOn':
@@ -300,7 +297,8 @@ const PageAutomation: React.FC = () => {
           prevAction = 'waitFor';
           break;
         case 'hideKeyboard':
-          lines.push('- hideKeyboard');
+          // Use pressKey: Back as alternative (safer on Huawei)
+          lines.push('- pressKey: Back');
           prevAction = 'hideKeyboard';
           break;
         case 'pressKey':
@@ -461,8 +459,7 @@ const PageAutomation: React.FC = () => {
             <CardContent className="pt-0">
               <div className="space-y-1 max-h-[500px] overflow-y-auto">
                 {elements.map((el, idx) => {
-                  const isInput = el.className?.includes('EditText');
-                  const isPassword = isInput && (el.className?.includes('password') || el.text?.toLowerCase().includes('password'));
+                  const isInput = el.className?.includes('EditText') || el.className?.includes('ImageView');
                   const isButton = el.className?.includes('Button') || (el.clickable && el.text?.length < 20);
                   return (
                     <div 
@@ -470,41 +467,18 @@ const PageAutomation: React.FC = () => {
                       className="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer border border-transparent hover:border-primary/50 transition-colors"
                       onClick={() => {
                         if (isInput) {
-                          if (isPassword) {
-                            // Flutter apps NEVER have resource-id (confirmed by device inspection)
-                            // Use coordinates - this is the ONLY option for Flutter password fields
-                            let coords = '';
-                            try {
-                              if (el.bounds && typeof el.bounds === 'string' && el.bounds.startsWith('{')) {
-                                const parsed = JSON.parse(el.bounds);
-                                coords = parsed.coords || '';
-                              }
-                            } catch {}
-                            
-                            if (!coords) {
-                              alert('No coordinates available for this password field.');
-                              return;
-                            }
-                            
-                            // Directly add steps - no confirm needed
-                            addStep('tapOn', coords, `Tap password field (${coords})`);
-                            const val = prompt(`Enter password to type:`, '');
+                          // Input field - ask for label text and type value
+                          // Labels are most reliable for Flutter apps
+                          const defaultLabel = el.text || '';
+                          const label = prompt(
+                            `Text to tap before typing (label shown on screen):\n(e.g. "Personal Number", "Password", "Email")\n\nNote: Tapping the label usually focuses the input field.`,
+                            defaultLabel
+                          );
+                          if (label) {
+                            addStep('tapOn', label, `Tap ${label} label to focus`);
+                            const val = prompt(`Text to type:`, '');
                             if (val) {
-                              addStep('inputText', val, `Type password`);
-                            }
-                          } else {
-                            // Email/Input field - tap placeholder text
-                            const defaultText = el.text || '';
-                            const label = prompt(
-                              `Text to tap before typing (the placeholder shown on screen):\n(e.g. "${defaultText}" or "Email")`,
-                              defaultText
-                            );
-                            if (label) {
-                              addStep('tapOn', label, `Tap ${label} to focus`);
-                              const val = prompt(`Text to type:`, '');
-                              if (val) {
-                                addStep('inputText', val, `Type '${val}'`);
-                              }
+                              addStep('inputText', val, `Type '${val}'`);
                             }
                           }
                         } else {
@@ -515,9 +489,9 @@ const PageAutomation: React.FC = () => {
                       }}
                     >
                       <Badge variant="outline" className={`text-xs ${
-                        isPassword ? 'bg-red-100 text-red-800' : isInput ? 'bg-yellow-100 text-yellow-800' : isButton ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                        isInput ? 'bg-yellow-100 text-yellow-800' : isButton ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
                       }`}>
-                        {isPassword ? 'Password' : isInput ? 'Input' : isButton ? 'Button' : 'Text'}
+                        {isInput ? 'Input' : isButton ? 'Button' : 'Text'}
                       </Badge>
                       <span className="flex-1 text-sm truncate">{el.text || '(no text)'}</span>
                       {el.bounds && (
