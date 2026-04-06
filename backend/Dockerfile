@@ -27,8 +27,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dumb-init for proper signal handling and OpenSSL for Prisma
-RUN apk add --no-cache dumb-init openssl
+# Install dumb-init, OpenSSL, and su-exec for privilege dropping in entrypoint
+RUN apk add --no-cache dumb-init openssl su-exec
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
@@ -52,8 +52,9 @@ COPY --from=builder /app/dist ./dist
 RUN mkdir -p /app/uploads && \
     chown -R nodejs:nodejs /app
 
-# Switch to non-root user
-USER nodejs
+# Copy entrypoint script (runs as root to fix SSH key permissions, then drops to nodejs)
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Expose port
 EXPOSE 3000
@@ -62,8 +63,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Use dumb-init to handle signals properly
-ENTRYPOINT ["dumb-init", "--"]
-
-# Start application
-CMD ["node", "dist/index.js"]
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["dumb-init", "--", "node", "dist/index.js"]

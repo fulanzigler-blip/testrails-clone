@@ -8,6 +8,7 @@ import notificationsReducer from './slices/notificationsSlice'
 import testSuitesReducer from './slices/testSuitesSlice'
 import reportsReducer from './slices/reportsSlice'
 import maestroReducer from './slices/maestroSlice'
+import generatedFlowsReducer from './slices/generatedFlowsSlice'
 
 export const store = configureStore({
   reducer: {
@@ -20,6 +21,7 @@ export const store = configureStore({
     testSuites: testSuitesReducer,
     reports: reportsReducer,
     maestro: maestroReducer,
+    generatedFlows: generatedFlowsReducer,
   },
 })
 

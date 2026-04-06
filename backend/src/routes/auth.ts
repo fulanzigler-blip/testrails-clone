@@ -77,7 +77,6 @@ export default async function authRoutes(fastify: FastifyInstance) {
       const passwordHash = await hashPassword(input.password);
 
       // Create user with email verification pending
-      const verificationToken = generateSecureToken(32);
       const user = await prisma.user.create({
         data: {
           email: input.email,
@@ -91,6 +90,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       });
 
       // Store verification token in Redis
+      const verificationToken = generateSecureToken(32);
       await redis.set(
         getEmailVerificationKey(user.id),
         verificationToken,
@@ -100,14 +100,6 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
       // SECURITY: Send verification email (email service to be implemented)
       logger.info(`Verification email sent to ${input.email} with token: ${verificationToken}`);
-
-      // Generate tokens (but mark user as unverified)
-      const accessToken = generateAccessToken(fastify, user.id, false, user.role);
-      const refreshToken = generateRefreshToken(fastify, user.id);
-
-      await redis.set(`refresh_token:${user.id}`, refreshToken, 'EX', 7 * 24 * 60 * 60);
-
-      logger.info(`New user registered: ${user.email} (email verification pending)`);
 
       return successResponse(reply, {
         user: {
@@ -123,7 +115,6 @@ export default async function authRoutes(fastify: FastifyInstance) {
           name: organization.name,
           slug: organization.slug,
         },
-        accessToken,
         message: 'Please check your email to verify your account',
       }, undefined);
     } catch (error: any) {
@@ -223,6 +214,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
       return successResponse(reply, {
         accessToken,
+        refreshToken,
         user: {
           id: user.id,
           email: user.email,
@@ -462,8 +454,14 @@ export default async function authRoutes(fastify: FastifyInstance) {
   // Refresh token
   fastify.post('/refresh', async (request, reply) => {
     try {
-      // Get refresh token from cookie
-      const refreshToken = request.cookies?.refresh_token;
+      // Accept refresh token from cookie, body, or Authorization header
+      const body = request.body as any;
+      const authHeader = request.headers.authorization;
+      const refreshToken =
+        request.cookies?.refresh_token ||
+        body?.refreshToken ||
+        body?.refresh_token ||
+        (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined);
 
       if (!refreshToken) {
         return errorResponses.unauthorized(reply, 'Refresh token not found');

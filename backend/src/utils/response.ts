@@ -110,4 +110,82 @@ export const errorResponses = {
 
   internal: (reply: FastifyReply, message?: string) =>
     errorResponse(reply, 'INTERNAL_ERROR', message || 'Internal server error', 500),
+
+  // Smart error handler — auto-detects error type and returns user-friendly message
+  handle: (reply: FastifyReply, error: Error, context?: string) => {
+    const msg = error.message || '';
+
+    // SSH / connectivity errors
+    if (msg.includes('timed out') || msg.includes('timeout')) {
+      return reply.code(503).send({
+        success: false,
+        error: {
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Mac runner timed out. Please ensure the Mac is awake and connected to the network, then try again.',
+        },
+      });
+    }
+    if (msg.includes('SSH') || msg.includes('connect') || msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND')) {
+      return reply.code(503).send({
+        success: false,
+        error: {
+          code: 'CONNECTION_FAILED',
+          message: `Cannot connect to Mac runner: ${msg}. Check SSH connectivity and ensure the device is on the same network.`,
+        },
+      });
+    }
+
+    // AI generation errors
+    if (msg.startsWith('CRAWL_GENERATION_FAILED')) {
+      const [, reason] = msg.split(':');
+      return reply.code(422).send({
+        success: false,
+        error: {
+          code: 'GENERATION_FAILED',
+          message: `AI failed to generate test cases: ${reason?.trim() || 'Unknown error'}. Please try again.`,
+        },
+      });
+    }
+
+    // Database / Prisma errors
+    if (msg.includes('P2002') || msg.includes('Unique constraint')) {
+      return reply.code(409).send({
+        success: false,
+        error: { code: 'CONFLICT', message: 'This record already exists.' },
+      });
+    }
+    if (msg.includes('P2025') || msg.includes('record not found')) {
+      return reply.code(404).send({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'The requested record was not found.' },
+      });
+    }
+
+    // Zod validation
+    if (error.name === 'ZodError') {
+      const details = (error as any).errors?.map((e: any) => ({
+        field: e.path?.join('.'),
+        message: e.message,
+      })) || [];
+      return reply.code(400).send({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid input data', details },
+      });
+    }
+
+    // JWT errors
+    if (msg.includes('expired') || msg.includes('EXPIRED')) {
+      return reply.code(401).send({
+        success: false,
+        error: { code: 'TOKEN_EXPIRED', message: 'Your session has expired. Please log in again.' },
+      });
+    }
+
+    // Fallback: generic internal error
+    const contextMsg = context ? `Failed to ${context}: ${msg}` : 'An unexpected error occurred. Please try again.';
+    return reply.code(500).send({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: contextMsg },
+    });
+  },
 };

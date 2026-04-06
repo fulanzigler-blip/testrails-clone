@@ -11,7 +11,9 @@ export default async function testSuiteRoutes(fastify: FastifyInstance) {
   }, async (request: any, reply) => {
     try {
       const organizationId = request.organizationId;
-      const { projectId, parentSuiteId, search, page = 1, perPage = 20 } = request.query as any;
+      const { projectId, parentSuiteId, search } = request.query as any;
+      const page = parseInt((request.query as any).page) || 1;
+      const perPage = Math.min(parseInt((request.query as any).perPage) || 20, 200);
 
       const where: any = { project: { organizationId } };
       if (projectId) where.projectId = projectId;

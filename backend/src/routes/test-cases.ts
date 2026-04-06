@@ -4,8 +4,11 @@ import {
   updateTestCaseSchema,
   bulkDeleteSchema,
   generateTestCasesSchema,
+  crawlGenerateSchema,
+  detectLoginSchema,
 } from '../types/schemas';
 import { generateTestCases } from '../services/ai-generator';
+import { crawlAppHierarchy, statefulCrawl, detectLoginScreen, parseHierarchy, generateFromHierarchy, saveFlowsToMac } from '../services/crawl-generator';
 import prisma from '../config/database';
 import logger from '../utils/logger';
 import { successResponse, errorResponses } from '../utils/response';
@@ -18,25 +21,27 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
   }, async (request: any, reply) => {
     try {
       const organizationId = request.organizationId;
-      const {
-        suiteId,
-        projectId,
-        status,
-        priority,
-        tags,
-        search,
-        page = 1,
-        perPage = 20,
-        sort = 'createdAt',
-        order = 'desc',
-      } = request.query as any;
+      const { suiteId, projectId, status, priority, tags, search, sort = 'createdAt', order = 'desc' } = request.query as any;
+      const page = parseInt((request.query as any).page) || 1;
+      const perPage = Math.min(parseInt((request.query as any).perPage) || 20, 200);
 
+      // Base org filter: allow test cases with a suite OR without a suite (suiteId=null)
       const where: any = {
-        suite: { project: { organizationId } },
+        OR: [
+          { suite: { project: { organizationId } } },
+          { suiteId: null, createdBy: { organizationId } },
+        ],
       };
 
-      if (suiteId) where.suiteId = suiteId;
-      if (projectId) where.suite = { projectId };
+      if (suiteId) {
+        // When filtering by suiteId, only return cases in that suite
+        delete where.OR;
+        where.suiteId = suiteId;
+        where.suite = { project: { organizationId } };
+      } else if (projectId) {
+        delete where.OR;
+        where.suite = { projectId, project: { organizationId } };
+      }
       if (status) where.status = status;
       if (priority) where.priority = priority;
       if (tags) where.tags = { hasSome: Array.isArray(tags) ? tags : [tags] };
@@ -101,7 +106,7 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
       });
     } catch (error) {
       logger.error('Error listing test cases:', error);
-      return errorResponses.internal(reply);
+      return errorResponses.handle(reply, error, "complete this operation");
     }
   });
 
@@ -182,7 +187,7 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
         return errorResponses.validation(reply, error.errors);
       }
       logger.error('Error creating test case:', error);
-      return errorResponses.internal(reply);
+      return errorResponses.handle(reply, error, "complete this operation");
     }
   });
 
@@ -234,7 +239,7 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
       }, undefined);
     } catch (error) {
       logger.error('Error getting test case:', error);
-      return errorResponses.internal(reply);
+      return errorResponses.handle(reply, error, "complete this operation");
     }
   });
 
@@ -288,7 +293,7 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
         return errorResponses.validation(reply, error.errors);
       }
       logger.error('Error updating test case:', error);
-      return errorResponses.internal(reply);
+      return errorResponses.handle(reply, error, "complete this operation");
     }
   });
 
@@ -348,7 +353,7 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
       }, undefined);
     } catch (error) {
       logger.error('Error cloning test case:', error);
-      return errorResponses.internal(reply);
+      return errorResponses.handle(reply, error, "complete this operation");
     }
   });
 
@@ -380,7 +385,7 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
       return reply.code(204).send();
     } catch (error) {
       logger.error('Error deleting test case:', error);
-      return errorResponses.internal(reply);
+      return errorResponses.handle(reply, error, "complete this operation");
     }
   });
 
@@ -419,7 +424,7 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
         return errorResponses.validation(reply, error.errors);
       }
       logger.error('Error bulk deleting test cases:', error);
-      return errorResponses.internal(reply);
+      return errorResponses.handle(reply, error, "complete this operation");
     }
   });
 
@@ -490,7 +495,209 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
       if (error.message?.startsWith('GENERATION_FAILED')) {
         return reply.code(422).send({ error: error.message });
       }
-      return errorResponses.internal(reply);
+      return errorResponses.handle(reply, error, "complete this operation");
+    }
+  });
+
+  // Detect login screen fields (Phase 1 of two-phase crawl)
+  fastify.post('/detect-login-screen', {
+    onRequest: [
+      fastify.authenticate,
+      fastify.getOrganizationContext,
+      fastify.authorize('admin', 'manager', 'tester'),
+    ],
+  }, async (request: any, reply) => {
+    try {
+      const body = detectLoginSchema.parse(request.body);
+      const { projectId, appId, suiteId } = body;
+      const userId = (request.user as any).userId;
+
+      // Validate project belongs to org
+      const project = await prisma.project.findFirst({
+        where: { id: projectId, organizationId: request.organizationId },
+      });
+      if (!project) return errorResponses.notFound(reply, 'Project');
+
+      logger.info(`[DetectLogin] Detecting login screen for app ${appId}`);
+      const { fields, loginSummary, submitText } = await detectLoginScreen(appId);
+
+      // Optionally save detected fields as a test case
+      let savedTestCaseId: string | null = null;
+      if (suiteId && fields.length > 0) {
+        const suite = await prisma.testSuite.findFirst({
+          where: { id: suiteId, project: { organizationId: request.organizationId } },
+        });
+        if (suite) {
+          const tc = await prisma.testCase.create({
+            data: {
+              title: `Login Screen - ${appId}`,
+              description: 'Auto-detected login screen elements',
+              steps: fields.map((f, i) => ({
+                order: i + 1,
+                description: `Field: ${f.name} (${f.type})`,
+                expected: `Input field with placeholder "${f.placeholder}" is visible`,
+              })) as any,
+              expectedResult: 'All login fields are present and accessible',
+              priority: 'high',
+              automationType: 'automated',
+              suiteId,
+              createdById: userId,
+              tags: ['login', 'auto-detected'],
+            },
+          });
+          await prisma.testSuiteMember.create({
+            data: { testSuiteId: suiteId, testCaseId: tc.id },
+          });
+          savedTestCaseId = tc.id;
+        }
+      }
+
+      logger.info(`[DetectLogin] Detected ${fields.length} login fields for app ${appId}`);
+
+      return successResponse(reply, { fields, loginSummary, submitText, savedTestCaseId }, undefined);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return errorResponses.validation(reply, error.errors);
+      }
+      logger.error('Failed to detect login screen', { error: error.message });
+      return errorResponses.handle(reply, error, 'detect login screen');
+    }
+  });
+
+  // Crawl app UI and generate test cases + Maestro flows
+  fastify.post('/crawl-generate', {
+    onRequest: [
+      fastify.authenticate,
+      fastify.getOrganizationContext,
+      fastify.authorize('admin', 'manager', 'tester'),
+    ],
+  }, async (request: any, reply) => {
+    try {
+      const body = crawlGenerateSchema.parse(request.body);
+      const { projectId, appId, suiteId, framework, loginSummary, loginFields, submitText, credentials, maxScreens } = body;
+      const userId = (request.user as any).userId;
+
+      // Validate project belongs to org
+      const project = await prisma.project.findFirst({
+        where: { id: projectId, organizationId: request.organizationId },
+      });
+      if (!project) return errorResponses.notFound(reply, 'Project');
+
+      // Step 1: Crawl — use two-phase AI login crawl if loginSummary+credentials provided, else simple
+      const hasLoginData = loginSummary && credentials && Object.keys(credentials).length > 0;
+      logger.info(`[CrawlGenerate] Starting ${hasLoginData ? 'stateful (two-phase AI login)' : 'simple'} crawl for app ${appId} [framework: ${framework}]`);
+
+      let hierarchySummary: string;
+      let generatedLoginFlowYaml: string | undefined;
+      let discoveredScreens: import('../services/crawl-generator').DiscoveredScreen[] = [];
+      if (hasLoginData) {
+        // Ensure loginFields is a valid array with proper typing
+        const safeLoginFields = Array.isArray(loginFields) && loginFields.length > 0
+          ? loginFields.map(f => ({
+              name: f.name ?? '',
+              placeholder: f.placeholder ?? '',
+              type: f.type ?? 'text'
+            }))
+          : undefined;
+        const crawlResult = await statefulCrawl(appId, loginSummary, credentials, maxScreens, safeLoginFields, submitText, framework);
+        hierarchySummary = crawlResult.hierarchySummary;
+        generatedLoginFlowYaml = crawlResult.loginFlowYaml;
+        discoveredScreens = crawlResult.screens;
+      } else {
+        const rawHierarchy = await crawlAppHierarchy(appId);
+        hierarchySummary = parseHierarchy(rawHierarchy);
+      }
+      logger.info(`[CrawlGenerate] Hierarchy summary: ${hierarchySummary.length} chars`);
+
+      // Ensure loginFields has proper typing for flow generation
+      const safeLoginFields = Array.isArray(loginFields) && loginFields.length > 0
+        ? loginFields.map(f => ({
+            name: f.name ?? '',
+            placeholder: f.placeholder ?? '',
+            type: f.type ?? 'text',
+            tapTarget: f.tapTarget ?? f.name ?? ''
+          }))
+        : undefined;
+
+      logger.info(`[CrawlGenerate] Passing to generateFromHierarchy: loginFields=${JSON.stringify(safeLoginFields)}, submitText=${submitText}, credentials keys=${credentials ? Object.keys(credentials) : 'none'}`);
+
+      // Step 2: Send to AI with guard rails + pass screen graph for E2E flow generation
+      const result = await generateFromHierarchy(
+        projectId, appId, hierarchySummary, credentials, framework,
+        discoveredScreens, safeLoginFields, submitText
+      );
+      logger.info(`[CrawlGenerate] AI returned ${result.testCases.length} test cases, ${result.maestroFlows.length} flows`);
+
+      // Step 3: Save test cases to DB (if suiteId provided)
+      let savedIds: string[] = [];
+      if (suiteId) {
+        // Verify suite belongs to org
+        const suite = await prisma.testSuite.findFirst({
+          where: { id: suiteId, project: { organizationId: request.organizationId } },
+        });
+        if (!suite) return errorResponses.notFound(reply, 'Test Suite');
+
+        const created = await prisma.$transaction(
+          result.testCases.map(tc =>
+            prisma.testCase.create({
+              data: {
+                title: tc.title,
+                description: tc.description,
+                steps: tc.steps as any,
+                expectedResult: tc.expectedResult,
+                priority: tc.priority,
+                tags: tc.tags,
+                suiteId,
+                automationType: 'automated',
+                createdById: userId,
+              },
+            })
+          )
+        );
+
+        savedIds = created.map(c => c.id);
+
+        // Add to suite members
+        await prisma.testSuiteMember.createMany({
+          data: savedIds.map(testCaseId => ({ testSuiteId: suiteId, testCaseId })),
+          skipDuplicates: true,
+        });
+      }
+
+      // Step 4: Write YAML flows to Mac
+      // Prepend the verified login flow (from Phase 2) so it's saved with correct credentials/selectors
+      if (generatedLoginFlowYaml) {
+        result.maestroFlows.unshift({ name: 'login_verified', yaml: generatedLoginFlowYaml });
+      }
+
+      let savedFlowPaths: string[] = [];
+      if (result.maestroFlows.length > 0) {
+        try {
+          savedFlowPaths = await saveFlowsToMac(result.maestroFlows, true);
+          logger.info(`[CrawlGenerate] Saved ${savedFlowPaths.length} flows to Mac`);
+        } catch (flowErr: any) {
+          logger.warn(`[CrawlGenerate] Flow save failed (non-fatal): ${flowErr.message}`);
+        }
+      }
+
+      return successResponse(reply, {
+        testCases: result.testCases,
+        maestroFlows: result.maestroFlows.map((f, i) => ({
+          ...f,
+          savedPath: savedFlowPaths[i] ?? null,
+        })),
+        savedToDb: savedIds.length > 0,
+        savedCount: savedIds.length,
+        hierarchyPreview: hierarchySummary.slice(0, 500),
+        loginFlowYaml: generatedLoginFlowYaml ?? null,
+      }, undefined);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        logger.error(`[CrawlGenerate] Zod validation failed: ${JSON.stringify(error.errors)}`);
+        return errorResponses.validation(reply, error.errors);
+      }
+      logger.error('Failed to crawl-generate', { error: error.message });
+      return errorResponses.handle(reply, error, 'crawl and generate');
     }
   });
 }

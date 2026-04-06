@@ -22,6 +22,8 @@ export interface MaestroRun {
   failCount: number;
   logUrl: string | null;
   screenshots: MaestroScreenshot[];
+  flowStatuses?: { name: string; status: 'running' | 'passed' | 'failed'; duration?: number }[];
+  cliOutput?: string[]; // Live CLI output lines
 }
 
 interface MaestroState {
@@ -78,14 +80,57 @@ const maestroSlice = createSlice({
   reducers: {
     updateMaestroRun(
       state,
-      action: PayloadAction<Partial<MaestroRun> & { id: string; testRunId?: string }>
+      action: PayloadAction<Partial<MaestroRun> & { id?: string; maestroRunId?: string; testRunId?: string; flowName?: string; flowStatus?: string; flowDuration?: number; cliOutput?: string }>
     ) {
-      // Update run in whichever testRunId bucket it lives in
+      const runId = action.payload.id || action.payload.maestroRunId;
+      if (!runId) return;
+
+      // Handle CLI output streaming
+      if (action.payload.cliOutput) {
+        for (const testRunId of Object.keys(state.runsByTestRunId)) {
+          const runs = state.runsByTestRunId[testRunId];
+          const run = runs.find(r => r.id === runId);
+          if (run) {
+            if (!run.cliOutput) run.cliOutput = [];
+            run.cliOutput.push(action.payload.cliOutput);
+            // Keep last 500 lines to avoid memory issues
+            if (run.cliOutput.length > 500) run.cliOutput = run.cliOutput.slice(-500);
+            break;
+          }
+        }
+        return;
+      }
+
+      // Handle flow status updates from WebSocket
+      if (action.payload.flowName && action.payload.flowStatus) {
+        for (const testRunId of Object.keys(state.runsByTestRunId)) {
+          const runs = state.runsByTestRunId[testRunId];
+          const run = runs.find(r => r.id === runId);
+          if (run) {
+            if (!run.flowStatuses) run.flowStatuses = [];
+            const existing = run.flowStatuses.find(f => f.name === action.payload.flowName);
+            if (existing) {
+              existing.status = action.payload.flowStatus as 'running' | 'passed' | 'failed';
+              existing.duration = action.payload.flowDuration;
+            } else {
+              run.flowStatuses.push({
+                name: action.payload.flowName,
+                status: action.payload.flowStatus as 'running' | 'passed' | 'failed',
+                duration: action.payload.flowDuration,
+              });
+            }
+            break;
+          }
+        }
+        return;
+      }
+
+      // Standard run status update
       for (const testRunId of Object.keys(state.runsByTestRunId)) {
         const runs = state.runsByTestRunId[testRunId];
-        const index = runs.findIndex(r => r.id === action.payload.id);
+        const index = runs.findIndex(r => r.id === runId);
         if (index !== -1) {
-          runs[index] = { ...runs[index], ...action.payload };
+          runs[index] = { ...runs[index], ...action.payload, id: runId };
           break;
         }
       }

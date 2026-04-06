@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from "react";
-import { Play, ChevronDown, ChevronRight, X } from "lucide-react";
+import React, { useEffect, useState, useRef } from "react";
+import { Play, ChevronDown, ChevronRight, X, RefreshCw } from "lucide-react";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import {
   fetchMaestroRuns,
   triggerMaestroRun,
 } from "../store/slices/maestroSlice";
 import MaestroScreenshotGallery from "./MaestroScreenshotGallery";
+import { api } from "../lib/api";
 
 interface MaestroRun {
   id: string;
@@ -64,20 +65,51 @@ const MaestroRunPanel: React.FC<MaestroRunPanelProps> = ({ testRunId }) => {
   const { runsByTestRunId, loading } = useAppSelector((state) => state.maestro);
   const filteredRuns: MaestroRun[] = runsByTestRunId[testRunId] ?? [];
 
+  const cliEndRef = useRef<HTMLDivElement>(null);
   const [showModal, setShowModal] = useState(false);
   const [flowPathsText, setFlowPathsText] = useState("");
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [triggering, setTriggering] = useState(false);
+  const [availableFlows, setAvailableFlows] = useState<string[]>([]);
+  const [selectedFlows, setSelectedFlows] = useState<Set<string>>(new Set());
+  const [loadingFlows, setLoadingFlows] = useState(false);
 
   useEffect(() => {
     dispatch(fetchMaestroRuns(testRunId));
   }, [dispatch, testRunId]);
 
+  // Auto-scroll CLI output to bottom when new lines arrive
+  useEffect(() => {
+    cliEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [filteredRuns]);
+
+  const openTriggerModal = async () => {
+    setShowModal(true);
+    setLoadingFlows(true);
+    try {
+      const r = await api.get('/maestro/flows');
+      const flows: string[] = r.data?.data?.flows ?? [];
+      setAvailableFlows(flows);
+    } catch {
+      setAvailableFlows([]);
+    } finally {
+      setLoadingFlows(false);
+    }
+  };
+
+  const toggleFlow = (path: string) => {
+    setSelectedFlows(prev => {
+      const next = new Set(prev);
+      next.has(path) ? next.delete(path) : next.add(path);
+      return next;
+    });
+  };
+
   const handleTriggerRun = async () => {
-    const flowPaths = flowPathsText
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
+    // Combine checkbox selections + manual text
+    const fromCheckboxes = Array.from(selectedFlows);
+    const fromText = flowPathsText.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+    const flowPaths = [...new Set([...fromCheckboxes, ...fromText])];
 
     if (flowPaths.length === 0) return;
 
@@ -86,6 +118,7 @@ const MaestroRunPanel: React.FC<MaestroRunPanelProps> = ({ testRunId }) => {
       await dispatch(triggerMaestroRun({ testRunId, flowPaths })).unwrap();
       setShowModal(false);
       setFlowPathsText("");
+      setSelectedFlows(new Set());
       dispatch(fetchMaestroRuns(testRunId));
     } catch {
       // error handled via redux state
@@ -106,7 +139,7 @@ const MaestroRunPanel: React.FC<MaestroRunPanelProps> = ({ testRunId }) => {
           Maestro Automation
         </h3>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={openTriggerModal}
           className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
         >
           <Play className="h-4 w-4" />
@@ -191,6 +224,34 @@ const MaestroRunPanel: React.FC<MaestroRunPanelProps> = ({ testRunId }) => {
                 {/* Expanded Content */}
                 {isExpanded && (
                   <div className="border-t border-gray-100 bg-gray-50 px-6 py-4">
+                    {/* Live Flow Status */}
+                    {run.status === 'running' && run.flowStatuses && run.flowStatuses.length > 0 && (
+                      <div className="mb-3 rounded-lg border border-gray-200 bg-white p-3">
+                        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Live Flow Status</h4>
+                        <div className="space-y-1">
+                          {run.flowStatuses.map((fs, i) => (
+                            <div key={i} className="flex items-center gap-2 text-sm">
+                              <span className={`inline-flex h-2 w-2 rounded-full ${
+                                fs.status === 'passed' ? 'bg-green-500' :
+                                fs.status === 'failed' ? 'bg-red-500' :
+                                'bg-blue-500 animate-pulse'
+                              }`} />
+                              <span className="font-mono text-xs text-gray-700">{fs.name}</span>
+                              <span className={`ml-auto text-xs ${
+                                fs.status === 'passed' ? 'text-green-600' :
+                                fs.status === 'failed' ? 'text-red-600' :
+                                'text-blue-600'
+                              }`}>
+                                {fs.status === 'passed' ? `✓ ${fs.duration}s` :
+                                 fs.status === 'failed' ? `✗ ${fs.duration}s` :
+                                 'Running...'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="mb-3 grid grid-cols-4 gap-4 text-sm">
                       <div>
                         <span className="text-gray-500">Flow Count:</span>{" "}
@@ -219,6 +280,45 @@ const MaestroRunPanel: React.FC<MaestroRunPanelProps> = ({ testRunId }) => {
                         </div>
                       )}
                     </div>
+
+                    {/* Live CLI Output Terminal */}
+                    {run.cliOutput && run.cliOutput.length > 0 && (
+                      <div className="mb-3 overflow-hidden rounded-lg border border-gray-800 bg-gray-950">
+                        <div className="flex items-center justify-between border-b border-gray-700 px-3 py-1.5">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 w-2 rounded-full bg-red-500" />
+                            <div className="h-2 w-2 rounded-full bg-yellow-500" />
+                            <div className="h-2 w-2 rounded-full bg-green-500" />
+                            <span className="ml-2 text-xs text-gray-400 font-mono">Maestro CLI</span>
+                          </div>
+                          {run.status === 'running' && (
+                            <span className="flex items-center gap-1 text-xs text-blue-400">
+                              <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+                              Running...
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          className="max-h-[400px] overflow-y-auto p-3 font-mono text-[11px] leading-relaxed text-gray-300"
+                          style={{ scrollBehavior: 'smooth' }}
+                        >
+                          {run.cliOutput.slice(-200).map((line, i) => (
+                            <div key={i} className="whitespace-pre-wrap break-all">{line}</div>
+                          ))}
+                          <div ref={cliEndRef} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Screenshot Evidence */}
+                    {run.screenshots && run.screenshots.length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                          Screenshot Evidence ({run.screenshots.length})
+                        </h4>
+                        <MaestroScreenshotGallery screenshots={run.screenshots} />
+                      </div>
+                    )}
 
                     {run.logUrl && (
                       <div className="mb-3 text-sm">
@@ -262,21 +362,53 @@ const MaestroRunPanel: React.FC<MaestroRunPanelProps> = ({ testRunId }) => {
               </button>
             </div>
 
-            <div className="px-6 py-4">
-              <label
-                htmlFor="flowPaths"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Flow paths (one per line)
-              </label>
-              <textarea
-                id="flowPaths"
-                rows={6}
-                value={flowPathsText}
-                onChange={(e) => setFlowPathsText(e.target.value)}
-                placeholder={`.maestro/flows/login.yaml\n.maestro/flows/cart.yaml\n.maestro/flows/checkout.yaml`}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none"
-              />
+            <div className="px-6 py-4 space-y-4">
+              {/* Available flows from Mac */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Flows on Mac runner
+                  </label>
+                  <button onClick={openTriggerModal} className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                    <RefreshCw className="h-3 w-3" /> Refresh
+                  </button>
+                </div>
+                {loadingFlows ? (
+                  <p className="text-sm text-gray-400">Loading flows from Mac...</p>
+                ) : availableFlows.length === 0 ? (
+                  <p className="text-sm text-gray-400 italic">No flows found in ~/maestro-flows/. Use the text box below or run Crawl &amp; Generate first.</p>
+                ) : (
+                  <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                    {availableFlows.map(flow => (
+                      <label key={flow} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedFlows.has(flow)}
+                          onChange={() => toggleFlow(flow)}
+                          className="rounded border-gray-300 text-indigo-600"
+                        />
+                        <span className="text-xs font-mono text-gray-700 truncate">{flow.split('/').pop()}</span>
+                        <span className="text-xs text-gray-400 truncate ml-auto">{flow}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Manual input */}
+              <div>
+                <label htmlFor="flowPaths" className="block text-sm font-medium text-gray-700 mb-2">
+                  Or enter paths manually (one per line)
+                </label>
+                <textarea
+                  id="flowPaths"
+                  rows={3}
+                  value={flowPathsText}
+                  onChange={(e) => setFlowPathsText(e.target.value)}
+                  placeholder={`/Users/clawbot/maestro-flows/login_flow.yaml`}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none"
+                />
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
@@ -290,10 +422,8 @@ const MaestroRunPanel: React.FC<MaestroRunPanelProps> = ({ testRunId }) => {
                 onClick={handleTriggerRun}
                 disabled={
                   triggering ||
-                  flowPathsText
-                    .split("\n")
-                    .map((l) => l.trim())
-                    .filter((l) => l.length > 0).length === 0
+                  (selectedFlows.size === 0 &&
+                    flowPathsText.split("\n").map(l => l.trim()).filter(l => l.length > 0).length === 0)
                 }
                 className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
               >

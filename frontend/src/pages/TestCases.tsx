@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from 'react'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
-import { fetchTestCases, createTestCase, updateTestCase, deleteTestCase, setFilters } from '../store/slices/testCasesSlice'
+import { fetchTestCases, createTestCase, updateTestCase, deleteTestCase, bulkDeleteTestCases, setFilters } from '../store/slices/testCasesSlice'
+import { setGeneratedResults } from '../store/slices/generatedFlowsSlice'
+import { fetchProjects } from '../store/slices/projectsSlice'
+import { api } from '../lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Badge } from '../components/ui/badge'
-import { Plus, Search, Edit, Trash2, Filter, Wand2 } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Filter, Wand2, Smartphone, Trash } from 'lucide-react'
 import AIGenerateModal from '../components/AIGenerateModal'
+import CrawlGenerateModal from '../components/CrawlGenerateModal'
 import GitHubSyncPanel from '../components/GitHubSyncPanel'
+import MaestroFlowsViewer from '../components/MaestroFlowsViewer'
 
 interface TestCaseFormData {
   title: string
@@ -24,11 +29,17 @@ interface TestCaseFormData {
 const TestCases: React.FC = () => {
   const dispatch = useAppDispatch()
   const { testCases, loading, filters } = useAppSelector((state) => state.testCases)
+  const { projects } = useAppSelector((state) => state.projects)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedProject, setSelectedProject] = useState<string>('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [aiModalOpen, setAiModalOpen] = useState(false)
+  const [crawlModalOpen, setCrawlModalOpen] = useState(false)
   const [editingCase, setEditingCase] = useState<any>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [activeTab, setActiveTab] = useState<'cases' | 'flows'>('cases')
+  const [formSuites, setFormSuites] = useState<{ id: string; name: string; projectId: string }[]>([])
+  const [formProjectId, setFormProjectId] = useState('')
   const [formData, setFormData] = useState<TestCaseFormData>({
     title: '',
     description: '',
@@ -42,6 +53,7 @@ const TestCases: React.FC = () => {
 
   useEffect(() => {
     dispatch(fetchTestCases())
+    dispatch(fetchProjects())
   }, [dispatch])
 
   const handleSearch = (e: React.FormEvent) => {
@@ -50,8 +62,20 @@ const TestCases: React.FC = () => {
     dispatch(fetchTestCases({ search: searchTerm }))
   }
 
+  const handleFormProjectChange = async (projectId: string) => {
+    setFormProjectId(projectId)
+    setFormData(prev => ({ ...prev, suite_id: '' }))
+    if (!projectId) { setFormSuites([]); return; }
+    try {
+      const r = await api.get('/test-suites', { params: { projectId, perPage: 100 } })
+      setFormSuites(r.data?.data ?? [])
+    } catch { setFormSuites([]) }
+  }
+
   const handleCreate = () => {
     setEditingCase(null)
+    setFormProjectId('')
+    setFormSuites([])
     setFormData({
       title: '',
       description: '',
@@ -83,6 +107,26 @@ const TestCases: React.FC = () => {
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this test case?')) {
       await dispatch(deleteTestCase(id))
+      setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next })
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return
+    if (!window.confirm(`Delete ${selectedIds.size} selected test case(s)?`)) return
+    await dispatch(bulkDeleteTestCases(Array.from(selectedIds)))
+    setSelectedIds(new Set())
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === testCases.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(testCases.map(tc => tc.id)))
     }
   }
 
@@ -145,6 +189,10 @@ const TestCases: React.FC = () => {
           <p className="text-muted-foreground">Manage your test cases</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setCrawlModalOpen(true)}>
+            <Smartphone className="w-4 h-4 mr-2" />
+            Crawl &amp; Generate
+          </Button>
           <Button variant="outline" onClick={() => setAiModalOpen(true)}>
             <Wand2 className="w-4 h-4 mr-2" />
             Generate with AI
@@ -154,6 +202,30 @@ const TestCases: React.FC = () => {
             New Test Case
           </Button>
         </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-1 border-b">
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'cases'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setActiveTab('cases')}
+        >
+          Test Cases
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'flows'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setActiveTab('flows')}
+        >
+          Maestro Flows
+        </button>
       </div>
 
       {/* Search and Filters */}
@@ -184,15 +256,38 @@ const TestCases: React.FC = () => {
       </Card>
 
       {/* GitHub Sync Panel */}
-      {selectedProject && <GitHubSyncPanel projectId={selectedProject} />}
+      {activeTab === 'cases' && selectedProject && <GitHubSyncPanel projectId={selectedProject} />}
 
       {/* Test Cases Table */}
+      {activeTab === 'cases' && (
       <Card>
         <CardContent className="pt-6">
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-3 mb-4 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
+              <span className="text-sm font-medium text-red-700 dark:text-red-400">
+                {selectedIds.size} selected
+              </span>
+              <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+                <Trash className="mr-2 h-4 w-4" />
+                Delete Selected
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                Clear selection
+              </Button>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b">
+                  <th className="text-left p-3 font-medium w-10">
+                    <input
+                      type="checkbox"
+                      checked={testCases.length > 0 && selectedIds.size === testCases.length}
+                      onChange={toggleSelectAll}
+                      className="rounded border-gray-300"
+                    />
+                  </th>
                   <th className="text-left p-3 font-medium">Title</th>
                   <th className="text-left p-3 font-medium">Priority</th>
                   <th className="text-left p-3 font-medium">Type</th>
@@ -204,7 +299,15 @@ const TestCases: React.FC = () => {
               </thead>
               <tbody>
                 {testCases.map((testCase) => (
-                  <tr key={testCase.id} className="border-b hover:bg-muted/50">
+                  <tr key={testCase.id} className={`border-b hover:bg-muted/50 ${selectedIds.has(testCase.id) ? 'bg-red-50 dark:bg-red-950/20' : ''}`}>
+                    <td className="p-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(testCase.id)}
+                        onChange={() => toggleSelect(testCase.id)}
+                        className="rounded border-gray-300"
+                      />
+                    </td>
                     <td className="p-3">
                       <div className="font-medium">{testCase.title}</div>
                       <div className="text-sm text-muted-foreground">{testCase.description}</div>
@@ -243,6 +346,33 @@ const TestCases: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+      )}
+
+      {/* Maestro Flows Tab */}
+      {activeTab === 'flows' && <MaestroFlowsViewer />}
+
+      {/* Crawl & Generate Modal */}
+      <CrawlGenerateModal
+        open={crawlModalOpen}
+        onClose={() => setCrawlModalOpen(false)}
+        onSaved={(result) => {
+          setCrawlModalOpen(false);
+          dispatch(fetchTestCases({}));
+          if (result) {
+            dispatch(setGeneratedResults({
+              testCases: result.testCases || [],
+              maestroFlows: (result.maestroFlows || []).map((f: any) => ({
+                name: f.name,
+                yaml: f.yaml,
+                savedPath: f.savedPath || null,
+              })),
+              savedToDb: result.savedToDb || false,
+              savedCount: result.savedCount || 0,
+            }));
+            setActiveTab('flows');
+          }
+        }}
+      />
 
       {/* AI Generate Modal */}
       <AIGenerateModal
@@ -352,6 +482,34 @@ const TestCases: React.FC = () => {
                         />
                       </div>
                     ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="form_project">Project</Label>
+                      <select
+                        id="form_project"
+                        value={formProjectId}
+                        onChange={(e) => handleFormProjectChange(e.target.value)}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      >
+                        <option value="">Select project...</option>
+                        {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <Label htmlFor="form_suite">Test Suite</Label>
+                      <select
+                        id="form_suite"
+                        value={formData.suite_id}
+                        onChange={(e) => setFormData({ ...formData, suite_id: e.target.value })}
+                        disabled={!formProjectId}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
+                      >
+                        <option value="">No suite</option>
+                        {formSuites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
                   </div>
 
                   <div className="flex justify-end gap-3 pt-4">

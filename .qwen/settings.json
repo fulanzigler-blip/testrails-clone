@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose up *)",
+      "Bash(docker compose logs *)",
+      "Bash(docker compose build *)",
+      "Bash(docker compose exec *)",
+      "Bash(timeout *)",
+      "Bash(docker logs *)",
+      "Bash(npx *)",
+      "Bash(docker inspect *)",
+      "Bash(ssh *)",
+      "Bash(curl *)"
+    ]
+  },
+  "$version": 3
+}

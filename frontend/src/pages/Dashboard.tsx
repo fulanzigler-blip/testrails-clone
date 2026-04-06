@@ -13,14 +13,24 @@ const Dashboard: React.FC = () => {
     dispatch(fetchTestRuns())
   }, [dispatch])
 
+  // Helper to handle both camelCase (API) and snake_case (legacy type)
+  const r = (run: any) => ({
+    totalTests: run.totalTests ?? run.total_tests ?? 0,
+    passedCount: run.passedCount ?? run.passed_count ?? 0,
+    failedCount: run.failedCount ?? run.failed_count ?? 0,
+    skippedCount: run.skippedCount ?? run.skipped_count ?? 0,
+    passRate: run.passRate ?? run.pass_rate ?? 0,
+    createdAt: run.createdAt ?? run.created_at ?? '',
+  })
+
   // Calculate statistics
   const totalRuns = testRuns.length
-  const completedRuns = testRuns.filter((r) => r.status === 'completed').length
-  const runningRuns = testRuns.filter((r) => r.status === 'running').length
-  const totalTests = testRuns.reduce((sum, run) => sum + run.total_tests, 0)
-  const totalPassed = testRuns.reduce((sum, run) => sum + run.passed_count, 0)
-  const totalFailed = testRuns.reduce((sum, run) => sum + run.failed_count, 0)
-  const totalSkipped = testRuns.reduce((sum, run) => sum + run.skipped_count, 0)
+  const completedRuns = testRuns.filter((run) => run.status === 'completed').length
+  const runningRuns = testRuns.filter((run) => run.status === 'running').length
+  const totalTests = testRuns.reduce((sum, run) => sum + r(run).totalTests, 0)
+  const totalPassed = testRuns.reduce((sum, run) => sum + r(run).passedCount, 0)
+  const totalFailed = testRuns.reduce((sum, run) => sum + r(run).failedCount, 0)
+  const totalSkipped = testRuns.reduce((sum, run) => sum + r(run).skippedCount, 0)
   const averagePassRate = totalTests > 0 ? (totalPassed / totalTests) * 100 : 0
 
   // Chart data
@@ -31,9 +41,9 @@ const Dashboard: React.FC = () => {
   ]
 
   const trendData = testRuns.slice(-7).map((run) => ({
-    name: new Date(run.created_at).toLocaleDateString(),
-    passRate: run.pass_rate,
-    total: run.total_tests,
+    name: new Date(r(run).createdAt).toLocaleDateString(),
+    passRate: r(run).passRate,
+    total: r(run).totalTests,
   }))
 
   if (loading) {
@@ -161,17 +171,17 @@ const Dashboard: React.FC = () => {
                 <div>
                   <div className="font-medium">{run.name}</div>
                   <div className="text-sm text-muted-foreground">
-                    {run.total_tests} tests · {run.pass_rate.toFixed(1)}% pass rate
+                    {r(run).totalTests} tests · {r(run).passRate.toFixed(1)}% pass rate
                   </div>
                 </div>
                 <div className="flex items-center space-x-4">
                   <div className="flex items-center space-x-2">
                     <CheckCircle className="h-4 w-4 text-green-500" />
-                    <span className="text-sm">{run.passed_count}</span>
+                    <span className="text-sm">{r(run).passedCount}</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <XCircle className="h-4 w-4 text-red-500" />
-                    <span className="text-sm">{run.failed_count}</span>
+                    <span className="text-sm">{r(run).failedCount}</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <AlertCircle className="h-4 w-4 text-yellow-500" />

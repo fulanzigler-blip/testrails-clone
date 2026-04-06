@@ -90,6 +90,14 @@ export const cloneTestCase = createAsyncThunk(
   }
 )
 
+export const bulkDeleteTestCases = createAsyncThunk(
+  'testCases/bulkDeleteTestCases',
+  async (ids: string[]) => {
+    await api.post('/test-cases/bulk-delete', { ids })
+    return ids
+  }
+)
+
 const testCasesSlice = createSlice({
   name: 'testCases',
   initialState,
@@ -126,6 +134,10 @@ const testCasesSlice = createSlice({
       })
       .addCase(cloneTestCase.fulfilled, (state, action) => {
         state.testCases.push(action.payload)
+      })
+      .addCase(bulkDeleteTestCases.fulfilled, (state, action) => {
+        const deletedIds = new Set(action.payload)
+        state.testCases = state.testCases.filter((tc) => !deletedIds.has(tc.id))
       })
   },
 })

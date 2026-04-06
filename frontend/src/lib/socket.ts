@@ -20,7 +20,7 @@ export function connect(token: string): void {
     }
   }
 
-  const baseUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001';
+  const baseUrl = import.meta.env.VITE_WS_URL || `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`;
   const url = `${baseUrl}/ws`;
 
   // Send token via Sec-WebSocket-Protocol to avoid token in URL/logs
@@ -34,9 +34,17 @@ export function connect(token: string): void {
     try {
       const message = JSON.parse(event.data as string) as {
         type: string;
+        data?: unknown;
         payload?: unknown;
       };
-      dispatch(message.type, message.payload);
+      // Auto-respond to server pings
+      if (message.type === 'ping' && ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'pong' }));
+        return;
+      }
+      // Backend uses 'data', some handlers use 'payload'
+      const content = message.data ?? message.payload;
+      dispatch(message.type, content);
     } catch (error) {
       console.error('[socket] failed to parse message:', error);
     }
@@ -45,6 +53,12 @@ export function connect(token: string): void {
   ws.onclose = () => {
     console.info('[socket] disconnected');
     ws = null;
+    // Auto-reconnect after 3s if we still have a token
+    const currentToken = localStorage.getItem('access_token');
+    if (currentToken) {
+      console.info('[socket] scheduling reconnect in 3s');
+      setTimeout(() => connect(currentToken), 3000);
+    }
   };
 
   ws.onerror = (event: Event) => {

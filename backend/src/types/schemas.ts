@@ -239,3 +239,30 @@ export const generateTestCasesSchema = z.object({
   suiteId: z.string().uuid().optional(),
   autoSave: z.boolean().default(false),
 });
+
+// Detect Login Screen schema
+export const detectLoginSchema = z.object({
+  projectId: z.string().uuid(),
+  appId: z.string().min(1).max(200).regex(/^[a-zA-Z0-9._\-]+$/, 'Invalid app ID'),
+  suiteId: z.string().uuid().optional(),
+});
+
+// Crawl & Generate schema
+export const crawlGenerateSchema = z.object({
+  projectId: z.string().uuid(),
+  appId: z.string().min(1).max(200).regex(/^[a-zA-Z0-9._\-]+$/, 'Invalid app ID'),
+  suiteId: z.string().uuid().optional(),
+  // Framework: 'native' | 'flutter' | 'auto' (default)
+  framework: z.enum(['native', 'flutter', 'auto']).default('auto'),
+  // Phase 2: loginSummary + loginFields + credentials from detect-login-screen Phase 1
+  loginSummary: z.string().min(1).max(6000).optional(),
+  loginFields: z.array(z.object({
+    name: z.string().default(''),
+    placeholder: z.string().default(''),
+    type: z.string().default('text'),
+    tapTarget: z.string().optional(),
+  })).optional(),
+  submitText: z.string().max(100).optional(),
+  credentials: z.record(z.string().min(1), z.string().max(200)).optional(),
+  maxScreens: z.number().int().min(1).max(8).default(4),
+});

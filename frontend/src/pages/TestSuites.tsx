@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Badge } from '../components/ui/badge'
-import { Plus, ChevronRight, FolderOpen, Edit, Trash2 } from 'lucide-react'
+import { Plus, ChevronRight, FolderOpen, Edit, Trash2, FileText } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import {
   fetchTestSuites,
@@ -13,6 +13,7 @@ import {
   deleteTestSuite,
 } from '../store/slices/testSuitesSlice'
 import { fetchProjects } from '../store/slices/projectsSlice'
+import { api } from '../lib/api'
 
 interface TestSuite {
   id: string
@@ -20,8 +21,17 @@ interface TestSuite {
   description: string | null
   projectId: string
   parentSuiteId: string | null
+  testCasesCount?: number
   createdAt: string
   updatedAt: string
+}
+
+interface TestCaseRow {
+  id: string
+  title: string
+  priority: string
+  status: string
+  automationType: string
 }
 
 const TestSuites: React.FC = () => {
@@ -33,6 +43,9 @@ const TestSuites: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingSuite, setEditingSuite] = useState<TestSuite | null>(null)
   const [expandedSuites, setExpandedSuites] = useState<Set<string>>(new Set())
+  const [expandedCases, setExpandedCases] = useState<Set<string>>(new Set())
+  const [suiteTestCases, setSuiteTestCases] = useState<Record<string, TestCaseRow[]>>({})
+  const [loadingCases, setLoadingCases] = useState<Set<string>>(new Set())
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -92,6 +105,28 @@ const TestSuites: React.FC = () => {
       newExpanded.add(suiteId)
     }
     setExpandedSuites(newExpanded)
+  }
+
+  const toggleSuiteTestCases = async (suiteId: string) => {
+    const next = new Set(expandedCases)
+    if (next.has(suiteId)) {
+      next.delete(suiteId)
+      setExpandedCases(next)
+      return
+    }
+    next.add(suiteId)
+    setExpandedCases(next)
+    if (suiteTestCases[suiteId]) return // already loaded
+    setLoadingCases(prev => new Set(prev).add(suiteId))
+    try {
+      const r = await api.get('/test-cases', { params: { suiteId, perPage: 50 } })
+      const cases = r.data?.data ?? []
+      setSuiteTestCases(prev => ({ ...prev, [suiteId]: Array.isArray(cases) ? cases : [] }))
+    } catch {
+      setSuiteTestCases(prev => ({ ...prev, [suiteId]: [] }))
+    } finally {
+      setLoadingCases(prev => { const s = new Set(prev); s.delete(suiteId); return s })
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -165,6 +200,11 @@ const TestSuites: React.FC = () => {
                   )}
                   <div className="flex items-center gap-2 mt-2">
                     <Badge variant="secondary">{children.length} sub-suites</Badge>
+                    <Badge variant="outline" className="cursor-pointer hover:bg-muted" onClick={() => toggleSuiteTestCases(suite.id)}>
+                      <FileText className="h-3 w-3 mr-1" />
+                      {suite.testCasesCount ?? '?'} test cases
+                      <ChevronRight className={`h-3 w-3 ml-1 transition-transform ${expandedCases.has(suite.id) ? 'rotate-90' : ''}`} />
+                    </Badge>
                   </div>
                 </div>
               </div>
@@ -180,6 +220,44 @@ const TestSuites: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+
+        {expandedCases.has(suite.id) && (
+          <div className={`${level > 0 ? 'ml-6' : ''} mt-1 mb-2 rounded-lg border border-gray-100 bg-gray-50 overflow-hidden`}>
+            {loadingCases.has(suite.id) ? (
+              <p className="px-4 py-3 text-sm text-gray-500">Loading test cases...</p>
+            ) : (suiteTestCases[suite.id] ?? []).length === 0 ? (
+              <p className="px-4 py-3 text-sm text-gray-400">No test cases in this suite yet.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-100">
+                    <th className="text-left px-4 py-2 font-medium text-gray-600">Title</th>
+                    <th className="text-left px-4 py-2 font-medium text-gray-600 w-24">Priority</th>
+                    <th className="text-left px-4 py-2 font-medium text-gray-600 w-24">Type</th>
+                    <th className="text-left px-4 py-2 font-medium text-gray-600 w-20">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(suiteTestCases[suite.id] ?? []).map((tc) => (
+                    <tr key={tc.id} className="border-b border-gray-100 hover:bg-white">
+                      <td className="px-4 py-2 font-medium text-gray-800">{tc.title}</td>
+                      <td className="px-4 py-2">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          tc.priority === 'critical' ? 'bg-red-100 text-red-700' :
+                          tc.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                          tc.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-green-100 text-green-700'
+                        }`}>{tc.priority}</span>
+                      </td>
+                      <td className="px-4 py-2 text-gray-500 capitalize">{tc.automationType?.replace('_', ' ')}</td>
+                      <td className="px-4 py-2 text-gray-500 capitalize">{tc.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
 
         {hasChildren && isExpanded && (
           <div>

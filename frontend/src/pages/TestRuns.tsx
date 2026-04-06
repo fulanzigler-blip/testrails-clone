@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import MaestroRunPanel from '../components/MaestroRunPanel'
 import { fetchTestRuns, createTestRun, startTestRun, completeTestRun, deleteTestRun, fetchTestRun, updateTestResult } from '../store/slices/testRunsSlice'
+import { fetchProjects } from '../store/slices/projectsSlice'
+import { api } from '../lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -21,6 +23,8 @@ interface TestRunFormData {
 const TestRuns: React.FC = () => {
   const dispatch = useAppDispatch()
   const { testRuns, currentRun, loading } = useAppSelector((state) => state.testRuns)
+  const { projects } = useAppSelector((state) => state.projects)
+  const [runSuites, setRunSuites] = useState<{ id: string; name: string }[]>([])
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isExecutionModalOpen, setIsExecutionModalOpen] = useState(false)
   const [formData, setFormData] = useState<TestRunFormData>({
@@ -35,20 +39,32 @@ const TestRuns: React.FC = () => {
 
   useEffect(() => {
     dispatch(fetchTestRuns())
+    dispatch(fetchProjects())
   }, [dispatch])
+
+  const handleProjectChange = async (projectId: string) => {
+    setFormData(prev => ({ ...prev, project_id: projectId, suite_id: '' }))
+    setRunSuites([])
+    if (!projectId) return
+    try {
+      const r = await api.get('/test-suites', { params: { projectId, perPage: 100 } })
+      setRunSuites(r.data?.data ?? [])
+    } catch { setRunSuites([]) }
+  }
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    await dispatch(createTestRun(formData))
+    await dispatch(createTestRun({
+      name: formData.name,
+      description: formData.description,
+      projectId: formData.project_id,
+      suiteId: formData.suite_id || undefined,
+      includeAll: formData.include_all,
+      environment: formData.environment,
+    } as any))
     setIsCreateModalOpen(false)
-    setFormData({
-      name: '',
-      description: '',
-      project_id: '',
-      suite_id: '',
-      include_all: true,
-      environment: 'staging'
-    })
+    setFormData({ name: '', description: '', project_id: '', suite_id: '', include_all: true, environment: 'staging' })
+    dispatch(fetchTestRuns())
   }
 
   const handleStartExecution = async (runId: string) => {
@@ -102,6 +118,24 @@ const TestRuns: React.FC = () => {
 
   const currentResult = currentRun?.results?.[currentResultIndex]
 
+  // Extract run stats to avoid duplicating computation in JSX
+  const getRunStats = (run: typeof testRuns[0]) => {
+    const r = run as any;
+    const total = r.totalTests ?? run.total_tests ?? 0;
+    const done = (r.passedCount ?? 0) + (r.failedCount ?? 0) + (r.skippedCount ?? 0) + (r.blockedCount ?? 0);
+    const pct = total > 0 ? (done / total) * 100 : 0;
+    return {
+      totalTests: total,
+      passedCount: r.passedCount ?? run.passed_count ?? 0,
+      failedCount: r.failedCount ?? run.failed_count ?? 0,
+      skippedCount: r.skippedCount ?? run.skipped_count ?? 0,
+      blockedCount: r.blockedCount ?? run.blocked_count ?? 0,
+      progressPct: pct,
+      progressRounded: Math.round(pct),
+      passRate: r.passRate ?? run.pass_rate ?? 0,
+    };
+  }
+
   if (loading && testRuns.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -140,46 +174,38 @@ const TestRuns: React.FC = () => {
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-green-500" />
-                  <span>{run.passed_count} passed</span>
+                  <span>{getRunStats(run).passedCount} passed</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <XCircle className="h-4 w-4 text-red-500" />
-                  <span>{run.failed_count} failed</span>
+                  <span>{getRunStats(run).failedCount} failed</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <SkipForward className="h-4 w-4 text-yellow-500" />
-                  <span>{run.skipped_count} skipped</span>
+                  <span>{getRunStats(run).skippedCount} skipped</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 text-gray-500" />
-                  <span>{run.blocked_count} blocked</span>
+                  <span>{getRunStats(run).blockedCount} blocked</span>
                 </div>
               </div>
-              
+
               <div className="pt-2 border-t">
                 <div className="flex items-center justify-between text-sm mb-2">
                   <span className="text-muted-foreground">Progress</span>
-                  <span className="font-medium">
-                    {run.total_tests > 0
-                      ? Math.round(((run.passed_count + run.failed_count + run.skipped_count + run.blocked_count) / run.total_tests) * 100)
-                      : 0}%
-                  </span>
+                  <span className="font-medium">{getRunStats(run).progressRounded}%</span>
                 </div>
                 <div className="w-full bg-muted rounded-full h-2">
                   <div
                     className="bg-primary h-2 rounded-full transition-all"
-                    style={{
-                      width: `${run.total_tests > 0
-                        ? ((run.passed_count + run.failed_count + run.skipped_count + run.blocked_count) / run.total_tests) * 100
-                        : 0}%`
-                    }}
+                    style={{ width: `${getRunStats(run).progressPct}%` }}
                   />
                 </div>
               </div>
 
               <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span>{run.total_tests} tests</span>
-                <span>{run.pass_rate.toFixed(1)}% pass rate</span>
+                <span>{getRunStats(run).totalTests} tests</span>
+                <span>{getRunStats(run).passRate.toFixed(1)}% pass rate</span>
               </div>
 
               <div className="flex gap-2 pt-2">
@@ -242,25 +268,25 @@ const TestRuns: React.FC = () => {
                       <select
                         id="project_id"
                         value={formData.project_id}
-                        onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
+                        onChange={(e) => handleProjectChange(e.target.value)}
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                         required
                       >
                         <option value="">Select Project</option>
-                        {/* Add project options */}
+                        {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
                     </div>
                     <div>
-                      <Label htmlFor="suite_id">Suite *</Label>
+                      <Label htmlFor="suite_id">Suite</Label>
                       <select
                         id="suite_id"
                         value={formData.suite_id}
                         onChange={(e) => setFormData({ ...formData, suite_id: e.target.value })}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        required
+                        disabled={!formData.project_id}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
                       >
-                        <option value="">Select Suite</option>
-                        {/* Add suite options */}
+                        <option value="">All suites</option>
+                        {runSuites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     </div>
                   </div>

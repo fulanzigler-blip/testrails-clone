@@ -187,25 +187,51 @@ async function registerRoutes() {
 
         // Register connection in registry by organizationId
         const userCtx = (connection as any).user as { userId: string; organizationId?: string };
+        
+        // If organizationId not in token, look it up from DB
         if (!userCtx.organizationId) {
-          connection.socket.close(4002, 'Missing organizationId in token');
+          try {
+            const user = await prisma.user.findUnique({
+              where: { id: userCtx.userId },
+              select: { organizationId: true },
+            });
+            if (user) {
+              userCtx.organizationId = user.organizationId;
+            }
+          } catch {}
+        }
+        
+        logger.info(`WebSocket user context: userId=${userCtx.userId}, organizationId=${userCtx.organizationId}`);
+        if (!userCtx.organizationId) {
+          logger.warn(`WebSocket: user ${userCtx.userId} has no organization, closing connection`);
+          connection.socket.close(4002, 'No organization associated with your account');
           return;
         }
         const organizationId = userCtx.organizationId;
         registerConnection(organizationId, connection.socket);
+        logger.info(`WebSocket registered for org ${organizationId}, socket readyState=${connection.socket.readyState}`);
+
+        // Keep-alive: send ping every 10s to prevent proxy timeouts
+        const pingInterval = setInterval(() => {
+          if (connection.socket.readyState === 1) { // OPEN
+            try {
+              connection.socket.send(JSON.stringify({ type: 'ping' }));
+            } catch {}
+          }
+        }, 10000);
 
         connection.socket.on('message', async message => {
           try {
-            // Process authenticated messages
             const data = JSON.parse(message.toString());
 
             if (data.type === 'subscribe' && data.room) {
-              // Store room subscription info on connection
               (connection as any).room = data.room;
               connection.socket.send(JSON.stringify({
                 type: 'subscribed',
                 room: data.room,
               }));
+            } else if (data.type === 'pong') {
+              // Client responded to ping, connection is alive
             }
           } catch (error) {
             logger.error('Error processing WebSocket message:', error);
@@ -213,9 +239,17 @@ async function registerRoutes() {
         });
 
         connection.socket.on('close', () => {
+          clearInterval(pingInterval);
           removeConnection(organizationId, connection.socket);
-          logger.info('WebSocket connection closed');
+          logger.info(`WebSocket connection closed for org ${organizationId}`);
         });
+
+        // Send initial ping immediately to test connection
+        setTimeout(() => {
+          if (connection.socket.readyState === 1) {
+            connection.socket.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 1000);
       } catch (error) {
         logger.error('WebSocket connection error:', error);
       }

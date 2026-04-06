@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1'
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -27,14 +27,16 @@ api.interceptors.response.use(
       const refreshToken = localStorage.getItem('refresh_token')
       if (refreshToken) {
         try {
-          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {}, {
+          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken }, {
             withCredentials: true,
           })
-          const { access_token } = response.data.data
-          localStorage.setItem('access_token', access_token)
+          const { access_token, accessToken } = response.data.data
+          const newToken = accessToken || access_token
+          if (!newToken) throw new Error('No token in refresh response')
+          localStorage.setItem('access_token', newToken)
           // Retry original request
           if (error.config) {
-            error.config.headers.Authorization = `Bearer ${access_token}`
+            error.config.headers.Authorization = `Bearer ${newToken}`
             return api.request(error.config)
           }
         } catch (refreshError) {

@@ -23,19 +23,61 @@ const useWebSocket = () => {
       })
 
       const unsubscribeMaestroRunUpdate = subscribe('maestro_run_update', (data) => {
-        dispatch(updateMaestroRun(data as Parameters<typeof updateMaestroRun>[0]))
+        const payload = data as any;
+        if (!payload || (!payload.id && !payload.maestroRunId)) {
+          console.warn('[WS] maestro_run_update: invalid payload', data);
+          return;
+        }
+        dispatch(updateMaestroRun({
+          id: payload.id || payload.maestroRunId,
+          status: payload.status,
+          testRunId: payload.testRunId,
+          flowCount: payload.flowCount,
+          passCount: payload.passCount,
+          failCount: payload.failCount,
+          logUrl: payload.logUrl,
+          completedAt: payload.completedAt,
+          screenshots: payload.screenshots,
+        }))
+      })
+
+      const unsubscribeMaestroFlowUpdate = subscribe('maestro_flow_update', (data) => {
+        const payload = data as any;
+        if (!payload || !payload.maestroRunId || !payload.flowName) {
+          console.warn('[WS] maestro_flow_update: invalid payload', data);
+          return;
+        }
+        dispatch(updateMaestroRun({
+          maestroRunId: payload.maestroRunId,
+          flowName: payload.flowName,
+          flowStatus: payload.status,
+          flowDuration: payload.duration,
+        }))
+      })
+
+      const unsubscribeMaestroOutput = subscribe('maestro_output', (data) => {
+        const payload = data as any;
+        if (!payload || !payload.maestroRunId || !payload.line) return;
+        // Dispatch output as flow status (we'll handle it in the panel directly via store)
+        dispatch(updateMaestroRun({
+          maestroRunId: payload.maestroRunId,
+          cliOutput: payload.line,
+        }))
       })
 
       return () => {
         unsubscribeNotification()
         unsubscribeTestRunUpdate()
         unsubscribeMaestroRunUpdate()
-        disconnect()
+        unsubscribeMaestroFlowUpdate()
+        unsubscribeMaestroOutput()
+        // Don't disconnect on unmount — keep WS alive across route changes
       }
     }
 
     return () => {
-      disconnect()
+      // Only disconnect on full logout
+      if (!isAuthenticated) disconnect()
     }
   }, [isAuthenticated, dispatch])
 }
