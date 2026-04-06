@@ -10,7 +10,8 @@
       "Bash(npx *)",
       "Bash(docker inspect *)",
       "Bash(ssh *)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(docker exec *)"
     ]
   },
   "$version": 3

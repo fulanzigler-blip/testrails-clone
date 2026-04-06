@@ -220,4 +220,159 @@ export default async function testSuiteRoutes(fastify: FastifyInstance) {
       return errorResponses.internal(reply);
     }
   });
+
+  // ─── Maestro Flows for Test Suites ─────────────────────────────────────────
+
+  // GET /flows - Get all available maestro flows (pool)
+  fastify.get('/flows', {
+    onRequest: [fastify.authenticate, fastify.getOrganizationContext],
+  }, async (request: any, reply) => {
+    try {
+      // Get all flows across all suites in the org
+      const flows = await prisma.maestroFlow.findMany({
+        where: {
+          testSuite: {
+            project: { organizationId: request.organizationId },
+          },
+        },
+        include: {
+          testSuite: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return successResponse(reply, flows, undefined);
+    } catch (error) {
+      logger.error('Error listing all flows:', error);
+      return errorResponses.handle(reply, error, 'list flows');
+    }
+  });
+
+  // POST /:id/flows - Save a new flow to a suite
+  fastify.post('/:id/flows', {
+    onRequest: [fastify.authenticate, fastify.getOrganizationContext, fastify.authorize('admin', 'manager', 'tester')],
+  }, async (request: any, reply) => {
+    try {
+      const { id } = request.params;
+      const { name, yaml, orderIndex, savedPath } = request.body as {
+        name: string;
+        yaml: string;
+        orderIndex?: number;
+        savedPath?: string;
+      };
+
+      // Verify suite belongs to org
+      const suite = await prisma.testSuite.findFirst({
+        where: { id, project: { organizationId: request.organizationId } },
+      });
+      if (!suite) return errorResponses.notFound(reply, 'Test Suite');
+
+      const flow = await prisma.maestroFlow.create({
+        data: {
+          name,
+          yaml,
+          orderIndex: orderIndex ?? 0,
+          savedPath: savedPath || null,
+          testSuiteId: id,
+        },
+      });
+
+      logger.info(`Saved flow "${name}" to suite "${suite.name}"`);
+      return successResponse(reply, flow, undefined);
+    } catch (error: any) {
+      logger.error('Error saving flow to suite:', error);
+      return errorResponses.handle(reply, error, 'save flow');
+    }
+  });
+
+  // GET /:id/flows - Get all flows for a suite
+  fastify.get('/:id/flows', {
+    onRequest: [fastify.authenticate, fastify.getOrganizationContext],
+  }, async (request: any, reply) => {
+    try {
+      const { id } = request.params;
+
+      const suite = await prisma.testSuite.findFirst({
+        where: { id, project: { organizationId: request.organizationId } },
+      });
+      if (!suite) return errorResponses.notFound(reply, 'Test Suite');
+
+      const flows = await prisma.maestroFlow.findMany({
+        where: { testSuiteId: id },
+        orderBy: { orderIndex: 'asc' },
+      });
+
+      return successResponse(reply, flows, undefined);
+    } catch (error) {
+      logger.error('Error listing flows:', error);
+      return errorResponses.handle(reply, error, 'list flows');
+    }
+  });
+
+  // DELETE /:suiteId/flows/:flowId
+  fastify.delete('/:suiteId/flows/:flowId', {
+    onRequest: [fastify.authenticate, fastify.getOrganizationContext, fastify.authorize('admin', 'manager')],
+  }, async (request: any, reply) => {
+    try {
+      const { suiteId, flowId } = request.params;
+
+      const flow = await prisma.maestroFlow.findFirst({
+        where: { id: flowId, testSuite: { project: { organizationId: request.organizationId } } },
+      });
+      if (!flow) return errorResponses.notFound(reply, 'Maestro Flow');
+
+      await prisma.maestroFlow.delete({ where: { id: flowId } });
+      logger.info(`Deleted flow "${flow.name}" from suite`);
+      return reply.code(204).send();
+    } catch (error) {
+      logger.error('Error deleting flow:', error);
+      return errorResponses.handle(reply, error, 'delete flow');
+    }
+  });
+
+  // POST /:id/flows/:flowId/copy - Copy an existing flow to this suite
+  fastify.post('/:id/flows/:flowId/copy', {
+    onRequest: [fastify.authenticate, fastify.getOrganizationContext, fastify.authorize('admin', 'manager', 'tester')],
+  }, async (request: any, reply) => {
+    try {
+      const { id: targetSuiteId } = request.params;
+      const { flowId } = request.params;
+
+      // Verify target suite belongs to org
+      const targetSuite = await prisma.testSuite.findFirst({
+        where: { id: targetSuiteId, project: { organizationId: request.organizationId } },
+      });
+      if (!targetSuite) return errorResponses.notFound(reply, 'Test Suite');
+
+      // Get source flow
+      const sourceFlow = await prisma.maestroFlow.findFirst({
+        where: { id: flowId, testSuite: { project: { organizationId: request.organizationId } } },
+      });
+      if (!sourceFlow) return errorResponses.notFound(reply, 'Maestro Flow');
+
+      // Get current max orderIndex
+      const maxOrder = await prisma.maestroFlow.aggregate({
+        where: { testSuiteId: targetSuiteId },
+        _max: { orderIndex: true },
+      });
+      const nextOrder = (maxOrder._max?.orderIndex ?? -1) + 1;
+
+      // Copy flow to target suite
+      const copiedFlow = await prisma.maestroFlow.create({
+        data: {
+          name: sourceFlow.name,
+          yaml: sourceFlow.yaml,
+          orderIndex: nextOrder,
+          savedPath: sourceFlow.savedPath,
+          testSuiteId: targetSuiteId,
+        },
+      });
+
+      logger.info(`Copied flow "${sourceFlow.name}" to suite "${targetSuite.name}"`);
+      return successResponse(reply, copiedFlow, undefined);
+    } catch (error: any) {
+      logger.error('Error copying flow to suite:', error);
+      return errorResponses.handle(reply, error, 'copy flow');
+    }
+  });
 }

@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Badge } from '../components/ui/badge'
-import { Plus, ChevronRight, FolderOpen, Edit, Trash2, FileText } from 'lucide-react'
+import { Plus, ChevronRight, FolderOpen, Edit, Trash2, FileText, Smartphone } from 'lucide-react'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import {
   fetchTestSuites,
@@ -34,6 +34,14 @@ interface TestCaseRow {
   automationType: string
 }
 
+interface SuiteFlow {
+  id: string
+  name: string
+  yaml: string
+  orderIndex: number
+  savedPath?: string | null
+}
+
 const TestSuites: React.FC = () => {
   const dispatch = useAppDispatch()
   const { suites, loading } = useAppSelector((state) => state.testSuites)
@@ -46,6 +54,14 @@ const TestSuites: React.FC = () => {
   const [expandedCases, setExpandedCases] = useState<Set<string>>(new Set())
   const [suiteTestCases, setSuiteTestCases] = useState<Record<string, TestCaseRow[]>>({})
   const [loadingCases, setLoadingCases] = useState<Set<string>>(new Set())
+  const [suiteFlows, setSuiteFlows] = useState<Record<string, SuiteFlow[]>>({})
+  const [loadingFlows, setLoadingFlows] = useState<Set<string>>(new Set())
+  const [expandedFlows, setExpandedFlows] = useState<Set<string>>(new Set())
+  const [flowYamlModal, setFlowYamlModal] = useState<{ name: string; yaml: string } | null>(null)
+  const [allFlows, setAllFlows] = useState<SuiteFlow[]>([])
+  const [showAddFlowModal, setShowAddFlowModal] = useState(false)
+  const [copyingFlowId, setCopyingFlowId] = useState<string | null>(null)
+  const [addFlowToSuiteId, setAddFlowToSuiteId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -129,6 +145,54 @@ const TestSuites: React.FC = () => {
     }
   }
 
+  const toggleSuiteFlows = async (suiteId: string) => {
+    const next = new Set(expandedFlows)
+    if (next.has(suiteId)) {
+      next.delete(suiteId)
+      setExpandedFlows(next)
+      return
+    }
+    next.add(suiteId)
+    setExpandedFlows(next)
+    if (suiteFlows[suiteId]) return // already loaded
+    setLoadingFlows(prev => new Set(prev).add(suiteId))
+    try {
+      const r = await api.get(`/test-suites/${suiteId}/flows`)
+      const flows = r.data?.data ?? []
+      setSuiteFlows(prev => ({ ...prev, [suiteId]: Array.isArray(flows) ? flows : [] }))
+    } catch {
+      setSuiteFlows(prev => ({ ...prev, [suiteId]: [] }))
+    } finally {
+      setLoadingFlows(prev => { const s = new Set(prev); s.delete(suiteId); return s })
+    }
+  }
+
+  const fetchAllFlows = async () => {
+    try {
+      const r = await api.get('/test-suites/flows')
+      setAllFlows(r.data?.data ?? [])
+    } catch {
+      setAllFlows([])
+    }
+  }
+
+  const copyFlowToSuite = async (suiteId: string, flowId: string) => {
+    setCopyingFlowId(flowId)
+    try {
+      await api.post(`/test-suites/${suiteId}/flows/${flowId}/copy`)
+      // Refresh suite flows
+      setExpandedFlows(new Set())
+      setSuiteFlows(prev => ({ ...prev, [suiteId]: undefined as any }))
+      toggleSuiteFlows(suiteId)
+      setShowAddFlowModal(false)
+    } catch (err) {
+      console.error('Failed to copy flow:', err)
+      alert('Failed to copy flow to suite.')
+    } finally {
+      setCopyingFlowId(null)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
@@ -205,6 +269,11 @@ const TestSuites: React.FC = () => {
                       {suite.testCasesCount ?? '?'} test cases
                       <ChevronRight className={`h-3 w-3 ml-1 transition-transform ${expandedCases.has(suite.id) ? 'rotate-90' : ''}`} />
                     </Badge>
+                    <Badge variant="outline" className="cursor-pointer hover:bg-muted" onClick={() => toggleSuiteFlows(suite.id)}>
+                      <Smartphone className="h-3 w-3 mr-1" />
+                      {(suiteFlows[suite.id] ?? []).length} flows
+                      <ChevronRight className={`h-3 w-3 ml-1 transition-transform ${expandedFlows.has(suite.id) ? 'rotate-90' : ''}`} />
+                    </Badge>
                   </div>
                 </div>
               </div>
@@ -255,6 +324,84 @@ const TestSuites: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+            )}
+          </div>
+        )}
+
+        {expandedFlows.has(suite.id) && (
+          <div className={`${level > 0 ? 'ml-6' : ''} mt-1 mb-2 rounded-lg border border-gray-100 bg-gray-50 overflow-hidden`}>
+            {loadingFlows.has(suite.id) ? (
+              <p className="px-4 py-3 text-sm text-gray-500">Loading Maestro flows...</p>
+            ) : (suiteFlows[suite.id] ?? []).length === 0 ? (
+              <div className="px-4 py-3">
+                <p className="text-sm text-gray-400 mb-2">No Maestro flows in this suite yet.</p>
+                <Button variant="outline" size="sm" onClick={() => { setAddFlowToSuiteId(suite.id); fetchAllFlows(); setShowAddFlowModal(true); }}>
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Existing Flow
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between px-4 py-2 bg-gray-100 border-b border-gray-200">
+                  <span className="text-xs text-gray-500">{(suiteFlows[suite.id] ?? []).length} flow(s) in this suite</span>
+                  <Button variant="outline" size="sm" onClick={() => { setAddFlowToSuiteId(suite.id); fetchAllFlows(); setShowAddFlowModal(true); }}>
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add Flow
+                  </Button>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-100">
+                      <th className="text-left px-4 py-2 font-medium text-gray-600">#</th>
+                      <th className="text-left px-4 py-2 font-medium text-gray-600">Flow Name</th>
+                      <th className="text-left px-4 py-2 font-medium text-gray-600 w-24">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(suiteFlows[suite.id] ?? []).map((flow, idx) => (
+                      <tr key={flow.id} className="border-b border-gray-100 hover:bg-white">
+                        <td className="px-4 py-2 text-gray-500">{idx + 1}</td>
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-2">
+                            <Smartphone className="h-3 w-3 text-muted-foreground" />
+                            <span className="font-medium text-gray-800">{flow.name}</span>
+                            {flow.savedPath && (
+                              <span className="text-xs text-gray-400 font-mono">{flow.savedPath}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setFlowYamlModal({ name: flow.name, yaml: flow.yaml })}
+                            >
+                              <FileText className="h-3 w-3 mr-1" />
+                              View
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const blob = new Blob([flow.yaml], { type: 'text/yaml' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `${flow.name}.yaml`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              }}
+                            >
+                              Download
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}
@@ -404,6 +551,88 @@ const TestSuites: React.FC = () => {
                     </Button>
                   </div>
                 </form>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Flow YAML Modal */}
+      {flowYamlModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background rounded-lg shadow-lg w-full max-w-2xl max-h-[80vh] overflow-hidden">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Smartphone className="h-5 w-5" />
+                    {flowYamlModal.name}
+                  </CardTitle>
+                  <Button variant="ghost" size="sm" onClick={() => setFlowYamlModal(null)}>
+                    ✕
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg text-xs font-mono max-h-[60vh] overflow-y-auto whitespace-pre">
+                  {flowYamlModal.yaml}
+                </pre>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Add Flow Modal */}
+      {showAddFlowModal && addFlowToSuiteId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background rounded-lg shadow-lg w-full max-w-xl max-h-[80vh] overflow-hidden">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Add Flow to Suite</CardTitle>
+                  <Button variant="ghost" size="sm" onClick={() => setShowAddFlowModal(false)}>
+                    ✕
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {allFlows.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    No flows available. Use Page Automation to capture flows first.
+                  </p>
+                ) : (
+                  <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+                    {allFlows.map(flow => (
+                      <div key={flow.id} className="flex items-center justify-between p-2 rounded hover:bg-muted border">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Smartphone className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                            <span className="font-medium text-sm truncate">{flow.name}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            From: {(flow as any).testSuite?.name || 'Unknown'}
+                          </span>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={copyingFlowId === flow.id}
+                          onClick={() => copyFlowToSuite(addFlowToSuiteId!, flow.id)}
+                        >
+                          {copyingFlowId === flow.id ? (
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary" />
+                          ) : (
+                            <>
+                              <Plus className="h-3 w-3 mr-1" />
+                              Add
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

@@ -12,6 +12,8 @@ import TestSuites from './pages/TestSuites'
 import Users from './pages/Users'
 import Reports from './pages/Reports'
 import Projects from './pages/Projects'
+import FlowBuilderPage from './pages/FlowBuilderPage'
+import PageAutomationPage from './pages/PageAutomationPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAppSelector((state) => state.auth)
@@ -87,6 +89,8 @@ function App() {
           <Route path="test-suites" element={<TestSuites />} />
           <Route path="users" element={<Users />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="flow-builder" element={<FlowBuilderPage />} />
+          <Route path="page-automation" element={<PageAutomationPage />} />
         </Route>
 
         {/* Fallback */}

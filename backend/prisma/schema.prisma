@@ -191,6 +191,7 @@ model TestSuite {
   testCases TestCase[]
   members TestSuiteMember[]
   testRuns TestRun[]
+  maestroFlows MaestroFlow[]
 
   @@index([projectId])
   @@index([parentSuiteId])
@@ -407,4 +408,19 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@map("audit_log")
+}
+
+model MaestroFlow {
+  id          String    @id @default(uuid())
+  name        String    @db.VarChar(255)
+  yaml        String    @db.Text
+  orderIndex  Int       @default(0) @map("order_index")
+  testSuite   TestSuite @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
+  testSuiteId String    @map("test_suite_id")
+  savedPath   String?   @map("saved_path") @db.VarChar(500)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([testSuiteId])
+  @@map("maestro_flows")
 }
