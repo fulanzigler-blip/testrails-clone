@@ -143,8 +143,10 @@ const AIIntegrationTestBuilder: React.FC = () => {
         scenario: scenario.trim(),
         credentials: buildCredentials(),
       });
-      setDartCode(resp.data?.dartCode || resp.data?.code || '');
-      setGeneratedFileName(resp.data?.fileName || resp.data?.filename || 'generated_test.dart');
+      const dartCode = resp.data?.data?.dartCode || resp.data?.dartCode || resp.data?.code || '';
+      const fileName = resp.data?.data?.fileName || resp.data?.fileName || resp.data?.filename || 'generated_test.dart';
+      setDartCode(dartCode);
+      setGeneratedFileName(fileName);
     } catch (err: any) {
       const msg =
         err.response?.data?.error?.message ||
@@ -171,13 +173,13 @@ const AIIntegrationTestBuilder: React.FC = () => {
     try {
       const resp = await api.post('/integration-tests/run', {
         appId: appId.trim(),
-        dartCode,
-        fileName: generatedFileName || 'test.dart',
+        scenario: scenario.trim(),
+        credentials: buildCredentials(),
       });
       setTestResult({
-        success: resp.data?.success ?? false,
-        output: resp.data?.output || resp.data?.logs || '',
-        duration: resp.data?.duration ?? 0,
+        success: resp.data?.data?.success ?? resp.data?.success ?? false,
+        output: resp.data?.data?.output || resp.data?.output || resp.data?.logs || '',
+        duration: resp.data?.data?.duration ?? resp.data?.duration ?? 0,
       });
     } catch (err: any) {
       const msg =
@@ -233,9 +235,9 @@ const AIIntegrationTestBuilder: React.FC = () => {
     try {
       const resp = await api.post(`/integration-tests/${test.id}/run`);
       setTestResult({
-        success: resp.data?.success ?? false,
-        output: resp.data?.output || resp.data?.logs || '',
-        duration: resp.data?.duration ?? 0,
+        success: resp.data?.data?.success ?? resp.data?.success ?? false,
+        output: resp.data?.data?.output || resp.data?.output || resp.data?.logs || '',
+        duration: resp.data?.data?.duration ?? resp.data?.duration ?? 0,
       });
       // Also load the code for preview
       setDartCode(test.dartCode);

@@ -94,6 +94,7 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
         version: tc.version,
         status: tc.status,
         tags: tc.tags,
+        customFields: tc.customFields,
         createdAt: tc.createdAt,
         updatedAt: tc.updatedAt,
       }));

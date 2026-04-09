@@ -11,6 +11,7 @@ services:
       - .env
     volumes:
       - testrails-uploads:/app/uploads
+      - testrails-scans:/app/scans
       - /home/clawdbot/.ssh/id_ed25519:/tmp/host_ssh_key:ro
     networks:
       - testrails-network
@@ -37,6 +38,8 @@ services:
 volumes:
   testrails-uploads:
     name: testrails-uploads
+  testrails-scans:
+    driver: local
 
 networks:
   testrails-network:

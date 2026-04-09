@@ -1,5 +1,8 @@
 let ws: WebSocket | null = null;
 const handlers: Map<string, Set<(data: unknown) => void>> = new Map();
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_BASE_DELAY = 3000;
 
 function dispatch(eventType: string, data: unknown): void {
   const set = handlers.get(eventType);
@@ -13,6 +16,36 @@ function dispatch(eventType: string, data: unknown): void {
   });
 }
 
+/**
+ * Try to refresh the access token using the stored refresh token.
+ * Returns the new access token on success, null on failure.
+ */
+async function tryRefreshToken(): Promise<string | null> {
+  const refreshToken = localStorage.getItem('refresh_token');
+  if (!refreshToken) return null;
+
+  try {
+    const apiBaseUrl = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.host}/api/v1`;
+    const response = await fetch(`${apiBaseUrl}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) return null;
+
+    const result = await response.json();
+    const newToken = result.data?.accessToken || result.data?.access_token;
+    if (newToken) {
+      localStorage.setItem('access_token', newToken);
+      return newToken;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function connect(token: string): void {
   if (ws) {
     if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
@@ -20,14 +53,20 @@ export function connect(token: string): void {
     }
   }
 
+  reconnectAttempts++;
+
   const baseUrl = import.meta.env.VITE_WS_URL || `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`;
   const url = `${baseUrl}/ws`;
 
+  // Always read the freshest token at connection time
+  const freshToken = localStorage.getItem('access_token') || token;
+
   // Send token via Sec-WebSocket-Protocol to avoid token in URL/logs
-  ws = new WebSocket(url, [`bearer.${token}`]);
+  ws = new WebSocket(url, [`bearer.${freshToken}`]);
 
   ws.onopen = () => {
     console.info('[socket] connected');
+    reconnectAttempts = 0; // reset on successful connection
   };
 
   ws.onmessage = (event: MessageEvent) => {
@@ -50,20 +89,51 @@ export function connect(token: string): void {
     }
   };
 
-  ws.onclose = () => {
-    console.info('[socket] disconnected');
+  ws.onclose = (event: CloseEvent) => {
+    console.info(`[socket] disconnected (code: ${event.code})`);
     ws = null;
-    // Auto-reconnect after 3s if we still have a token
-    const currentToken = localStorage.getItem('access_token');
-    if (currentToken) {
-      console.info('[socket] scheduling reconnect in 3s');
-      setTimeout(() => connect(currentToken), 3000);
+
+    // Detect auth failure — stop reconnecting if token is invalid/expired
+    if (event.code === 4003) {
+      console.warn('[socket] auth failure on WS — stopping reconnect, will attempt token refresh');
+      reconnectAttempts = 0; // allow one more cycle after refresh
+      tryRefreshToken().then((newToken) => {
+        if (newToken) {
+          console.info('[socket] token refreshed — reconnecting');
+          scheduleReconnect();
+        } else {
+          console.warn('[socket] token refresh failed — not reconnecting');
+        }
+      });
+      return;
     }
+
+    scheduleReconnect();
   };
 
   ws.onerror = (event: Event) => {
     console.error('[socket] error:', event);
   };
+}
+
+/**
+ * Schedule a reconnect attempt with exponential backoff.
+ * Gives up after MAX_RECONNECT_ATTEMPTS consecutive failures.
+ */
+function scheduleReconnect(): void {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.warn(`[socket] max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached — giving up`);
+    return;
+  }
+
+  const delay = RECONNECT_BASE_DELAY * Math.pow(2, Math.min(reconnectAttempts - 1, 3));
+  console.info(`[socket] scheduling reconnect in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+  setTimeout(() => {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      connect(token);
+    }
+  }, delay);
 }
 
 export function disconnect(): void {

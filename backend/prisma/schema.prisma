@@ -437,3 +437,19 @@ model IntegrationTest {
 
   @@map("integration_tests")
 }
+
+model Runner {
+  id          String   @id @default(uuid())
+  name        String
+  host        String
+  username    String   @default("clawbot")
+  projectPath String   @map("project_path")
+  deviceId    String?  @map("device_id")
+  isActive    Boolean  @default(true) @map("is_active")
+  isDefault   Boolean  @default(false) @map("is_default")
+  sshKeyPath  String   @default("/home/nodejs/.ssh/id_ed25519") @map("ssh_key_path")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("runners")
+}

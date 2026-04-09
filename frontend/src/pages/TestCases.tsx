@@ -9,7 +9,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Badge } from '../components/ui/badge'
-import { Plus, Search, Edit, Trash2, Filter, Wand2, Smartphone, Trash } from 'lucide-react'
+import { Play, Loader2, CheckCircle2, XCircle, Code2, Plus, Search, Edit, Trash2, Filter, Wand2, Smartphone, Trash } from 'lucide-react'
 import AIGenerateModal from '../components/AIGenerateModal'
 import CrawlGenerateModal from '../components/CrawlGenerateModal'
 import GitHubSyncPanel from '../components/GitHubSyncPanel'
@@ -331,6 +331,10 @@ const TestCases: React.FC = () => {
                     </td>
                     <td className="p-3">
                       <div className="flex gap-2">
+                        {/* Run button for integration test cases with generated code */}
+                        {testCase.customFields?.dartCode && (
+                          <RunTestCaseButton testCase={testCase} />
+                        )}
                         <Button variant="ghost" size="sm" onClick={() => handleEdit(testCase)}>
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -524,6 +528,65 @@ const TestCases: React.FC = () => {
               </CardContent>
             </Card>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Run Test Case Button Component ──────────────────────────────────────────
+
+function RunTestCaseButton({ testCase }: { testCase: any }) {
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<{ success: boolean; output: string; duration: number } | null>(null)
+
+  const handleRun = async () => {
+    setRunning(true)
+    setResult(null)
+    try {
+      const resp = await api.post(`/integration-tests/run-testcase/${testCase.id}`)
+      const data = resp.data?.data
+      setResult({
+        success: data?.success ?? false,
+        output: data?.output || '',
+        duration: data?.duration ?? 0,
+      })
+    } catch (err: any) {
+      setResult({
+        success: false,
+        output: err.response?.data?.error?.message || err.message || 'Run failed',
+        duration: 0,
+      })
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  const formatDuration = (ms: number) => {
+    if (ms < 1000) return `${ms}ms`
+    return `${(ms / 1000).toFixed(1)}s`
+  }
+
+  return (
+    <div>
+      <Button variant="ghost" size="sm" onClick={handleRun} disabled={running} className="text-green-600 hover:text-green-700">
+        {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+      </Button>
+      {result && (
+        <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
+          <div className="flex items-center gap-1 mb-1">
+            {result.success ? (
+              <span className="text-green-600 font-semibold">✓ PASSED</span>
+            ) : (
+              <span className="text-red-600 font-semibold">✗ FAILED</span>
+            )}
+            <span className="text-muted-foreground ml-1">{formatDuration(result.duration)}</span>
+          </div>
+          {result.output && (
+            <pre className="bg-gray-900 text-gray-100 p-2 rounded font-mono max-h-[200px] overflow-y-auto whitespace-pre-wrap break-all">
+              {result.output.slice(-1000)}
+            </pre>
+          )}
         </div>
       )}
     </div>
