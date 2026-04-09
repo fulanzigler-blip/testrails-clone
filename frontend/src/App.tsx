@@ -14,7 +14,6 @@ import Reports from './pages/Reports'
 import Projects from './pages/Projects'
 import FlowBuilderPage from './pages/FlowBuilderPage'
 import PageAutomationPage from './pages/PageAutomationPage'
-import AIIntegrationTestPage from './pages/AIIntegrationTestPage'
 import VisualTestBuilderPage from './pages/VisualTestBuilderPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -93,7 +92,6 @@ function App() {
           <Route path="reports" element={<Reports />} />
           <Route path="flow-builder" element={<FlowBuilderPage />} />
           <Route path="page-automation" element={<PageAutomationPage />} />
-          <Route path="ai-integration-tests" element={<AIIntegrationTestPage />} />
           <Route path="visual-test-builder" element={<VisualTestBuilderPage />} />
         </Route>
 

@@ -1,640 +1,254 @@
-import React, { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { useAppDispatch, useAppSelector } from '../store/hooks'
+import { fetchTestCases } from '../store/slices/testCasesSlice'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Badge } from '../components/ui/badge'
-import { Plus, ChevronRight, FolderOpen, Edit, Trash2, FileText, Smartphone } from 'lucide-react'
-import { useAppDispatch, useAppSelector } from '../store/hooks'
 import {
-  fetchTestSuites,
-  createTestSuite,
-  updateTestSuite,
-  deleteTestSuite,
-} from '../store/slices/testSuitesSlice'
-import { fetchProjects } from '../store/slices/projectsSlice'
+  FolderOpen, ChevronDown, ChevronRight, Play, CheckCircle2, XCircle,
+  Loader2, FolderPlus, TestTube, Eye, X
+} from 'lucide-react'
 import { api } from '../lib/api'
+
+interface TestCase {
+  id: string
+  title: string
+  description: string
+  steps: any[]
+  priority: string
+  automationType: string
+  status: string
+  tags: string[]
+  customFields?: { dartCode?: string }
+  updatedAt: string
+}
 
 interface TestSuite {
   id: string
   name: string
-  description: string | null
-  projectId: string
-  parentSuiteId: string | null
-  testCasesCount?: number
-  createdAt: string
-  updatedAt: string
+  description: string
+  testCases: TestCase[]
+  isOpen: boolean
 }
 
-interface TestCaseRow {
-  id: string
-  title: string
-  priority: string
-  status: string
-  automationType: string
+function getPriorityColor(p: string) {
+  switch (p) {
+    case 'critical': return 'bg-red-500 text-white'
+    case 'high': return 'bg-orange-500 text-white'
+    case 'medium': return 'bg-yellow-500 text-black'
+    default: return 'bg-green-500 text-white'
+  }
 }
 
-interface SuiteFlow {
-  id: string
-  name: string
-  yaml: string
-  orderIndex: number
-  savedPath?: string | null
+function formatDuration(ms: number) {
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
+function autoGroupTestCases(testCases: TestCase[]): TestSuite[] {
+  if (testCases.length === 0) return []
+  const groups: Map<string, TestCase[]> = new Map()
+  const ungrouped: TestCase[] = []
+  for (const tc of testCases) {
+    const words = tc.title.split(' ')
+    let prefix = ''
+    if (words.length >= 3) prefix = words.slice(0, 3).join(' ')
+    else if (words.length >= 2) prefix = words.slice(0, 2).join(' ')
+    else prefix = words[0]
+    const matching = testCases.filter(t => t.title.startsWith(prefix))
+    if (matching.length >= 2) {
+      if (!groups.has(prefix)) groups.set(prefix, [])
+      if (!groups.get(prefix)!.find(t => t.id === tc.id)) groups.get(prefix)!.push(tc)
+    } else {
+      if (!ungrouped.find(t => t.id === tc.id)) ungrouped.push(tc)
+    }
+  }
+  const suites: TestSuite[] = []
+  for (const [name, cases] of groups) {
+    suites.push({ id: 'auto_' + name.replace(/\s+/g, '_'), name, description: `Auto-grouped: ${cases.length} test cases`, testCases: cases, isOpen: true })
+  }
+  if (ungrouped.length > 0) {
+    suites.push({ id: 'ungrouped', name: 'Ungrouped', description: `${ungrouped.length} test case(s) without a group`, testCases: ungrouped, isOpen: true })
+  }
+  return suites
 }
 
 const TestSuites: React.FC = () => {
   const dispatch = useAppDispatch()
-  const { suites, loading } = useAppSelector((state) => state.testSuites)
-  const { projects } = useAppSelector((state) => state.projects)
+  const { testCases } = useAppSelector((state) => state.testCases)
+  const [suites, setSuites] = useState<TestSuite[]>([])
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [newSuiteName, setNewSuiteName] = useState('')
+  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([])
+  const [runningIds, setRunningIds] = useState<Set<string>>(new Set())
+  const [runResults, setRunResults] = useState<Record<string, { success: boolean; duration: number; output: string }>>({})
+  const [showOutput, setShowOutput] = useState<{ title: string; success: boolean; duration: number; output: string } | null>(null)
 
-  const [selectedProject, setSelectedProject] = useState<string>('')
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingSuite, setEditingSuite] = useState<TestSuite | null>(null)
-  const [expandedSuites, setExpandedSuites] = useState<Set<string>>(new Set())
-  const [expandedCases, setExpandedCases] = useState<Set<string>>(new Set())
-  const [suiteTestCases, setSuiteTestCases] = useState<Record<string, TestCaseRow[]>>({})
-  const [loadingCases, setLoadingCases] = useState<Set<string>>(new Set())
-  const [suiteFlows, setSuiteFlows] = useState<Record<string, SuiteFlow[]>>({})
-  const [loadingFlows, setLoadingFlows] = useState<Set<string>>(new Set())
-  const [expandedFlows, setExpandedFlows] = useState<Set<string>>(new Set())
-  const [flowYamlModal, setFlowYamlModal] = useState<{ name: string; yaml: string } | null>(null)
-  const [allFlows, setAllFlows] = useState<SuiteFlow[]>([])
-  const [showAddFlowModal, setShowAddFlowModal] = useState(false)
-  const [copyingFlowId, setCopyingFlowId] = useState<string | null>(null)
-  const [addFlowToSuiteId, setAddFlowToSuiteId] = useState<string | null>(null)
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    project_id: '',
-    parent_suite_id: '',
-  })
+  useEffect(() => { dispatch(fetchTestCases({ page: 1, perPage: 200 })) }, [dispatch])
+  useEffect(() => { setSuites(autoGroupTestCases(testCases)) }, [testCases])
 
-  useEffect(() => {
-    dispatch(fetchProjects())
-  }, [dispatch])
+  const toggleSuite = (id: string) => setSuites(prev => prev.map(s => s.id === id ? { ...s, isOpen: !s.isOpen } : s))
 
-  useEffect(() => {
-    dispatch(
-      fetchTestSuites({
-        projectId: selectedProject || undefined,
-      })
-    )
-  }, [selectedProject, dispatch])
-
-  const handleCreate = () => {
-    setEditingSuite(null)
-    setFormData({
-      name: '',
-      description: '',
-      project_id: selectedProject || '',
-      parent_suite_id: '',
-    })
-    setIsModalOpen(true)
-  }
-
-  const handleEdit = (suite: TestSuite) => {
-    setEditingSuite(suite)
-    setFormData({
-      name: suite.name,
-      description: suite.description || '',
-      project_id: suite.projectId,
-      parent_suite_id: suite.parentSuiteId || '',
-    })
-    setIsModalOpen(true)
-  }
-
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this suite? All child suites will also be deleted.')) {
-      try {
-        await dispatch(deleteTestSuite(id)).unwrap()
-      } catch (error) {
-        console.error('Failed to delete test suite:', error)
-      }
-    }
-  }
-
-  const toggleExpand = (suiteId: string) => {
-    const newExpanded = new Set(expandedSuites)
-    if (newExpanded.has(suiteId)) {
-      newExpanded.delete(suiteId)
-    } else {
-      newExpanded.add(suiteId)
-    }
-    setExpandedSuites(newExpanded)
-  }
-
-  const toggleSuiteTestCases = async (suiteId: string) => {
-    const next = new Set(expandedCases)
-    if (next.has(suiteId)) {
-      next.delete(suiteId)
-      setExpandedCases(next)
-      return
-    }
-    next.add(suiteId)
-    setExpandedCases(next)
-    if (suiteTestCases[suiteId]) return // already loaded
-    setLoadingCases(prev => new Set(prev).add(suiteId))
+  const handleRunTestCase = async (testCaseId: string) => {
+    if (runningIds.has(testCaseId)) return
+    setRunningIds(prev => new Set([...prev, testCaseId]))
+    setRunResults(prev => { const n = { ...prev }; delete n[testCaseId]; return n })
     try {
-      const r = await api.get('/test-cases', { params: { suiteId, perPage: 50 } })
-      const cases = r.data?.data ?? []
-      setSuiteTestCases(prev => ({ ...prev, [suiteId]: Array.isArray(cases) ? cases : [] }))
-    } catch {
-      setSuiteTestCases(prev => ({ ...prev, [suiteId]: [] }))
+      const resp = await api.post(`/integration-tests/run-testcase/${testCaseId}`)
+      const data = resp.data?.data
+      setRunResults(prev => ({ ...prev, [testCaseId]: { success: data?.success ?? false, duration: data?.duration ?? 0, output: data?.output || '' } }))
+    } catch (err: any) {
+      setRunResults(prev => ({ ...prev, [testCaseId]: { success: false, duration: 0, output: err.response?.data?.error?.message || err.message || 'Run failed' } }))
     } finally {
-      setLoadingCases(prev => { const s = new Set(prev); s.delete(suiteId); return s })
+      setRunningIds(prev => { const n = new Set(prev); n.delete(testCaseId); return n })
     }
   }
 
-  const toggleSuiteFlows = async (suiteId: string) => {
-    const next = new Set(expandedFlows)
-    if (next.has(suiteId)) {
-      next.delete(suiteId)
-      setExpandedFlows(next)
-      return
-    }
-    next.add(suiteId)
-    setExpandedFlows(next)
-    if (suiteFlows[suiteId]) return // already loaded
-    setLoadingFlows(prev => new Set(prev).add(suiteId))
-    try {
-      const r = await api.get(`/test-suites/${suiteId}/flows`)
-      const flows = r.data?.data ?? []
-      setSuiteFlows(prev => ({ ...prev, [suiteId]: Array.isArray(flows) ? flows : [] }))
-    } catch {
-      setSuiteFlows(prev => ({ ...prev, [suiteId]: [] }))
-    } finally {
-      setLoadingFlows(prev => { const s = new Set(prev); s.delete(suiteId); return s })
-    }
+  const handleCreateSuite = () => {
+    if (!newSuiteName.trim()) return
+    const newSuite: TestSuite = { id: 'manual_' + Date.now(), name: newSuiteName.trim(), description: `${selectedCaseIds.length} test case(s)`, testCases: testCases.filter(tc => selectedCaseIds.includes(tc.id)), isOpen: true }
+    setSuites(prev => [newSuite, ...prev])
+    setNewSuiteName('')
+    setSelectedCaseIds([])
+    setIsCreateModalOpen(false)
   }
 
-  const fetchAllFlows = async () => {
-    try {
-      const r = await api.get('/test-suites/flows')
-      setAllFlows(r.data?.data ?? [])
-    } catch {
-      setAllFlows([])
-    }
-  }
-
-  const copyFlowToSuite = async (suiteId: string, flowId: string) => {
-    setCopyingFlowId(flowId)
-    try {
-      await api.post(`/test-suites/${suiteId}/flows/${flowId}/copy`)
-      // Refresh suite flows
-      setExpandedFlows(new Set())
-      setSuiteFlows(prev => ({ ...prev, [suiteId]: undefined as any }))
-      toggleSuiteFlows(suiteId)
-      setShowAddFlowModal(false)
-    } catch (err) {
-      console.error('Failed to copy flow:', err)
-      alert('Failed to copy flow to suite.')
-    } finally {
-      setCopyingFlowId(null)
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      if (editingSuite) {
-        await dispatch(
-          updateTestSuite({
-            id: editingSuite.id,
-            name: formData.name,
-            description: formData.description || undefined,
-            parentSuiteId: formData.parent_suite_id || undefined,
-          })
-        ).unwrap()
-      } else {
-        await dispatch(
-          createTestSuite({
-            name: formData.name,
-            description: formData.description || undefined,
-            projectId: formData.project_id,
-            parentSuiteId: formData.parent_suite_id || undefined,
-          })
-        ).unwrap()
-      }
-      setIsModalOpen(false)
-    } catch (error) {
-      console.error('Failed to save test suite:', error)
-    }
-  }
-
-  const getChildSuites = (parentId: string): TestSuite[] => {
-    return suites.filter((s) => s.parentSuiteId === parentId)
-  }
-
-  const getRootSuites = (): TestSuite[] => {
-    return suites.filter((s) => s.parentSuiteId === null || s.parentSuiteId === undefined)
-  }
-
-  const renderSuite = (suite: TestSuite, level: number = 0) => {
-    const isExpanded = expandedSuites.has(suite.id)
-    const children = getChildSuites(suite.id)
-    const hasChildren = children.length > 0
-
-    return (
-      <div key={suite.id}>
-        <Card className={`hover:shadow-md transition-shadow ${level > 0 ? 'ml-6 mt-2' : 'mt-4'}`}>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 flex-1">
-                {hasChildren && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleExpand(suite.id)}
-                    className="p-1"
-                  >
-                    <ChevronRight
-                      className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                    />
-                  </Button>
-                )}
-                {!hasChildren && <div className="w-6" />}
-
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <FolderOpen className="h-5 w-5 text-muted-foreground" />
-                    <h3 className="font-semibold">{suite.name}</h3>
-                  </div>
-                  {suite.description && (
-                    <p className="text-sm text-muted-foreground mt-1">{suite.description}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-2">
-                    <Badge variant="secondary">{children.length} sub-suites</Badge>
-                    <Badge variant="outline" className="cursor-pointer hover:bg-muted" onClick={() => toggleSuiteTestCases(suite.id)}>
-                      <FileText className="h-3 w-3 mr-1" />
-                      {suite.testCasesCount ?? '?'} test cases
-                      <ChevronRight className={`h-3 w-3 ml-1 transition-transform ${expandedCases.has(suite.id) ? 'rotate-90' : ''}`} />
-                    </Badge>
-                    <Badge variant="outline" className="cursor-pointer hover:bg-muted" onClick={() => toggleSuiteFlows(suite.id)}>
-                      <Smartphone className="h-3 w-3 mr-1" />
-                      {(suiteFlows[suite.id] ?? []).length} flows
-                      <ChevronRight className={`h-3 w-3 ml-1 transition-transform ${expandedFlows.has(suite.id) ? 'rotate-90' : ''}`} />
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={() => handleEdit(suite)}>
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => handleDelete(suite.id)}>
-                  <Trash2 className="h-4 w-4 text-red-500" />
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {expandedCases.has(suite.id) && (
-          <div className={`${level > 0 ? 'ml-6' : ''} mt-1 mb-2 rounded-lg border border-gray-100 bg-gray-50 overflow-hidden`}>
-            {loadingCases.has(suite.id) ? (
-              <p className="px-4 py-3 text-sm text-gray-500">Loading test cases...</p>
-            ) : (suiteTestCases[suite.id] ?? []).length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-400">No test cases in this suite yet.</p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-100">
-                    <th className="text-left px-4 py-2 font-medium text-gray-600">Title</th>
-                    <th className="text-left px-4 py-2 font-medium text-gray-600 w-24">Priority</th>
-                    <th className="text-left px-4 py-2 font-medium text-gray-600 w-24">Type</th>
-                    <th className="text-left px-4 py-2 font-medium text-gray-600 w-20">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(suiteTestCases[suite.id] ?? []).map((tc) => (
-                    <tr key={tc.id} className="border-b border-gray-100 hover:bg-white">
-                      <td className="px-4 py-2 font-medium text-gray-800">{tc.title}</td>
-                      <td className="px-4 py-2">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                          tc.priority === 'critical' ? 'bg-red-100 text-red-700' :
-                          tc.priority === 'high' ? 'bg-orange-100 text-orange-700' :
-                          tc.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-green-100 text-green-700'
-                        }`}>{tc.priority}</span>
-                      </td>
-                      <td className="px-4 py-2 text-gray-500 capitalize">{tc.automationType?.replace('_', ' ')}</td>
-                      <td className="px-4 py-2 text-gray-500 capitalize">{tc.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
-
-        {expandedFlows.has(suite.id) && (
-          <div className={`${level > 0 ? 'ml-6' : ''} mt-1 mb-2 rounded-lg border border-gray-100 bg-gray-50 overflow-hidden`}>
-            {loadingFlows.has(suite.id) ? (
-              <p className="px-4 py-3 text-sm text-gray-500">Loading Maestro flows...</p>
-            ) : (suiteFlows[suite.id] ?? []).length === 0 ? (
-              <div className="px-4 py-3">
-                <p className="text-sm text-gray-400 mb-2">No Maestro flows in this suite yet.</p>
-                <Button variant="outline" size="sm" onClick={() => { setAddFlowToSuiteId(suite.id); fetchAllFlows(); setShowAddFlowModal(true); }}>
-                  <Plus className="h-3 w-3 mr-1" />
-                  Add Existing Flow
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <div className="flex items-center justify-between px-4 py-2 bg-gray-100 border-b border-gray-200">
-                  <span className="text-xs text-gray-500">{(suiteFlows[suite.id] ?? []).length} flow(s) in this suite</span>
-                  <Button variant="outline" size="sm" onClick={() => { setAddFlowToSuiteId(suite.id); fetchAllFlows(); setShowAddFlowModal(true); }}>
-                    <Plus className="h-3 w-3 mr-1" />
-                    Add Flow
-                  </Button>
-                </div>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 bg-gray-100">
-                      <th className="text-left px-4 py-2 font-medium text-gray-600">#</th>
-                      <th className="text-left px-4 py-2 font-medium text-gray-600">Flow Name</th>
-                      <th className="text-left px-4 py-2 font-medium text-gray-600 w-24">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(suiteFlows[suite.id] ?? []).map((flow, idx) => (
-                      <tr key={flow.id} className="border-b border-gray-100 hover:bg-white">
-                        <td className="px-4 py-2 text-gray-500">{idx + 1}</td>
-                        <td className="px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            <Smartphone className="h-3 w-3 text-muted-foreground" />
-                            <span className="font-medium text-gray-800">{flow.name}</span>
-                            {flow.savedPath && (
-                              <span className="text-xs text-gray-400 font-mono">{flow.savedPath}</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setFlowYamlModal({ name: flow.name, yaml: flow.yaml })}
-                            >
-                              <FileText className="h-3 w-3 mr-1" />
-                              View
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                const blob = new Blob([flow.yaml], { type: 'text/yaml' });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = `${flow.name}.yaml`;
-                                a.click();
-                                URL.revokeObjectURL(url);
-                              }}
-                            >
-                              Download
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {hasChildren && isExpanded && (
-          <div>
-            {children.map((child) => renderSuite(child, level + 1))}
-          </div>
-        )}
-      </div>
-    )
-  }
+  const totalCases = testCases.length
+  const passedCount = Object.values(runResults).filter(r => r.success).length
+  const failedCount = Object.values(runResults).filter(r => !r.success).length
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Test Suites</h1>
-          <p className="text-muted-foreground">Organize your test cases into suites</p>
+          <h1 className="text-2xl font-bold">Test Suites</h1>
+          <p className="text-muted-foreground">Group and organize test cases</p>
         </div>
-        <Button onClick={handleCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Suite
-        </Button>
+        <div className="flex items-center gap-3">
+          <Badge variant="outline" className="text-sm">{totalCases} test cases</Badge>
+          {passedCount > 0 && <Badge className="bg-green-100 text-green-800">✓ {passedCount} passed</Badge>}
+          {failedCount > 0 && <Badge className="bg-red-100 text-red-800">✗ {failedCount} failed</Badge>}
+          <Button onClick={() => setIsCreateModalOpen(true)}><FolderPlus className="w-4 h-4 mr-2" /> New Suite</Button>
+        </div>
       </div>
 
-      {/* Project Filter */}
-      <div className="flex items-center gap-2">
-        <Label htmlFor="project-filter">Filter by Project:</Label>
-        <select
-          id="project-filter"
-          value={selectedProject}
-          onChange={(e) => setSelectedProject(e.target.value)}
-          className="border rounded-md px-3 py-1.5 text-sm"
-        >
-          <option value="">All Projects</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Loading State */}
-      {loading && (
-        <div className="flex items-center justify-center h-32">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      )}
-
-      {/* Suites Tree */}
-      {!loading && (
-        <div className="space-y-4">
-          {getRootSuites().length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-16">
-                <FolderOpen className="h-16 w-16 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No test suites yet</h3>
-                <p className="text-muted-foreground mb-4">Create your first test suite to get started</p>
-                <Button onClick={handleCreate}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Suite
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            getRootSuites().map((suite) => renderSuite(suite))
-          )}
-        </div>
-      )}
-
-      {/* Create/Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-background rounded-lg shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <Card>
-              <CardHeader>
-                <CardTitle>{editingSuite ? 'Edit Test Suite' : 'New Test Suite'}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <Label htmlFor="name">Name *</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      required
-                    />
+      {suites.length === 0 ? (
+        <Card><CardContent className="py-16 text-center text-muted-foreground"><FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-30" /><p>No test cases yet. Create test cases first.</p></CardContent></Card>
+      ) : (
+        <div className="space-y-3">
+          {suites.map(suite => {
+            const suiteCases = suite.testCases
+            const passedInSuite = suiteCases.filter(tc => runResults[tc.id]?.success).length
+            const failedInSuite = suiteCases.filter(tc => runResults[tc.id] && !runResults[tc.id]?.success).length
+            const runningInSuite = suiteCases.filter(tc => runningIds.has(tc.id)).length
+            return (
+              <Card key={suite.id} className="overflow-hidden">
+                <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50" onClick={() => toggleSuite(suite.id)}>
+                  <div className="flex items-center gap-3">
+                    {suite.isOpen ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                    <FolderOpen className="w-5 h-5 text-blue-500" />
+                    <div><div className="font-medium">{suite.name}</div><div className="text-sm text-muted-foreground">{suite.description}</div></div>
                   </div>
-
-                  <div>
-                    <Label htmlFor="description">Description</Label>
-                    <textarea
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      placeholder="Optional description for this suite"
-                    />
+                  <div className="flex items-center gap-4">
+                    {runningInSuite > 0 && <Badge className="bg-blue-100 text-blue-800"><Loader2 className="w-3 h-3 mr-1 animate-spin" />{runningInSuite}</Badge>}
+                    {passedInSuite > 0 && <Badge className="bg-green-100 text-green-800">✓ {passedInSuite}</Badge>}
+                    {failedInSuite > 0 && <Badge className="bg-red-100 text-red-800">✗ {failedInSuite}</Badge>}
+                    <Badge variant="outline">{suiteCases.length} cases</Badge>
                   </div>
-
-                  <div>
-                    <Label htmlFor="project_id">Project *</Label>
-                    <select
-                      id="project_id"
-                      value={formData.project_id}
-                      onChange={(e) => setFormData({ ...formData, project_id: e.target.value })}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      required
-                    >
-                      <option value="">Select Project</option>
-                      {projects.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="parent_suite_id">Parent Suite (optional)</Label>
-                    <select
-                      id="parent_suite_id"
-                      value={formData.parent_suite_id}
-                      onChange={(e) => setFormData({ ...formData, parent_suite_id: e.target.value })}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    >
-                      <option value="">Root Level</option>
-                      {suites
-                        .filter((s) => !editingSuite || s.id !== editingSuite.id)
-                        .map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-4">
-                    <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button type="submit">
-                      {editingSuite ? 'Update' : 'Create'} Suite
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* Flow YAML Modal */}
-      {flowYamlModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-background rounded-lg shadow-lg w-full max-w-2xl max-h-[80vh] overflow-hidden">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Smartphone className="h-5 w-5" />
-                    {flowYamlModal.name}
-                  </CardTitle>
-                  <Button variant="ghost" size="sm" onClick={() => setFlowYamlModal(null)}>
-                    ✕
-                  </Button>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <pre className="bg-gray-900 text-green-400 p-4 rounded-lg text-xs font-mono max-h-[60vh] overflow-y-auto whitespace-pre">
-                  {flowYamlModal.yaml}
-                </pre>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* Add Flow Modal */}
-      {showAddFlowModal && addFlowToSuiteId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-background rounded-lg shadow-lg w-full max-w-xl max-h-[80vh] overflow-hidden">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Add Flow to Suite</CardTitle>
-                  <Button variant="ghost" size="sm" onClick={() => setShowAddFlowModal(false)}>
-                    ✕
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {allFlows.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">
-                    No flows available. Use Page Automation to capture flows first.
-                  </p>
-                ) : (
-                  <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-                    {allFlows.map(flow => (
-                      <div key={flow.id} className="flex items-center justify-between p-2 rounded hover:bg-muted border">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Smartphone className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                            <span className="font-medium text-sm truncate">{flow.name}</span>
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            From: {(flow as any).testSuite?.name || 'Unknown'}
-                          </span>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={copyingFlowId === flow.id}
-                          onClick={() => copyFlowToSuite(addFlowToSuiteId!, flow.id)}
-                        >
-                          {copyingFlowId === flow.id ? (
-                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary" />
-                          ) : (
-                            <>
-                              <Plus className="h-3 w-3 mr-1" />
-                              Add
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    ))}
+                {suite.isOpen && suiteCases.length > 0 && (
+                  <div className="border-t">
+                    <table className="w-full">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2">Test Case</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2">Priority</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2">Type</th>
+                          <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2">Result</th>
+                          <th className="text-right text-xs font-medium text-muted-foreground px-4 py-2">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {suiteCases.map(tc => {
+                          const result = runResults[tc.id]
+                          const isRunning = runningIds.has(tc.id)
+                          const hasCode = !!tc.customFields?.dartCode
+                          return (
+                            <tr key={tc.id} className="border-t hover:bg-muted/30">
+                              <td className="px-4 py-2">
+                                <div className="flex items-center gap-2">{hasCode && <TestTube className="w-3 h-3 text-purple-500" />}<div className="font-medium text-sm">{tc.title}</div></div>
+                                {tc.description && <div className="text-xs text-muted-foreground mt-0.5">{tc.description}</div>}
+                              </td>
+                              <td className="px-4 py-2"><Badge className={`${getPriorityColor(tc.priority)} text-[10px] px-1.5 py-0 h-4`}>{tc.priority}</Badge></td>
+                              <td className="px-4 py-2"><Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{tc.automationType}</Badge></td>
+                              <td className="px-4 py-2">
+                                {isRunning ? <Badge className="bg-blue-100 text-blue-800"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Running</Badge> : result ? (
+                                  <div className="flex items-center gap-1">
+                                    {result.success ? <Badge className="bg-green-100 text-green-800"><CheckCircle2 className="w-3 h-3 mr-1" />PASSED</Badge> : <Badge className="bg-red-100 text-red-800"><XCircle className="w-3 h-3 mr-1" />FAILED</Badge>}
+                                    <span className="text-xs text-muted-foreground">{formatDuration(result.duration)}</span>
+                                  </div>
+                                ) : <span className="text-xs text-muted-foreground">—</span>}
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                <div className="flex items-center justify-end gap-1">
+                                  {hasCode && <Button variant="ghost" size="sm" onClick={() => handleRunTestCase(tc.id)} disabled={isRunning} className="h-7 px-2 text-green-600 hover:text-green-700">{isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}</Button>}
+                                  {result && <Button variant="ghost" size="sm" onClick={() => setShowOutput({ title: tc.title, success: result.success, duration: result.duration, output: result.output })} className="h-7 px-2"><Eye className="h-3.5 w-3.5" /></Button>}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Create Suite Modal */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setIsCreateModalOpen(false)}>
+          <div className="bg-background rounded-lg shadow-lg w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Create Test Suite</h2>
+              <Button variant="ghost" size="sm" onClick={() => setIsCreateModalOpen(false)}><X className="w-4 h-4" /></Button>
+            </div>
+            <div className="space-y-4">
+              <div><Label>Suite Name</Label><Input value={newSuiteName} onChange={e => setNewSuiteName(e.target.value)} placeholder="e.g. Login Flow" /></div>
+              <div>
+                <Label>Assign Test Cases</Label>
+                <div className="max-h-40 overflow-y-auto space-y-1 border rounded p-2 mt-1">
+                  {testCases.map(tc => (
+                    <label key={tc.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedCaseIds.includes(tc.id)} onChange={e => setSelectedCaseIds(prev => e.target.checked ? [...prev, tc.id] : prev.filter(id => id !== tc.id))} className="rounded" />{tc.title}</label>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>Cancel</Button><Button onClick={handleCreateSuite} disabled={!newSuiteName.trim()}>Create</Button></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Output Modal */}
+      {showOutput && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowOutput(null)}>
+          <div className="bg-background rounded-lg shadow-lg w-full max-w-2xl p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Run Output: {showOutput.title}</h2>
+              <Button variant="ghost" size="sm" onClick={() => setShowOutput(null)}><X className="w-4 h-4" /></Button>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                {showOutput.success ? <Badge className="bg-green-100 text-green-800"><CheckCircle2 className="w-3 h-3 mr-1" />PASSED</Badge> : <Badge className="bg-red-100 text-red-800"><XCircle className="w-3 h-3 mr-1" />FAILED</Badge>}
+                <span className="text-xs text-muted-foreground">{formatDuration(showOutput.duration)}</span>
+              </div>
+              {showOutput.output && <pre className="bg-gray-900 text-gray-100 p-3 rounded text-xs font-mono max-h-[400px] overflow-y-auto whitespace-pre-wrap break-all">{showOutput.output}</pre>}
+            </div>
           </div>
         </div>
       )}

@@ -20,7 +20,6 @@ const Layout: React.FC = () => {
     { name: 'Test Runs', href: '/test-runs', icon: Play },
     { name: 'Test Suites', href: '/test-suites', icon: FolderTree },
     { name: 'Page Automation', href: '/page-automation', icon: Smartphone },
-    { name: 'AI Integration Tests', href: '/ai-integration-tests', icon: Cpu },
     { name: 'Visual Test Builder', href: '/visual-test-builder', icon: Wrench },
     { name: 'Users', href: '/users', icon: Users },
     { name: 'Reports', href: '/reports', icon: BarChart3 },
