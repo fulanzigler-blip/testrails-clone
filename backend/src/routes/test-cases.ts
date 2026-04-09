@@ -199,11 +199,15 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
     try {
       const { id } = request.params;
       const organizationId = request.organizationId;
+      const userId = (request.user as any).userId;
 
       const testCase = await prisma.testCase.findFirst({
         where: {
           id,
-          suite: { project: { organizationId } },
+          OR: [
+            { suite: { project: { organizationId } } },
+            { createdById: userId },
+          ],
         },
         include: {
           createdBy: {
@@ -252,11 +256,15 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
       const { id } = request.params;
       const input = updateTestCaseSchema.parse(request.body);
       const organizationId = request.organizationId;
+      const userId = (request.user as any).userId;
 
       const testCase = await prisma.testCase.findFirst({
         where: {
           id,
-          suite: { project: { organizationId } },
+          OR: [
+            { suite: { project: { organizationId } } },
+            { createdById: userId },
+          ],
         },
       });
 
@@ -287,7 +295,18 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
       return successResponse(reply, {
         id: updatedCase.id,
         title: updatedCase.title,
+        description: updatedCase.description,
+        steps: updatedCase.steps,
+        expectedResult: updatedCase.expectedResult,
+        priority: updatedCase.priority,
+        automationType: updatedCase.automationType,
+        suiteId: updatedCase.suiteId,
         version: updatedCase.version,
+        status: updatedCase.status,
+        tags: updatedCase.tags,
+        customFields: updatedCase.customFields,
+        createdAt: updatedCase.createdAt,
+        updatedAt: updatedCase.updatedAt,
       }, undefined);
     } catch (error: any) {
       if (error.name === 'ZodError') {
@@ -310,7 +329,10 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
       const original = await prisma.testCase.findFirst({
         where: {
           id,
-          suite: { project: { organizationId } },
+          OR: [
+            { suite: { project: { organizationId } } },
+            { createdById: userId },
+          ],
         },
       });
 
@@ -365,11 +387,15 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
     try {
       const { id } = request.params;
       const organizationId = request.organizationId;
+      const userId = (request.user as any).userId;
 
       const testCase = await prisma.testCase.findFirst({
         where: {
           id,
-          suite: { project: { organizationId } },
+          OR: [
+            { suite: { project: { organizationId } } },
+            { createdById: userId },
+          ],
         },
       });
 

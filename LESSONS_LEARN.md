@@ -32,7 +32,6 @@ appId: com.disciplinetracker.app
 ```
 
 ### Mac runner
-- Host: `100.76.181.104`, user: `clawbot`, key: `/home/clawdbot/.ssh/id_ed25519`
 - Flows dir: `/Users/clawbot/maestro-flows/`
 - Device: Huawei (`SDE0219926003245`), Android 33, pixel_6 profile
 - Maestro version: 2.4.0

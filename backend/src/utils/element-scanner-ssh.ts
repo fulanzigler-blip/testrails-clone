@@ -1,10 +1,10 @@
 import { Client } from 'ssh2';
 import * as fs from 'fs';
 
-const SSH_HOST: string = process.env.MAESTRO_RUNNER_HOST || '100.76.181.104';
+const SSH_HOST: string = process.env.MAESTRO_RUNNER_HOST || '';
 const SSH_USER: string = process.env.MAESTRO_RUNNER_USER || 'clawbot';
 const SSH_KEY_PATH: string = process.env.MAESTRO_RUNNER_KEY_PATH || '/home/nodejs/.ssh/id_ed25519';
-const FLUTTER_PROJECT_PATH: string = process.env.FLUTTER_PROJECT_PATH || '/Users/clawbot/actions-runner/_work/discipline-tracker/discipline-tracker';
+const FLUTTER_PROJECT_PATH: string = process.env.FLUTTER_PROJECT_PATH || '';
 
 let cachedKey: Buffer | null = null;
 function getSSHKey(): Buffer {

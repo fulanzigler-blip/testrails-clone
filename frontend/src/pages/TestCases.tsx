@@ -89,18 +89,47 @@ const TestCases: React.FC = () => {
     setIsModalOpen(true)
   }
 
-  const handleEdit = (testCase: any) => {
+  const handleEdit = async (testCase: any) => {
     setEditingCase(testCase)
+    // Parse steps - handle both array and JSON string formats
+    let steps = testCase.steps
+    if (typeof steps === 'string') {
+      try { steps = JSON.parse(steps) } catch { steps = [] }
+    }
+    if (!Array.isArray(steps)) steps = []
+    
     setFormData({
       title: testCase.title,
-      description: testCase.description,
-      steps: testCase.steps,
-      expected_result: testCase.expected_result,
-      priority: testCase.priority,
-      automation_type: testCase.automation_type,
-      suite_id: testCase.suite_id,
-      tags: testCase.tags
+      description: testCase.description || '',
+      steps,
+      expected_result: testCase.expected_result || testCase.expectedResult || '',
+      priority: testCase.priority || 'medium',
+      automation_type: testCase.automation_type || testCase.automationType || 'automated',
+      suite_id: testCase.suite_id || testCase.suiteId || '',
+      tags: testCase.tags || []
     })
+
+    // If test case has a suite, load its project and suites
+    const suiteId = testCase.suite_id || testCase.suiteId
+    if (suiteId) {
+      try {
+        const suiteResp = await api.get(`/test-suites/${suiteId}`)
+        const suite = suiteResp.data?.data
+        if (suite) {
+          const projectId = suite.projectId || suite.project_id
+          setFormProjectId(projectId || '')
+          // Load suites for this project
+          const suitesResp = await api.get('/test-suites', { params: { projectId, perPage: 100 } })
+          setFormSuites(suitesResp.data?.data?.items || suitesResp.data?.data || [])
+        }
+      } catch (e) {
+        // Silently fail - user can change project/suite manually
+      }
+    } else {
+      setFormProjectId('')
+      setFormSuites([])
+    }
+
     setIsModalOpen(true)
   }
 
@@ -132,34 +161,50 @@ const TestCases: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const payload: Record<string, any> = {
+      title: formData.title,
+      description: formData.description,
+      steps: formData.steps,
+      expectedResult: formData.expected_result,
+      priority: formData.priority,
+      automationType: formData.automation_type,
+      tags: formData.tags,
+    }
+    // Only include suiteId if it has a value (Zod expects uuid string, not null/empty)
+    if (formData.suite_id) {
+      payload.suiteId = formData.suite_id
+    }
     if (editingCase) {
-      await dispatch(updateTestCase({ id: editingCase.id, ...formData }))
+      await dispatch(updateTestCase({ id: editingCase.id, ...payload }))
     } else {
-      await dispatch(createTestCase(formData))
+      await dispatch(createTestCase(payload))
     }
     setIsModalOpen(false)
   }
 
   const addStep = () => {
+    const steps = formData.steps || []
     setFormData({
       ...formData,
       steps: [
-        ...formData.steps,
-        { order: formData.steps.length + 1, description: '', expected: '' }
+        ...steps,
+        { order: steps.length + 1, description: '', expected: '' }
       ]
     })
   }
 
   const updateStep = (index: number, field: 'description' | 'expected', value: string) => {
-    const newSteps = [...formData.steps]
-    newSteps[index][field] = value
+    const steps = formData.steps || []
+    const newSteps = [...steps]
+    newSteps[index] = { ...newSteps[index], [field]: value }
     setFormData({ ...formData, steps: newSteps })
   }
 
   const removeStep = (index: number) => {
+    const steps = formData.steps || []
     setFormData({
       ...formData,
-      steps: formData.steps.filter((_, i) => i !== index).map((s, i) => ({ ...s, order: i + 1 }))
+      steps: steps.filter((_, i) => i !== index).map((s, i) => ({ ...s, order: i + 1 }))
     })
   }
 
@@ -325,7 +370,7 @@ const TestCases: React.FC = () => {
                         {testCase.status}
                       </Badge>
                     </td>
-                    <td className="p-3">{testCase.steps.length}</td>
+                    <td className="p-3">{(testCase.steps || []).length}</td>
                     <td className="p-3 text-sm text-muted-foreground">
                       {new Date(testCase.updated_at).toLocaleDateString()}
                     </td>
@@ -464,11 +509,11 @@ const TestCases: React.FC = () => {
                         Add Step
                       </Button>
                     </div>
-                    {formData.steps.map((step, index) => (
+                    {(formData.steps || []).map((step, index) => (
                       <div key={index} className="border rounded-lg p-4 mb-2 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium">Step {step.order}</span>
-                          {formData.steps.length > 1 && (
+                          {(formData.steps || []).length > 1 && (
                             <Button type="button" variant="ghost" size="sm" onClick={() => removeStep(index)}>
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>

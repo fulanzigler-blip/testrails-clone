@@ -36,7 +36,18 @@
       "Bash(cp *)",
       "Bash(docker compose cp *)",
       "Bash(ssh-keygen *)",
-      "Bash(ssh-keyscan *)"
+      "Bash(ssh-keyscan *)",
+      "Bash(const *)",
+      "Bash('@prisma/client')",
+      "Bash('jsonwebtoken')",
+      "Bash(async *)",
+      "Bash(console.log)",
+      "Bash(await *)",
+      "Bash(})",
+      "Bash(p.\\$disconnect)",
+      "Bash(\" 2>/dev/null)\")",
+      "Bash(git log *)",
+      "Bash(cat *)"
     ]
   },
   "$version": 3

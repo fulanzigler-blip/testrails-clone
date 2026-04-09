@@ -54,7 +54,9 @@ export const fetchTestCases = createAsyncThunk(
     per_page?: number
   }) => {
     const response = await api.get('/test-cases', { params })
-    return response.data.data
+    const data = response.data.data
+    // Handle paginated response { items: [...], total: N }
+    return Array.isArray(data) ? data : (data?.items || data?.data || [])
   }
 )
 
