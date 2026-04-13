@@ -11,6 +11,7 @@ import logger from '../utils/logger';
 import prisma from '../config/database';
 import { scanFlutterProjectSSH, ElementCatalog, ButtonInfo, execSSHWithConfig } from '../utils/element-scanner-ssh';
 import { scanFlutterProjectLocal } from '../utils/element-scanner';
+import { hybridScanFlutterProject, mergeScanResults, HybridScannerConfig } from '../utils/element-scanner-hybrid';
 import * as path from 'path';
 import * as https from 'https';
 const AdmZip = require('adm-zip');
@@ -709,10 +710,10 @@ async function executeTest(testFileName: string, noBuild: boolean = false): Prom
   };
 }
 
-async function executeTestWithRunner(testFileName: string, noBuild: boolean, runner: any | null): Promise<{ success: boolean; output: string; duration: number }> {
+async function executeTestWithRunner(testFileName: string, noBuild: boolean, runner: any | null, overrideProjectPath?: string): Promise<{ success: boolean; output: string; duration: number }> {
   if (!runner) return executeTest(testFileName, noBuild);
 
-  const projectPath = runner.projectPath;
+  const projectPath = overrideProjectPath || runner.projectPath;
   const deviceId = runner.deviceId || 'emulator-5554';
 
   // Use SFTP to write the test script, then execute it (avoids SSH shell escaping issues)
@@ -721,12 +722,22 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
   const scriptLines = [
     '#!/bin/bash -l',  // -l for login shell to load PATH with flutter
     `cd "${projectPath}"`,
+    '# Run flutter pub get first (required before testing)',
+    `echo "Running flutter pub get..."`,
+    `flutter pub get 2>&1`,
+    'PUB_EXIT=$?',
+    'if [ $PUB_EXIT -ne 0 ]; then',
+    '  echo "flutter pub get failed with exit code $PUB_EXIT"',
+    '  echo "EXIT_CODE:$PUB_EXIT"',
+    '  exit $PUB_EXIT',
+    'fi',
+    `echo "Running test..."`,
     `flutter test integration_test/${testFileName} -d ${deviceId} 2>&1`,
     'echo "EXIT_CODE:$?"',
   ];
   const scriptContent = scriptLines.join('\n') + '\n';
 
-  logger.info(`[IntegrationTest] Running test on ${runner.name}: ${testFileName}`);
+  logger.info(`[IntegrationTest] Running test on ${runner.name}: ${testFileName} (project: ${projectPath})`);
   const startTime = Date.now();
 
   try {
@@ -1414,11 +1425,12 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
     onRequest: [fastify.authenticate],
   }, async (request: any, reply) => {
     try {
-      const { dartCode, credentials, noBuild = false, runnerId } = request.body as {
+      const { dartCode, credentials, noBuild = false, runnerId, projectPath } = request.body as {
         dartCode: string;
         credentials?: { email: string; password: string };
         noBuild?: boolean;
         runnerId?: string;
+        projectPath?: string;
       };
       if (!dartCode) return errorResponses.validation(reply, [{ field: 'dartCode', message: 'Dart code is required' }]);
 
@@ -1428,7 +1440,9 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       if (!runner) runner = await prisma.runner.findFirst({ where: { isDefault: true } });
       if (!runner) runner = await prisma.runner.findFirst({ orderBy: { createdAt: 'asc' } });
 
-      logger.info(`[IntegrationTest] Running pre-generated test code (${dartCode.length} chars) on runner: ${runner?.name || 'default'}`);
+      const testProjectPath = projectPath || runner?.projectPath || FLUTTER_PROJECT_PATH;
+
+      logger.info(`[IntegrationTest] Running pre-generated test code (${dartCode.length} chars) on runner: ${runner?.name || 'default'} (project: ${testProjectPath})`);
 
       // Apply credential replacement
       let finalCode = dartCode;
@@ -1443,9 +1457,8 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
 
       // Write test file
       const testFileName = `visual_builder_${Date.now()}.dart`;
-      const projectPath = runner?.projectPath || FLUTTER_PROJECT_PATH;
-      const testFilePath = `${projectPath}/integration_test/${testFileName}`;
-      
+      const testFilePath = `${testProjectPath}/integration_test/${testFileName}`;
+
       if (runner) {
         await writeFileSSHWithRunner(testFilePath, finalCode, runner);
       } else {
@@ -1454,7 +1467,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       logger.info(`[IntegrationTest] Wrote test to ${testFilePath}`);
 
       // Execute
-      const result = await executeTestWithRunner(testFileName, noBuild, runner);
+      const result = await executeTestWithRunner(testFileName, noBuild, runner, testProjectPath);
       logger.info(`[IntegrationTest] Test ${result.success ? 'passed' : 'failed'} in ${result.duration}ms`);
 
       return successResponse(reply, result, undefined);
@@ -1469,8 +1482,19 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
     onRequest: [fastify.authenticate],
   }, async (_request: any, reply) => {
     try {
-      const catalog = await scanFlutterProjectSSH();
-      logger.info(`[ElementCatalog] Found ${catalog.screens.length} screens, ${catalog.inputs.length} inputs, ${catalog.buttons.length} buttons, ${catalog.texts.length} texts`);
+      // Find default runner config
+      let runner = await prisma.runner.findFirst({ where: { isDefault: true } });
+      if (!runner) runner = await prisma.runner.findFirst({ orderBy: { createdAt: 'asc' } });
+      if (!runner) return errorResponses.validation(reply, [{ field: 'runner', message: 'No runner configured. Set up a runner in Visual Test Builder first.' }]);
+
+      const catalog = await scanFlutterProjectSSH({
+        host: runner.host,
+        username: runner.username,
+        sshKeyPath: runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519',
+        projectPath: runner.projectPath,
+        deviceId: runner.deviceId,
+      });
+      logger.info(`[ElementCatalog] Found ${catalog.screens.length} screens, ${catalog.inputs.length} inputs, ${catalog.buttons.length} buttons from ${runner.name}`);
       return successResponse(reply, catalog, undefined);
     } catch (error: any) {
       logger.error('[ElementCatalog] Scan failed:', error);
@@ -1550,11 +1574,70 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
     onRequest: [fastify.authenticate],
   }, async (_request: any, reply) => {
     try {
-      const catalog = await scanFlutterProjectSSH();
+      let runner = await prisma.runner.findFirst({ where: { isDefault: true } });
+      if (!runner) runner = await prisma.runner.findFirst({ orderBy: { createdAt: 'asc' } });
+      if (!runner) return errorResponses.validation(reply, [{ field: 'runner', message: 'No runner configured.' }]);
+
+      const catalog = await scanFlutterProjectSSH({
+        host: runner.host,
+        username: runner.username,
+        sshKeyPath: runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519',
+        projectPath: runner.projectPath,
+        deviceId: runner.deviceId,
+      });
       return successResponse(reply, catalog, undefined);
     } catch (error: any) {
       logger.error('[ElementCatalog] Failed to fetch catalog:', error);
       return errorResponses.handle(reply, error, 'fetch element catalog');
+    }
+  });
+
+  // POST /scan-hybrid - Hybrid scan (static + API inference)
+  fastify.post('/scan-hybrid', {
+    onRequest: [fastify.authenticate],
+  }, async (request: any, reply) => {
+    try {
+      const { runnerId, projectPath } = request.body as { runnerId?: string; projectPath?: string };
+
+      // Find runner
+      let runner = runnerId 
+        ? await prisma.runner.findUnique({ where: { id: runnerId } })
+        : await prisma.runner.findFirst({ where: { isDefault: true } });
+      
+      if (!runner) runner = await prisma.runner.findFirst({ orderBy: { createdAt: 'asc' } });
+      if (!runner) return errorResponses.validation(reply, [{ field: 'runner', message: 'No runner configured. Set up a runner in Visual Test Builder first.' }]);
+
+      const scanPath = projectPath || runner.projectPath;
+
+      // Step 1: Run static scan
+      logger.info('[HybridScanner] Running static scan...');
+      const staticResult = await scanFlutterProjectSSH({
+        host: runner.host,
+        username: runner.username,
+        sshKeyPath: runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519',
+        projectPath: scanPath,
+        deviceId: runner.deviceId,
+      });
+      logger.info(`[HybridScanner] Static scan: ${staticResult.screens.length} screens, ${staticResult.texts.length} texts`);
+
+      // Step 2: Run hybrid scan (API inference)
+      logger.info('[HybridScanner] Running API inference scan...');
+      const hybridConfig: HybridScannerConfig = {
+        host: runner.host,
+        username: runner.username,
+        sshKeyPath: runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519',
+        projectPath: scanPath,
+      };
+      const hybridResult = await hybridScanFlutterProject(hybridConfig, staticResult);
+
+      // Step 3: Merge results
+      const mergedResult = mergeScanResults(staticResult, hybridResult);
+
+      logger.info(`[HybridScanner] Complete: ${hybridResult.apiEndpoints.length} API endpoints, ${hybridResult.dynamicContentHints.length} dynamic hints`);
+      return successResponse(reply, mergedResult, undefined);
+    } catch (error: any) {
+      logger.error('[HybridScanner] Scan failed:', error);
+      return errorResponses.handle(reply, error, 'hybrid scan flutter project');
     }
   });
 
@@ -1563,20 +1646,32 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
     onRequest: [fastify.authenticate],
   }, async (request: any, reply) => {
     try {
-      const { steps, credentials } = request.body as {
+      const { steps, credentials, projectPath } = request.body as {
         steps: Array<{ type: string; elementId?: string; value?: string; value2?: string; text?: string }>;
         credentials?: { email: string; password: string };
+        projectPath?: string;
       };
 
       if (!steps || steps.length === 0) {
         return errorResponses.validation(reply, [{ field: 'steps', message: 'At least one step is required' }]);
       }
 
-      const catalog = await scanFlutterProjectSSH();
+      let runner = await prisma.runner.findFirst({ where: { isDefault: true } });
+      if (!runner) runner = await prisma.runner.findFirst({ orderBy: { createdAt: 'asc' } });
+      if (!runner) return errorResponses.validation(reply, [{ field: 'runner', message: 'No runner configured.' }]);
+
+      const scanPath = projectPath || runner.projectPath;
+      const catalog = await scanFlutterProjectSSH({
+        host: runner.host,
+        username: runner.username,
+        sshKeyPath: runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519',
+        projectPath: scanPath,
+        deviceId: runner.deviceId,
+      });
       const dartCode = generateTestFromElements(catalog, steps, credentials);
       const fileName = `generated_test_${Date.now()}.dart`;
 
-      logger.info(`[TestBuilder] Generated deterministic test code with ${steps.length} steps`);
+      logger.info(`[TestBuilder] Generated deterministic test code with ${steps.length} steps (project: ${scanPath})`);
       return successResponse(reply, { dartCode, fileName, catalog }, undefined);
     } catch (error: any) {
       logger.error('[TestBuilder] Generation failed:', error);

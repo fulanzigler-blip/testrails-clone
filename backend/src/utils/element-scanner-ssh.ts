@@ -248,10 +248,15 @@ export async function scanFlutterProjectSSH(config?: ScannerConfig): Promise<Ele
   const routeMatches = mainResult.output.match(/path:\s*['"]([^'"]+)['"]/g) || [];
   catalog.routes = routeMatches.map(r => r.match(/['"]([^'"]+)['"]/)?.[1] || '').filter(Boolean);
 
-  // 2. Find and scan ALL screen files
+  // 2. Find and scan ALL screen/view/page files
+  // Support multiple Flutter architecture patterns:
+  //   - *screen*.dart (common pattern)
+  //   - *_page.dart (page-based)
+  //   - *_view.dart (Stacked/MVC pattern, used by Raya-dev)
+  //   - *_widget.dart (standalone widgets with complex UI)
   const screenResult = await execSSHWithConfig(
-    `find "${path}/lib" -type f -name "*screen*.dart" 2>/dev/null; find "${path}/lib" -type f -name "*_page.dart" 2>/dev/null | head -30`,
-    config, 15000
+    `find "${path}/lib" -type f \\( -name "*screen*.dart" -o -name "*_page.dart" -o -name "*_view.dart" \\) 2>/dev/null | head -100`,
+    config, 30000
   );
   const screenFiles = screenResult.output.split('\n').filter(Boolean);
 
@@ -260,7 +265,7 @@ export async function scanFlutterProjectSSH(config?: ScannerConfig): Promise<Ele
     const content = contentResult.output;
     const fileName = file.split('/').pop()?.replace('.dart', '') || '';
     const screenName = fileName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    const route = catalog.routes.find(r => r.toLowerCase().includes(fileName.toLowerCase().replace('_screen', '').replace('_page', '')));
+    const route = catalog.routes.find(r => r.toLowerCase().includes(fileName.toLowerCase().replace('_screen', '').replace('_page', '').replace('_view', '')));
     const elements = extractElements(content);
 
     catalog.screens.push({ name: screenName, file, route, ...elements });

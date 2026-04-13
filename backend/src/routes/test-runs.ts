@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { createTestRunSchema, updateTestRunSchema } from '../types/schemas';
+import { executeDartTestOnRunner, RunnerConfig } from '../utils/test-executor';
 import prisma from '../config/database';
 import logger from '../utils/logger';
 import { successResponse, errorResponses } from '../utils/response';
@@ -89,7 +90,7 @@ export default async function testRunRoutes(fastify: FastifyInstance) {
         page: parsedPage,
         perPage: parsedPerPage,
         total,
-        totalPages: Math.ceil(total / perPage),
+        totalPages: Math.ceil(total / parsedPerPage),
       });
     } catch (error) {
       logger.error('Error listing test runs:', error);
@@ -248,7 +249,8 @@ export default async function testRunRoutes(fastify: FastifyInstance) {
           id: r.id,
           testRunId: r.testRunId,
           testCaseId: r.testCaseId,
-          testCaseTitle: r.testCase.title,
+          testCaseTitle: r.testCase?.title || 'Unknown',
+          test_case_title: r.testCase?.title || 'Unknown',
           status: r.status,
           comment: r.comment,
           executedBy: r.executedBy,
@@ -404,6 +406,92 @@ export default async function testRunRoutes(fastify: FastifyInstance) {
     } catch (error) {
       logger.error('Error deleting test run:', error);
       return errorResponses.internal(reply);
+    }
+  });
+
+  // Execute all test cases in a run on a Flutter runner
+  fastify.post('/:id/execute', {
+    onRequest: [fastify.authenticate, fastify.getOrganizationContext, fastify.authorize('admin', 'manager', 'tester')],
+  }, async (request: any, reply) => {
+    try {
+      const { id } = request.params;
+      const organizationId = request.organizationId;
+
+      const testRun = await prisma.testRun.findFirst({
+        where: { id, project: { organizationId } },
+        include: { results: { include: { testCase: true } } },
+      });
+
+      if (!testRun) return errorResponses.notFound(reply, 'Test Run');
+
+      let runner = await prisma.runner.findFirst({ where: { isDefault: true } });
+      if (!runner) runner = await prisma.runner.findFirst({ orderBy: { createdAt: 'asc' } });
+      if (!runner) return errorResponses.validation(reply, [{ field: 'runner', message: 'No runner configured.' }]);
+
+      const runnerConfig = {
+        host: runner.host,
+        username: runner.username,
+        sshKeyPath: runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519',
+        projectPath: runner.projectPath,
+        deviceId: runner.deviceId || 'emulator-5554',
+      };
+
+      logger.info(`[TestRun Execute] Running ${testRun.results.length} tests on ${runner.name}`);
+
+      const { executeDartTestOnRunner } = await import('../utils/test-executor');
+      const results = [];
+
+      for (const result of testRun.results) {
+        const testCase = result.testCase;
+        if (!testCase) continue;
+
+        const customFields = testCase.customFields as any;
+        const dartCode = customFields?.dartCode;
+
+        if (dartCode) {
+          const testFileName = `testrun_${id.replace(/-/g, '_')}_${result.id.replace(/-/g, '_')}.dart`;
+          logger.info(`[TestRun Execute] Running: ${testCase.title}`);
+
+          const testResult = await executeDartTestOnRunner(dartCode, testFileName, runnerConfig);
+
+          await prisma.testResult.update({
+            where: { id: result.id },
+            data: {
+              status: testResult.success ? 'passed' : 'failed',
+              comment: testResult.success ? 'Test passed' : `Failed\n${testResult.output.slice(-500)}`,
+              executedAt: new Date(),
+              durationMs: testResult.duration,
+            },
+          });
+
+          results.push({
+            testCaseTitle: testCase.title,
+            status: testResult.success ? 'passed' : 'failed',
+            output: testResult.output.slice(-300),
+            duration: testResult.duration,
+          });
+        } else {
+          results.push({
+            testCaseTitle: testCase.title,
+            status: 'skipped',
+            output: 'No generated Flutter code',
+            duration: 0,
+          });
+        }
+      }
+
+      const hasFailures = results.some(r => r.status === 'failed');
+      await prisma.testRun.update({
+        where: { id },
+        data: { status: hasFailures ? 'failed' : 'completed', completedAt: new Date() },
+      });
+
+      logger.info(`[TestRun Execute] Run ${id} done: ${results.filter(r => r.status === 'passed').length}/${results.length} passed`);
+
+      return successResponse(reply, { runId: id, status: hasFailures ? 'failed' : 'completed', results }, undefined);
+    } catch (error: any) {
+      logger.error('[TestRun Execute] Error:', error);
+      return errorResponses.handle(reply, error, 'execute test run');
     }
   });
 }

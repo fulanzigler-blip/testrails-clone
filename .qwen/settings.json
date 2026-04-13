@@ -47,7 +47,12 @@
       "Bash(p.\\$disconnect)",
       "Bash(\" 2>/dev/null)\")",
       "Bash(git log *)",
-      "Bash(cat *)"
+      "Bash(cat *)",
+      "Bash(git remote *)",
+      "Bash(du *)",
+      "Bash(find *)",
+      "Bash(docker images *)",
+      "Bash(docker compose down *)"
     ]
   },
   "$version": 3

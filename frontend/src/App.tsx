@@ -15,6 +15,7 @@ import Projects from './pages/Projects'
 import FlowBuilderPage from './pages/FlowBuilderPage'
 import PageAutomationPage from './pages/PageAutomationPage'
 import VisualTestBuilderPage from './pages/VisualTestBuilderPage'
+import HybridScanPage from './pages/HybridScanPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAppSelector((state) => state.auth)
@@ -93,6 +94,7 @@ function App() {
           <Route path="flow-builder" element={<FlowBuilderPage />} />
           <Route path="page-automation" element={<PageAutomationPage />} />
           <Route path="visual-test-builder" element={<VisualTestBuilderPage />} />
+          <Route path="hybrid-scan" element={<HybridScanPage />} />
         </Route>
 
         {/* Fallback */}

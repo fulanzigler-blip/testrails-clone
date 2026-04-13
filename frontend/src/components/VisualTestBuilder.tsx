@@ -9,7 +9,7 @@ import {
   Scan, Play, Loader2, CheckCircle2, XCircle, GripVertical,
   FileText,
   Type, MousePointerClick, Clock, Terminal, Code2, AlertTriangle,
-  Eye, EyeOff, ArrowUp, ArrowDown, Plus, Trash2,
+  Eye, EyeOff, ArrowUp, ArrowDown, Plus, Trash2, Layers,
 } from 'lucide-react';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -30,9 +30,14 @@ interface ElementCatalog {
   screens: ScreenElement[];
   inputs: { id: string; label: string; type: string; screen?: string; hasOnFieldSubmitted: boolean }[];
   buttons: { id: string; text: string; type: string; screen?: string; action?: string }[];
-  texts: { id: string; text: string; screen?: string; isStatic: boolean }[];
+  texts: { id: string; text: string; screen?: string; isStatic: boolean; source?: string; modelClass?: string; fieldName?: string }[];
   auth?: { flow: 'tap' | 'onFieldSubmitted'; loginButton?: string; credentials: { email: string; password: string; role: string }[] };
   routes: string[];
+  // Hybrid scan extra fields
+  apiEndpoints?: Array<{ method: string; url: string; file: string; line: number; responseModel?: string }>;
+  responseModels?: Array<{ fieldName: string; fieldType: string; modelClass: string; sourceFile: string }>;
+  dynamicContentHints?: Array<{ screenFile: string; screenName: string; widgetPattern: string; description: string; responseFields: any[] }>;
+  source?: 'ssh' | 'hybrid';
 }
 
 interface TestStep {
@@ -193,6 +198,11 @@ const StepRow: React.FC<{
                   {(screen.buttons || []).map(btn => (
                     <option key={btn.id} value={btn.id}>"{btn.text}" ({btn.type})</option>
                   ))}
+                  {(screen.texts || []).slice(0, 30).map(txt => (
+                    <option key={txt.id} value={txt.id}>
+                      {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
+                    </option>
+                  ))}
                 </optgroup>
               ))}
             </select>
@@ -222,8 +232,10 @@ const StepRow: React.FC<{
                   {(screen.buttons || []).map(btn => (
                     <option key={btn.id} value={btn.id}>"{btn.text}"</option>
                   ))}
-                  {(screen.texts || []).slice(0, 15).map(txt => (
-                    <option key={txt.id} value={txt.id}>"{txt.text}"</option>
+                  {(screen.texts || []).slice(0, 30).map(txt => (
+                    <option key={txt.id} value={txt.id}>
+                      {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
+                    </option>
                   ))}
                 </optgroup>
               ))}
@@ -253,8 +265,10 @@ const StepRow: React.FC<{
                   {(screen.buttons || []).map(btn => (
                     <option key={btn.id} value={btn.id}>"{btn.text}"</option>
                   ))}
-                  {(screen.texts || []).slice(0, 20).map(txt => (
-                    <option key={txt.id} value={txt.id}>"{txt.text}"</option>
+                  {(screen.texts || []).slice(0, 40).map(txt => (
+                    <option key={txt.id} value={txt.id}>
+                      {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
+                    </option>
                   ))}
                 </optgroup>
               ))}
@@ -319,8 +333,10 @@ const StepRow: React.FC<{
                   {(screen.buttons || []).map(btn => (
                     <option key={btn.id} value={btn.id}>"{btn.text}"</option>
                   ))}
-                  {(screen.texts || []).slice(0, 15).map(txt => (
-                    <option key={txt.id} value={txt.id}>"{txt.text}"</option>
+                  {(screen.texts || []).slice(0, 30).map(txt => (
+                    <option key={txt.id} value={txt.id}>
+                      {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
+                    </option>
                   ))}
                 </optgroup>
               ))}
@@ -368,7 +384,9 @@ const VisualTestBuilder: React.FC = () => {
   const [catalog, setCatalog] = useState<ElementCatalog | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
-  const [runners, setRunners] = useState<Array<{id: string; name: string; host: string; deviceId?: string; isDefault: boolean}>>([]);
+  const [scanMode, setScanMode] = useState<'regular' | 'hybrid'>('regular');
+  const [codebasePath, setCodebasePath] = useState<string>('');
+  const [runners, setRunners] = useState<Array<{id: string; name: string; host: string; deviceId?: string; isDefault: boolean; projectPath?: string}>>([]);
   const [selectedRunner, setSelectedRunner] = useState<string>('');
   const [steps, setSteps] = useState<TestStep[]>([]);
   const [credentials, setCredentials] = useState({ email: '', password: '' });
@@ -389,18 +407,32 @@ const VisualTestBuilder: React.FC = () => {
         const list = resp.data?.data || resp.data || [];
         setRunners(list);
         const def = list.find((r: any) => r.isDefault) || list[0];
-        if (def) setSelectedRunner(def.id);
+        if (def) {
+          setSelectedRunner(def.id);
+          setCodebasePath(def.projectPath || '');
+        }
       } catch {}
     };
     load();
   }, []);
 
   const handleScan = async () => {
+    if (!codebasePath.trim()) {
+      setScanError('Please select or enter a codebase path');
+      return;
+    }
     setScanning(true);
     setScanError('');
     try {
-      const payload = selectedRunner ? { runnerId: selectedRunner } : {};
-      const resp = await api.post('/integration-tests/scan', payload);
+      const payload: any = {};
+      if (selectedRunner) payload.runnerId = selectedRunner;
+      if (codebasePath.trim()) payload.projectPath = codebasePath.trim();
+      const endpoint = scanMode === 'hybrid'
+        ? '/integration-tests/scan-hybrid'
+        : '/integration-tests/scan';
+      const resp = await api.post(endpoint, payload, {
+        timeout: scanMode === 'hybrid' ? 900000 : 120000,
+      });
       setCatalog(resp.data?.data || resp.data);
     } catch (err: any) {
       setScanError(err.response?.data?.error?.message || err.message || 'Scan failed');
@@ -438,12 +470,14 @@ const VisualTestBuilder: React.FC = () => {
 
   const handleGenerate = async () => {
     if (steps.length === 0) { setError('Add at least one step'); return; }
+    if (!codebasePath.trim()) { setError('Select or enter a codebase path first'); return; }
     setGenerating(true);
     setError('');
     try {
       const resp = await api.post('/integration-tests/generate-deterministic', {
         steps,
         credentials: credentials.email ? { email: credentials.email, password: credentials.password } : undefined,
+        projectPath: codebasePath.trim(),
       });
       setGeneratedCode(resp.data?.data?.dartCode || '');
     } catch (err: any) {
@@ -465,6 +499,7 @@ const VisualTestBuilder: React.FC = () => {
         credentials: credentials.email ? { email: credentials.email, password: credentials.password } : undefined,
         noBuild,
         runnerId: selectedRunner || undefined,
+        projectPath: codebasePath.trim() || undefined,
       });
       setTestResult({
         success: resp.data?.data?.success ?? resp.data?.success ?? false,
@@ -514,24 +549,88 @@ const VisualTestBuilder: React.FC = () => {
           <h1 className="text-2xl font-bold">Visual Test Builder</h1>
           <p className="text-muted-foreground">Scan your Flutter app, pick elements, compose test scenarios</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* Codebase Selector */}
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Codebase:</Label>
+            <div className="flex gap-1">
+              <select
+                value={codebasePath || '__custom__'}
+                onChange={(e) => {
+                  if (e.target.value === '__custom__') {
+                    setCodebasePath('');
+                  } else {
+                    setCodebasePath(e.target.value);
+                  }
+                }}
+                className="rounded border px-2 py-1.5 text-xs bg-background min-w-[140px]"
+              >
+                {/* Preset codebases */}
+                <option value="/Users/bankraya/Development/discipline-tracker">Discipline Tracker</option>
+                <option value="/Users/bankraya/Development/Raya-dev">Raya Dev (Bank Raya)</option>
+                <option value="__custom__">Custom Path...</option>
+              </select>
+              <input
+                type="text"
+                value={codebasePath}
+                onChange={(e) => setCodebasePath(e.target.value)}
+                placeholder="/path/to/flutter/project"
+                className="rounded border px-2 py-1.5 text-xs bg-background min-w-[200px] flex-1"
+              />
+            </div>
+          </div>
+
+          {/* Scan Mode Toggle */}
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Scan:</Label>
+            <div className="flex items-center border rounded-md overflow-hidden">
+              <button
+                onClick={() => setScanMode('regular')}
+                className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1 ${
+                  scanMode === 'regular' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                <Scan className="w-3 h-3" />
+                Static
+              </button>
+              <button
+                onClick={() => setScanMode('hybrid')}
+                className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1 ${
+                  scanMode === 'hybrid' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                <Layers className="w-3 h-3" />
+                Hybrid
+              </button>
+            </div>
+          </div>
+
           {runners.length > 1 && (
-            <select
-              value={selectedRunner}
-              onChange={(e) => setSelectedRunner(e.target.value)}
-              className="rounded border px-3 py-2 text-sm bg-background"
-            >
-              {runners.map(r => (
-                <option key={r.id} value={r.id}>
-                  {r.name} {r.deviceId ? `(${r.deviceId})` : ''} {r.isDefault ? '★' : ''}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">Runner:</Label>
+              <select
+                value={selectedRunner}
+                onChange={(e) => {
+                  setSelectedRunner(e.target.value);
+                  const runner = runners.find(r => r.id === e.target.value);
+                  if (runner?.projectPath) setCodebasePath(runner.projectPath);
+                }}
+                className="rounded border px-3 py-2 text-xs bg-background min-w-[140px]"
+              >
+                {runners.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.name} {r.deviceId ? `(${r.deviceId})` : ''} {r.isDefault ? '★' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
-          <Button onClick={handleScan} disabled={scanning}>
-            {scanning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Scan className="w-4 h-4 mr-2" />}
-            {scanning ? 'Scanning...' : 'Scan Codebase'}
-          </Button>
+          <div className="flex flex-col gap-1 self-end">
+            <Button onClick={handleScan} disabled={scanning} size="sm">
+              {scanning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Scan className="w-3 h-3 mr-1" />}
+              {scanning ? 'Scanning...' : scanMode === 'hybrid' ? 'Hybrid Scan' : 'Scan'}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -542,12 +641,23 @@ const VisualTestBuilder: React.FC = () => {
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Element Catalog: {catalog.packageName}</CardTitle>
+              <CardTitle className="text-base">
+                Element Catalog: {catalog.packageName}
+                {catalog.source === 'hybrid' && (
+                  <Badge className="ml-2" variant="secondary">Hybrid</Badge>
+                )}
+              </CardTitle>
               <div className="flex gap-3">
                 <Badge variant="outline">{(catalog.screens || []).length} Screens</Badge>
                 <Badge variant="outline">{(catalog.inputs || []).length} Inputs</Badge>
                 <Badge variant="outline">{(catalog.buttons || []).length} Buttons</Badge>
-                <Badge variant="outline">{(catalog.texts || []).length} Texts</Badge>
+                <Badge variant="outline">{(catalog.texts || []).filter((t: any) => t.isStatic).length} Static Texts</Badge>
+                {(catalog.texts || []).some((t: any) => !t.isStatic) && (
+                  <Badge variant="secondary">{(catalog.texts || []).filter((t: any) => !t.isStatic).length} Dynamic</Badge>
+                )}
+                {catalog.apiEndpoints && (
+                  <Badge variant="outline">{catalog.apiEndpoints.length} API Endpoints</Badge>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -614,11 +724,21 @@ const VisualTestBuilder: React.FC = () => {
                     )}
                     {screen.texts && screen.texts.length > 0 && (
                       <div>
-                        <div className="text-muted-foreground font-medium mb-1">Texts ({screen.texts.length})</div>
+                        <div className="text-muted-foreground font-medium mb-1">
+                          Texts ({screen.texts.filter((t: any) => t.isStatic).length} static
+                          {screen.texts.some((t: any) => !t.isStatic) && `, ${screen.texts.filter((t: any) => !t.isStatic).length} dynamic`})
+                        </div>
                         <div className="flex flex-wrap gap-1">
                           {screen.texts.slice(0, 12).map(txt => (
-                            <span key={txt.id} className="bg-background rounded px-1.5 py-0.5 truncate max-w-full">
+                            <span key={txt.id} className={`rounded px-1.5 py-0.5 truncate max-w-full text-xs ${
+                              (txt as any).source === 'api-inference'
+                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                : 'bg-background border'
+                            }`}>
                               "{txt.text}"
+                              {(txt as any).source === 'api-inference' && (
+                                <span className="ml-1 text-[10px] opacity-70">⚡</span>
+                              )}
                             </span>
                           ))}
                           {screen.texts.length > 12 && (

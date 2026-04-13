@@ -4,7 +4,7 @@
   "description": "Backend API for TestRails clone",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "NODE_OPTIONS='--max-old-space-size=1536' tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
@@ -61,7 +61,7 @@
     "prettier": "^3.3.3",
     "prisma": "^5.19.1",
     "tsx": "^4.18.0",
-    "typescript": "^5.5.4",
+    "typescript": "^5.9.3",
     "vitest": "^2.0.5"
   }
 }

@@ -34,6 +34,9 @@ const TestRuns: React.FC = () => {
   const [suites, setSuites] = useState<SuiteWithCases[]>([])
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isExecutionModalOpen, setIsExecutionModalOpen] = useState(false)
+  const [isStarting, setIsStarting] = useState(false)
+  const [isExecuting, setIsExecuting] = useState(false)
+  const [execResults, setExecResults] = useState<any[]>([])
   const [runName, setRunName] = useState('')
   const [runEnv, setRunEnv] = useState('staging')
   const [selectedSuite, setSelectedSuite] = useState<SuiteWithCases | null>(null)
@@ -42,7 +45,7 @@ const TestRuns: React.FC = () => {
   useEffect(() => {
     dispatch(fetchTestRuns())
     dispatch(fetchProjects())
-    dispatch(fetchTestCases({ perPage: 500 }))
+    dispatch(fetchTestCases({ per_page: 500 } as any))
   }, [dispatch])
 
   // Build suites from test cases grouped by suiteId
@@ -116,15 +119,10 @@ const TestRuns: React.FC = () => {
     const caseIds = selectedSuite.testCases.map(tc => tc.id)
     let projectId = selectedSuite.projectId
 
-    // For ungrouped cases, try to find a project from any test case's customFields
     if (!projectId && caseIds.length > 0) {
-      // Find any project that has test cases matching these
       const firstCase = selectedSuite.testCases[0]
-      if (firstCase) {
-        // Use the first available project as fallback
-        if (projects.length > 0) {
-          projectId = projects[0].id
-        }
+      if (firstCase && projects.length > 0) {
+        projectId = projects[0].id
       }
     }
 
@@ -133,7 +131,7 @@ const TestRuns: React.FC = () => {
       return
     }
 
-    await dispatch(createTestRun({
+    const result = await dispatch(createTestRun({
       name: runName,
       description: `${selectedSuite.testCases.length} test cases from ${selectedSuite.name}`,
       projectId,
@@ -146,6 +144,14 @@ const TestRuns: React.FC = () => {
     setIsCreateModalOpen(false)
     setSelectedSuite(null)
     dispatch(fetchTestRuns())
+
+    // Open execution modal with the new run
+    const newRunId = (result.payload as any)?.id
+    if (newRunId) {
+      await dispatch(fetchTestRun(newRunId))
+      setCurrentResultIndex(0)
+      setIsExecutionModalOpen(true)
+    }
   }
 
   const handleStartExecution = async (runId: string) => {
@@ -155,8 +161,33 @@ const TestRuns: React.FC = () => {
   }
 
   const handleStartRun = async (runId: string) => {
-    await dispatch(startTestRun(runId))
-    await dispatch(fetchTestRun(runId))
+    setIsStarting(true)
+    try {
+      await dispatch(startTestRun(runId))
+      await dispatch(fetchTestRun(runId))
+    } catch (err) {
+      console.error('Failed to start run:', err)
+      alert('Failed to start test run. Check console for details.')
+    } finally {
+      setIsStarting(false)
+    }
+  }
+
+  const handleExecuteRun = async (runId: string) => {
+    setIsExecuting(true)
+    setExecResults([])
+    try {
+      const resp = await api.post(`/test-runs/${runId}/execute`)
+      const data = resp.data?.data
+      setExecResults(data.results || [])
+      // Refresh the run data
+      await dispatch(fetchTestRun(runId))
+    } catch (err: any) {
+      console.error('Execute failed:', err)
+      alert(err.response?.data?.error?.message || 'Failed to execute tests.')
+    } finally {
+      setIsExecuting(false)
+    }
   }
 
   const handleCompleteRun = async (runId: string) => {
@@ -215,6 +246,7 @@ const TestRuns: React.FC = () => {
   }
 
   const currentResult = currentRun?.results?.[currentResultIndex]
+  const isLoading = loading || testCases.length === 0
 
   return (
     <div className="space-y-6">
@@ -225,6 +257,13 @@ const TestRuns: React.FC = () => {
         </div>
       </div>
 
+      {isLoading ? (
+        <Card><CardContent className="py-16 text-center text-muted-foreground">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3"></div>
+          Loading test cases...
+        </CardContent></Card>
+      ) : (
+        <>
       {/* Suites Section - Create Runs From Here */}
       <Card>
         <CardHeader>
@@ -355,6 +394,8 @@ const TestRuns: React.FC = () => {
           )}
         </CardContent>
       </Card>
+        </>
+      )}
 
       {/* Create Run Modal */}
       {isCreateModalOpen && selectedSuite && (
@@ -418,10 +459,32 @@ const TestRuns: React.FC = () => {
               </div>
 
               {currentRun.status === 'pending' && (
-                <Button onClick={() => handleStartRun(currentRun.id)}>
-                  <Play className="mr-2 h-4 w-4" />
-                  Start Run
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={() => handleStartRun(currentRun.id)} disabled={isStarting}>
+                    {isStarting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                    {isStarting ? 'Starting...' : 'Start Run (Manual)'}
+                  </Button>
+                  <Button onClick={() => handleExecuteRun(currentRun.id)} disabled={isExecuting} variant="secondary">
+                    {isExecuting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                    {isExecuting ? 'Running...' : 'Run All Tests (Auto)'}
+                  </Button>
+                </div>
+              )}
+
+              {execResults.length > 0 && (
+                <div className="space-y-2 mt-2">
+                  <h3 className="font-semibold">Execution Results</h3>
+                  {execResults.map((r, i) => (
+                    <div key={i} className={`p-3 rounded border text-sm ${r.status === 'passed' ? 'bg-green-50 border-green-200' : r.status === 'failed' ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex justify-between">
+                        <span className="font-medium">{r.testCaseTitle}</span>
+                        <Badge className={r.status === 'passed' ? 'bg-green-500' : r.status === 'failed' ? 'bg-red-500' : 'bg-gray-400'}>{r.status}</Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">{r.duration}ms</div>
+                      {r.output && <pre className="text-xs mt-1 bg-gray-100 p-2 rounded max-h-20 overflow-y-auto">{r.output}</pre>}
+                    </div>
+                  ))}
+                </div>
               )}
 
               {currentResult ? (
@@ -430,40 +493,66 @@ const TestRuns: React.FC = () => {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium">Test {currentResultIndex + 1} of {currentRun.results?.length}</span>
                       <span className="text-sm text-muted-foreground">
-                        {Math.round((currentResultIndex / (currentRun.results?.length || 1)) * 100)}% complete
+                        {Math.round(((currentResultIndex + 1) / (currentRun.results?.length || 1)) * 100)}% complete
                       </span>
                     </div>
                     <div className="w-full bg-muted-foreground/20 rounded-full h-2">
-                      <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${(currentResultIndex / (currentRun.results?.length || 1)) * 100}%` }} />
+                      <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${((currentResultIndex + 1) / (currentRun.results?.length || 1)) * 100}%` }} />
                     </div>
                   </div>
 
                   <div className="flex items-start gap-3">
-                    {getStatusIcon(currentResult.status)}
+                    {getStatusIcon(currentResult.status || 'running')}
                     <div>
-                      <h3 className="text-lg font-semibold">{currentResult.test_case_title}</h3>
+                      <h3 className="text-lg font-semibold">{currentResult.test_case_title || currentResult.testCase?.title || 'Unknown'}</h3>
                       {currentResult.comment && <p className="text-sm text-muted-foreground mt-1">{currentResult.comment}</p>}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-3">
-                    <Button variant="outline" className="flex-col h-20" onClick={() => handleUpdateResult(currentResult.id, 'passed', '')}>
-                      <CheckCircle className="h-6 w-6 mb-1 text-green-500" /> Pass
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (currentResultIndex > 0) setCurrentResultIndex(currentResultIndex - 1)
+                      }}
+                      disabled={currentResultIndex === 0}
+                    >
+                      ← Prev
                     </Button>
-                    <Button variant="outline" className="flex-col h-20" onClick={() => handleUpdateResult(currentResult.id, 'failed', '')}>
-                      <XCircle className="h-6 w-6 mb-1 text-red-500" /> Fail
+                    <span className="text-sm self-center text-muted-foreground">
+                      {currentResultIndex + 1} / {currentRun.results?.length}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (currentResultIndex < (currentRun.results?.length || 1) - 1) setCurrentResultIndex(currentResultIndex + 1)
+                      }}
+                      disabled={currentResultIndex >= (currentRun.results?.length || 1) - 1}
+                    >
+                      Next →
                     </Button>
-                    <Button variant="outline" className="flex-col h-20" onClick={() => handleUpdateResult(currentResult.id, 'skipped', '')}>
-                      <SkipForward className="h-6 w-6 mb-1 text-yellow-500" /> Skip
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-2">
+                    <Button variant="outline" className="flex-col h-16 text-xs" onClick={() => handleUpdateResult(currentResult.id, 'passed', '')}>
+                      <CheckCircle className="h-5 w-5 mb-0.5 text-green-500" /> Pass
                     </Button>
-                    <Button variant="outline" className="flex-col h-20" onClick={() => handleUpdateResult(currentResult.id, 'blocked', '')}>
-                      <AlertCircle className="h-6 w-6 mb-1 text-gray-500" /> Block
+                    <Button variant="outline" className="flex-col h-16 text-xs" onClick={() => handleUpdateResult(currentResult.id, 'failed', '')}>
+                      <XCircle className="h-5 w-5 mb-0.5 text-red-500" /> Fail
+                    </Button>
+                    <Button variant="outline" className="flex-col h-16 text-xs" onClick={() => handleUpdateResult(currentResult.id, 'skipped', '')}>
+                      <SkipForward className="h-5 w-5 mb-0.5 text-yellow-500" /> Skip
+                    </Button>
+                    <Button variant="outline" className="flex-col h-16 text-xs" onClick={() => handleUpdateResult(currentResult.id, 'blocked', '')}>
+                      <AlertCircle className="h-5 w-5 mb-0.5 text-gray-500" /> Block
                     </Button>
                   </div>
 
                   <textarea
                     placeholder="Add a comment about this test result..."
-                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     onBlur={(e) => handleUpdateResult(currentResult.id, currentResult.status, e.target.value)}
                   />
                 </div>

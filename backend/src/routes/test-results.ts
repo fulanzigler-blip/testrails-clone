@@ -85,7 +85,7 @@ export default async function testResultRoutes(fastify: FastifyInstance) {
   });
 
   // Update test result
-  fastify.put('/results/:id', {
+  fastify.put('/test-results/:id', {
     onRequest: [fastify.authenticate, fastify.getOrganizationContext, fastify.authorize('admin', 'manager', 'tester')],
   }, async (request: any, reply) => {
     try {
