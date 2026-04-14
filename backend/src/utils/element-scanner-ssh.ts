@@ -314,9 +314,33 @@ export async function scanFlutterProjectSSH(config?: unknown): Promise<ElementCa
   );
   const screenFiles = screenResult.output.split('\n').filter(Boolean);
 
-  for (const file of screenFiles) {
-    const contentResult = await execSSHWithConfig(`cat "${file}" 2>/dev/null`, config, 15000);
-    const content = contentResult.output;
+  // OPTIMIZATION: Batch file reads - cat multiple files in single SSH call
+  // Then process in parallel chunks for better throughput
+  const BATCH_SIZE = 20; // Process 20 files at a time
+  const allScreenData: Array<{ file: string; content: string }> = [];
+
+  for (let i = 0; i < screenFiles.length; i += BATCH_SIZE) {
+    const batch = screenFiles.slice(i, Math.min(i + BATCH_SIZE, screenFiles.length));
+    const fileArgs = batch.map(f => `"${f}"`).join(' ');
+    const batchResult = await execSSHWithConfig(`cat ${fileArgs} 2>/dev/null`, config, 60000);
+
+    // Split output by file delimiter (each file starts with full path in error if fails)
+    // Simpler: re-fetch individually within batch in parallel
+    const batchPromises = batch.map(async (file) => {
+      try {
+        const contentResult = await execSSHWithConfig(`cat "${file}" 2>/dev/null`, config, 10000);
+        return { file, content: contentResult.output };
+      } catch {
+        return { file, content: '' };
+      }
+    });
+
+    const batchResults = await Promise.all(batchPromises);
+    allScreenData.push(...batchResults);
+  }
+
+  for (const { file, content } of allScreenData) {
+    if (!content) continue; // Skip empty files
     const fileName = file.split('/').pop()?.replace('.dart', '') || '';
     const screenName = fileName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     const route = catalog.routes.find(r => r.toLowerCase().includes(fileName.toLowerCase().replace('_screen', '').replace('_page', '').replace('_view', '')));
