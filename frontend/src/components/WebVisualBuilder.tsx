@@ -10,6 +10,7 @@ import {
   Scan, Play, Loader2, CheckCircle2, XCircle, GripVertical,
   FileText, Type, MousePointerClick, Clock, Terminal, Code2, AlertTriangle,
   Eye, EyeOff, ArrowUp, ArrowDown, Plus, Trash2, Globe,
+  ChevronDown, ChevronRight,
 } from 'lucide-react';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -584,6 +585,44 @@ const WebVisualBuilder: React.FC = () => {
   const totalPages = pages.length;
   const current = pages[currentPage];
 
+  // ─── Element Filters ───────────────────────────────────────────────────────
+  const [elementFilter, setElementFilter] = useState<'all' | 'inputs' | 'buttons' | 'texts'>('all');
+  const [elementSearch, setElementSearch] = useState('');
+  const [expandedPages, setExpandedPages] = useState<Set<number>>(new Set());
+
+  const togglePageExpanded = (pageIndex: number) => {
+    setExpandedPages(prev => {
+      const next = new Set(prev);
+      if (next.has(pageIndex)) {
+        next.delete(pageIndex);
+      } else {
+        next.add(pageIndex);
+      }
+      return next;
+    });
+  };
+
+  const filteredPages = pages.filter((page, idx) => {
+    // Text search filter
+    if (elementSearch) {
+      const searchLower = elementSearch.toLowerCase();
+      const matchesSearch =
+        page.name?.toLowerCase().includes(searchLower) ||
+        page.url?.toLowerCase().includes(searchLower) ||
+        (page.inputs || []).some(i => i.label?.toLowerCase().includes(searchLower) || i.selector?.toLowerCase().includes(searchLower)) ||
+        (page.buttons || []).some(b => b.text?.toLowerCase().includes(searchLower) || b.selector?.toLowerCase().includes(searchLower)) ||
+        (page.texts || []).some(t => t.text?.toLowerCase().includes(searchLower) || t.selector?.toLowerCase().includes(searchLower));
+      if (!matchesSearch) return false;
+    }
+
+    // Element type filter
+    if (elementFilter === 'all') return true;
+    if (elementFilter === 'inputs') return (page.inputs?.length || 0) > 0;
+    if (elementFilter === 'buttons') return (page.buttons?.length || 0) > 0;
+    if (elementFilter === 'texts') return (page.texts?.length || 0) > 0;
+    return true;
+  });
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -686,6 +725,71 @@ const WebVisualBuilder: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent className="pt-0">
+            {/* Filters */}
+            <div className="flex flex-wrap gap-3 mb-3 p-3 bg-muted/30 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm">Filter:</Label>
+                <div className="flex rounded-md shadow-sm">
+                  <button
+                    onClick={() => setElementFilter('all')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-l-md border ${
+                      elementFilter === 'all'
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setElementFilter('inputs')}
+                    className={`px-3 py-1.5 text-xs font-medium border-t border-b ${
+                      elementFilter === 'inputs'
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    <Type className="w-3 h-3 inline mr-1" />
+                    Inputs
+                  </button>
+                  <button
+                    onClick={() => setElementFilter('buttons')}
+                    className={`px-3 py-1.5 text-xs font-medium border-t border-b ${
+                      elementFilter === 'buttons'
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    <MousePointerClick className="w-3 h-3 inline mr-1" />
+                    Buttons
+                  </button>
+                  <button
+                    onClick={() => setElementFilter('texts')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-r-md border ${
+                      elementFilter === 'texts'
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    <FileText className="w-3 h-3 inline mr-1" />
+                    Texts
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 min-w-[200px]">
+                <Input
+                  placeholder="Search elements..."
+                  value={elementSearch}
+                  onChange={e => setElementSearch(e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              {filteredPages.length !== pages.length && (
+                <Badge variant="secondary" className="text-xs">
+                  Showing {filteredPages.length} of {pages.length} pages
+                </Badge>
+              )}
+            </div>
+
             <div className="text-xs text-muted-foreground mb-3 truncate">{current.url}</div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* Inputs */}

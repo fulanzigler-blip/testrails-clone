@@ -11,6 +11,7 @@ import {
   FileText,
   Type, MousePointerClick, Clock, Terminal, Code2, AlertTriangle,
   Eye, EyeOff, ArrowUp, ArrowDown, Plus, Trash2, Layers, Smartphone,
+  ChevronDown, ChevronRight,
 } from 'lucide-react';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -400,6 +401,46 @@ const VisualTestBuilder: React.FC = () => {
   const [savingTestCase, setSavingTestCase] = useState(false);
   const [savedTestCase, setSavedTestCase] = useState<{id: string; title: string} | null>(null);
 
+  // ─── Element Catalog Filters ─────────────────────────────────────────────────
+  const [elementFilter, setElementFilter] = useState<'all' | 'inputs' | 'buttons' | 'texts'>('all');
+  const [elementSearch, setElementSearch] = useState('');
+  const [expandedScreens, setExpandedScreens] = useState<Set<string>>(new Set());
+
+  const toggleScreenExpanded = (screenName: string) => {
+    setExpandedScreens(prev => {
+      const next = new Set(prev);
+      if (next.has(screenName)) {
+        next.delete(screenName);
+      } else {
+        next.add(screenName);
+      }
+      return next;
+    });
+  };
+
+  const filteredCatalog = catalog ? {
+    ...catalog,
+    screens: (catalog.screens || []).filter(screen => {
+      // Text search filter
+      if (elementSearch) {
+        const searchLower = elementSearch.toLowerCase();
+        const matchesSearch =
+          screen.name.toLowerCase().includes(searchLower) ||
+          (screen.inputs || []).some(i => i.label?.toLowerCase().includes(searchLower) || i.id?.toLowerCase().includes(searchLower)) ||
+          (screen.buttons || []).some(b => b.text?.toLowerCase().includes(searchLower) || b.id?.toLowerCase().includes(searchLower)) ||
+          (screen.texts || []).some(t => t.text?.toLowerCase().includes(searchLower) || t.id?.toLowerCase().includes(searchLower));
+        if (!matchesSearch) return false;
+      }
+
+      // Element type filter
+      if (elementFilter === 'all') return true;
+      if (elementFilter === 'inputs') return (screen.inputs?.length || 0) > 0;
+      if (elementFilter === 'buttons') return (screen.buttons?.length || 0) > 0;
+      if (elementFilter === 'texts') return (screen.texts?.length || 0) > 0;
+      return true;
+    })
+  } : null;
+
   // ─── Device Selection ─────────────────────────────────────────────────────
   const [selectedDevice, setSelectedDevice] = useState<string>('');
   const [showDevicePicker, setShowDevicePicker] = useState(false);
@@ -744,6 +785,71 @@ const VisualTestBuilder: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent className="pt-0">
+            {/* Filters */}
+            <div className="flex flex-wrap gap-3 mb-4 p-3 bg-muted/30 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm">Filter:</Label>
+                <div className="flex rounded-md shadow-sm">
+                  <button
+                    onClick={() => setElementFilter('all')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-l-md border ${
+                      elementFilter === 'all'
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setElementFilter('inputs')}
+                    className={`px-3 py-1.5 text-xs font-medium border-t border-b ${
+                      elementFilter === 'inputs'
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    <Type className="w-3 h-3 inline mr-1" />
+                    Inputs
+                  </button>
+                  <button
+                    onClick={() => setElementFilter('buttons')}
+                    className={`px-3 py-1.5 text-xs font-medium border-t border-b ${
+                      elementFilter === 'buttons'
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    <MousePointerClick className="w-3 h-3 inline mr-1" />
+                    Buttons
+                  </button>
+                  <button
+                    onClick={() => setElementFilter('texts')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-r-md border ${
+                      elementFilter === 'texts'
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    <FileText className="w-3 h-3 inline mr-1" />
+                    Texts
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 min-w-[200px]">
+                <Input
+                  placeholder="Search elements..."
+                  value={elementSearch}
+                  onChange={e => setElementSearch(e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              {filteredCatalog && filteredCatalog.screens.length !== (catalog.screens || []).length && (
+                <Badge variant="secondary" className="text-xs">
+                  Showing {filteredCatalog.screens.length} of {(catalog.screens || []).length} screens
+                </Badge>
+              )}
+            </div>
+
             {/* Credentials */}
             {catalog.auth?.credentials?.length ? (
               <div className="flex gap-2 mb-4">
@@ -764,13 +870,21 @@ const VisualTestBuilder: React.FC = () => {
 
             {/* Screen-by-screen element list */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {(catalog.screens || []).map(screen => (
+              {(filteredCatalog?.screens || []).map(screen => (
                 <div key={screen.name} className="rounded border bg-muted/20 p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm font-semibold">📱 {screen.name}</span>
+                  <div
+                    className="flex items-center gap-2 mb-2 cursor-pointer hover:bg-muted/30 -mx-3 px-3 py-2 -mt-3"
+                    onClick={() => toggleScreenExpanded(screen.name)}
+                  >
+                    <span className="text-sm font-semibold flex-1">📱 {screen.name}</span>
                     {screen.route && <Badge variant="outline" className="text-xs">{screen.route}</Badge>}
+                    {expandedScreens.has(screen.name) ? (
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    )}
                   </div>
-                  <div className="space-y-2 text-xs">
+                  {expandedScreens.has(screen.name) && (
                     {screen.inputs && screen.inputs.length > 0 && (
                       <div>
                         <div className="text-muted-foreground font-medium mb-1">Inputs ({screen.inputs.length})</div>
@@ -831,6 +945,7 @@ const VisualTestBuilder: React.FC = () => {
                     )}
                     {(!screen.inputs?.length && !screen.buttons?.length && !screen.texts?.length) && (
                       <div className="text-muted-foreground">No elements detected</div>
+                    )}
                     )}
                   </div>
                 </div>
