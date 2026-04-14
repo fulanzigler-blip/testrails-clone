@@ -31,6 +31,7 @@ import githubScenariosRoutes from './routes/github-scenarios';
 import integrationTestRoutes from './routes/integration-tests';
 import webIntegrationRoutes from './routes/web-integration-tests';
 import apiDetectionRoutes from './routes/api-detection';
+import apiTestRunnerRoutes from './routes/api-test-runner';
 
 // Create Fastify instance
 const fastify = Fastify({
@@ -276,6 +277,7 @@ async function registerRoutes() {
   await fastify.register(githubScenariosRoutes, { prefix: '/api/v1/integrations/github-scenarios' });
   await fastify.register(integrationTestRoutes, { prefix: '/api/v1/integration-tests' });
 	await fastify.register(apiDetectionRoutes, { prefix: '/api/v1/api-detection' });
+	await fastify.register(apiTestRunnerRoutes, { prefix: '/api/v1/api-test-runner' });
   await fastify.register(webIntegrationRoutes, { prefix: '/api/v1/web-tests' });
 }
 
