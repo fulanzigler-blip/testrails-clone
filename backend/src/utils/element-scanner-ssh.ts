@@ -1,5 +1,6 @@
 import { Client } from 'ssh2';
 import * as fs from 'fs';
+import { validateScannerConfig, ScannerConfig } from '../config/schemas';
 
 const SSH_HOST: string = process.env.MAESTRO_RUNNER_HOST || '';
 const SSH_USER: string = process.env.MAESTRO_RUNNER_USER || 'clawbot';
@@ -13,10 +14,24 @@ function getSSHKey(): Buffer {
   return cachedKey;
 }
 
-export function execSSHWithConfig(command: string, cfg: ScannerConfig | undefined, timeoutMs: number = 30000): Promise<{ output: string; code: number }> {
-  const host = cfg?.host || SSH_HOST;
-  const username = cfg?.username || SSH_USER;
-  const keyPath = cfg?.sshKeyPath || SSH_KEY_PATH;
+export function execSSHWithConfig(command: string, cfg: unknown, timeoutMs: number = 30000): Promise<{ output: string; code: number }> {
+  // Validate config if provided, otherwise use defaults
+  const validatedConfig = cfg ? validateScannerConfig(cfg) : undefined;
+
+  const host = validatedConfig?.host || SSH_HOST;
+  const username = validatedConfig?.username || SSH_USER;
+  const keyPath = validatedConfig?.sshKeyPath || SSH_KEY_PATH;
+
+  if (!keyPath) {
+    throw new Error('SSH key path not configured. Set SSH_KEY_PATH env var or provide sshKeyPath in config.');
+  }
+  if (!host) {
+    throw new Error('SSH host not configured. Set MAESTRO_RUNNER_HOST env var or provide host in config.');
+  }
+  if (!username) {
+    throw new Error('SSH username not configured. Set MAESTRO_RUNNER_USER env var or provide username in config.');
+  }
+
   const privateKey = fs.readFileSync(keyPath);
 
   return new Promise((resolve, reject) => {
@@ -46,9 +61,9 @@ export function execSSHWithConfig(command: string, cfg: ScannerConfig | undefine
 
 export interface ScreenElement {
   name: string; file: string; route?: string;
-  inputs: { id: string; label: string; type: string; hasOnFieldSubmitted: boolean }[];
+  inputs: { id: string; label: string; type: string; hasOnFieldSubmitted: boolean; finderStrategy: 'label' | 'key' | 'type'; finderValue: string }[];
   buttons: ButtonInfo[];
-  texts: { id: string; text: string }[];
+  texts: { id: string; text: string; finderStrategy?: 'text' | 'key'; finderValue?: string }[];
 }
 
 export interface ButtonInfo {
@@ -64,8 +79,24 @@ export interface ButtonInfo {
   finderValue: string;
 }
 
-export interface InputElement { id: string; label: string; type: string; screen?: string; hasOnFieldSubmitted: boolean; }
-export interface TextElement { id: string; text: string; screen?: string; isStatic: boolean; }
+export interface InputElement {
+  id: string;
+  label: string;
+  type: string;
+  screen?: string;
+  hasOnFieldSubmitted: boolean;
+  finderStrategy: 'label' | 'key' | 'type';
+  finderValue: string;
+}
+
+export interface TextElement {
+  id: string;
+  text: string;
+  screen?: string;
+  isStatic: boolean;
+  finderStrategy?: 'text' | 'key' | 'type';
+  finderValue?: string;
+}
 export interface CredentialInfo { email: string; password: string; role: string; }
 export interface AuthInfo { flow: 'tap' | 'onFieldSubmitted'; loginButton?: string; credentials: CredentialInfo[]; }
 export interface ElementCatalog {
@@ -128,7 +159,28 @@ function extractElements(content: string): { inputs: ScreenElement['inputs']; bu
       const hasOnSubmit = line.includes('onFieldSubmitted') || lines.slice(i, i + 5).some(l => l.includes('onFieldSubmitted'));
       const hintMatch = nearby.match(/hintText\s*:\s*['"]([^'"]+)['"]/) || nearby.match(/labelText\s*:\s*['"]([^'"]+)['"]/);
       const label = hintMatch?.[1] || '';
-      inputs.push({ id: label.toLowerCase().replace(/\s+/g, '_') || `${type.toLowerCase()}_${inputs.length}`, label, type, hasOnFieldSubmitted: hasOnSubmit });
+      const keyMatch = nearby.match(/key:\s*(?:const\s+)?(?:ValueKey|Key)\(['"]([^'"]+)['"]\)/);
+      const keyName = keyMatch?.[1];
+
+      // Determine finder strategy: key > label > type
+      let inputStrategy: 'key' | 'label' | 'type' = 'type';
+      let inputValue = type;
+      if (keyName) {
+        inputStrategy = 'key';
+        inputValue = keyName;
+      } else if (label) {
+        inputStrategy = 'label';
+        inputValue = label;
+      }
+
+      inputs.push({
+        id: label.toLowerCase().replace(/\s+/g, '_') || `${type.toLowerCase()}_${inputs.length}`,
+        label,
+        type,
+        hasOnFieldSubmitted: hasOnSubmit,
+        finderStrategy: inputStrategy,
+        finderValue: inputValue,
+      });
     }
 
     // ─── Buttons ───
@@ -209,7 +261,14 @@ function extractElements(content: string): { inputs: ScreenElement['inputs']; bu
     // ─── Static Text ───
     const textLineMatch = line.match(/Text\(\s*(?:const\s+)?['"]([^'"]{3,50})['"]\s*\)/);
     if (textLineMatch && !/\$/.test(textLineMatch[1]) && !textLineMatch[1].includes('${')) {
-      texts.push({ id: textLineMatch[1].toLowerCase().replace(/\s+/g, '_').slice(0, 40) || `text_${texts.length}`, text: textLineMatch[1] });
+      const txtKeyMatch = nearby.match(/key:\s*(?:const\s+)?(?:ValueKey|Key)\(['"]([^'"]+)['"]\)/);
+      const txtKeyName = txtKeyMatch?.[1];
+      texts.push({
+        id: textLineMatch[1].toLowerCase().replace(/\s+/g, '_').slice(0, 40) || `text_${texts.length}`,
+        text: textLineMatch[1],
+        finderStrategy: txtKeyName ? 'key' as const : 'text' as const,
+        finderValue: txtKeyName || textLineMatch[1],
+      });
     }
   }
 
@@ -218,20 +277,15 @@ function extractElements(content: string): { inputs: ScreenElement['inputs']; bu
 
 // ─── Main Scanner ──────────────────────────────────────────────────────────────
 
-interface ScannerConfig {
-  host?: string;
-  username?: string;
-  projectPath?: string;
-  deviceId?: string;
-  sshKeyPath?: string;
-}
+export async function scanFlutterProjectSSH(config?: unknown): Promise<ElementCatalog> {
+  // Validate config
+  const validatedConfig = config ? validateScannerConfig(config) : undefined;
 
-export async function scanFlutterProjectSSH(config?: ScannerConfig): Promise<ElementCatalog> {
-  const host = config?.host || SSH_HOST;
-  const username = config?.username || SSH_USER;
-  const path = config?.projectPath || FLUTTER_PROJECT_PATH;
-  const sshKeyPath = config?.sshKeyPath || SSH_KEY_PATH;
-  const deviceId = config?.deviceId;
+  const host = validatedConfig?.host || SSH_HOST;
+  const username = validatedConfig?.username || SSH_USER;
+  const path = validatedConfig?.projectPath || FLUTTER_PROJECT_PATH;
+  const sshKeyPath = validatedConfig?.sshKeyPath || SSH_KEY_PATH;
+  const deviceId = validatedConfig?.deviceId;
 
   const catalog: ElementCatalog = {
     packageName: '', projectPath: path, scannedAt: new Date().toISOString(),

@@ -1,5 +1,6 @@
 import { chromium, Browser, Page } from 'playwright';
 import logger from '../utils/logger';
+import { validateScraperConfig, ScraperConfig } from '../config/schemas';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,11 @@ export interface WebInputElement {
   name?: string;
   placeholder?: string;
   page?: string;
+  testId?: string;
+  ariaLabel?: string;
+  tag?: string;
+  role?: string;
+  fallbackSelectors?: string[];
 }
 
 export interface WebButtonElement {
@@ -22,6 +28,11 @@ export interface WebButtonElement {
   xpath: string;
   page?: string;
   action?: string;
+  testId?: string;
+  ariaLabel?: string;
+  tag?: string;
+  role?: string;
+  fallbackSelectors?: string[];
 }
 
 export interface WebTextElement {
@@ -31,6 +42,9 @@ export interface WebTextElement {
   xpath: string;
   page?: string;
   isStatic: boolean;
+  testId?: string;
+  tag?: string;
+  fallbackSelectors?: string[];
 }
 
 export interface WebLinkElement {
@@ -64,13 +78,8 @@ export interface WebElementCatalog {
 
 // ─── Scraper Configuration ─────────────────────────────────────────────────────
 
-export interface ScraperConfig {
-  maxPages?: number;
-  maxDepth?: number;
-  timeout?: number;
-  headless?: boolean;
-  viewport?: { width: number; height: number };
-}
+// Use ScraperConfig from schemas
+// Import it: import type { ScraperConfig } from '../config/schemas';
 
 const DEFAULT_CONFIG: Required<ScraperConfig> = {
   maxPages: 20,
@@ -78,6 +87,9 @@ const DEFAULT_CONFIG: Required<ScraperConfig> = {
   timeout: 30000,
   headless: true,
   viewport: { width: 1280, height: 720 },
+  requestDelay: 1000,  // 1 second between requests to be polite
+  concurrentRequests: 1,  // Sequential requests by default
+  respectRobotsTxt: true,  // Respect robots.txt by default
 };
 
 // ─── Element Extraction Helpers ────────────────────────────────────────────────
@@ -165,9 +177,9 @@ function getAccessibleLabel(element: any): string {
 
 async function extractElementsFromPage(page: Page, pageName: string): Promise<WebPageElement> {
   const elements = await page.evaluate(() => {
-    const inputs: Array<{ tag: string; type: string; id: string; name: string; placeholder: string; label: string; ariaLabel: string; selector: string }> = [];
-    const buttons: Array<{ tag: string; text: string; type: string; selector: string }> = [];
-    const texts: Array<{ text: string; tag: string; selector: string }> = [];
+    const inputs: Array<{ tag: string; type: string; id: string; name: string; placeholder: string; label: string; ariaLabel: string; selector: string; testId?: string; role?: string; fallbackSelectors?: string[] }> = [];
+    const buttons: Array<{ tag: string; text: string; type: string; selector: string; testId?: string; ariaLabel?: string; role?: string; fallbackSelectors?: string[] }> = [];
+    const texts: Array<{ text: string; tag: string; selector: string; testId?: string; fallbackSelectors?: string[] }> = [];
     const links: Array<{ text: string; href: string; tag: string; selector: string }> = [];
 
     // Extract input fields
@@ -185,6 +197,15 @@ async function extractElementsFromPage(page: Page, pageName: string): Promise<We
                     input.getAttribute('type') ||
                     '';
 
+      // Generate multiple fallback selectors
+      const fallbackSelectors: string[] = [];
+      if (input.getAttribute('data-testid')) fallbackSelectors.push(`[data-testid="${input.getAttribute('data-testid')}"]`);
+      if (input.id) fallbackSelectors.push(`#${input.id}`);
+      if (input.getAttribute('name')) fallbackSelectors.push(`[name="${input.getAttribute('name')}"]`);
+      if (input.getAttribute('placeholder')) fallbackSelectors.push(`[placeholder="${input.getAttribute('placeholder')}"]`);
+      if (input.getAttribute('aria-label')) fallbackSelectors.push(`[aria-label="${input.getAttribute('aria-label')}"]`);
+      fallbackSelectors.push(`${input.tagName.toLowerCase()}[type="${input.getAttribute('type') || 'text'}"]`);
+
       inputs.push({
         tag: input.tagName.toLowerCase(),
         type: input.getAttribute('type') || 'text',
@@ -193,7 +214,10 @@ async function extractElementsFromPage(page: Page, pageName: string): Promise<We
         placeholder: input.getAttribute('placeholder') || '',
         label: label || '',
         ariaLabel: input.getAttribute('aria-label') || '',
-        selector: input.id ? `#${input.id}` : `${input.tagName.toLowerCase()}[name="${input.getAttribute('name')}"]`,
+        testId: input.getAttribute('data-testid') || undefined,
+        role: input.getAttribute('role') || input.tagName.toLowerCase(),
+        selector: fallbackSelectors[0] || `${input.tagName.toLowerCase()}`,
+        fallbackSelectors,
       });
     });
 
@@ -206,26 +230,28 @@ async function extractElementsFromPage(page: Page, pageName: string): Promise<We
                    btn.getAttribute('value') ||
                    'Button';
 
-      // Generate Playwright-friendly selector
-      let selector = '';
-      if (btn.getAttribute('data-testid')) {
-        selector = `[data-testid="${btn.getAttribute('data-testid')}"]`;
-      } else if (btn.getAttribute('id')) {
-        selector = `#${btn.getAttribute('id')}`;
-      } else if (btn.getAttribute('name')) {
-        selector = `[name="${btn.getAttribute('name')}"]`;
-      } else if (btn.tagName === 'INPUT') {
-        selector = `input[type="${btn.getAttribute('type') || 'submit'}"][value="${text.slice(0, 50)}"]`;
-      } else {
-        // Use role-based selector: button has role="button" by default
-        selector = `button:has-text("${text.slice(0, 50)}")`;
+      // Generate multiple fallback selectors (ordered by stability)
+      const fallbackSelectors: string[] = [];
+      if (btn.getAttribute('data-testid')) fallbackSelectors.push(`[data-testid="${btn.getAttribute('data-testid')}"]`);
+      if (btn.id) fallbackSelectors.push(`#${btn.id}`);
+      if (btn.getAttribute('name')) fallbackSelectors.push(`[name="${btn.getAttribute('name')}"]`);
+      if (btn.getAttribute('role')) fallbackSelectors.push(`[role="${btn.getAttribute('role')}"]`);
+      if (btn.tagName === 'INPUT' && btn.getAttribute('value')) {
+        fallbackSelectors.push(`input[type="${btn.getAttribute('type') || 'submit'}"][value="${btn.getAttribute('value').slice(0, 50)}"]`);
+      } else if (btn.tagName !== 'INPUT') {
+        fallbackSelectors.push(`button:has-text("${text.slice(0, 50)}")`);
       }
+      fallbackSelectors.push(`${btn.tagName.toLowerCase()}`);
 
       buttons.push({
         tag: btn.tagName.toLowerCase(),
         text: text.slice(0, 100),
         type: btn.getAttribute('type') || 'button',
-        selector,
+        testId: btn.getAttribute('data-testid') || undefined,
+        ariaLabel: btn.getAttribute('aria-label') || undefined,
+        role: btn.getAttribute('role') || 'button',
+        selector: fallbackSelectors[0] || `${btn.tagName.toLowerCase()}`,
+        fallbackSelectors,
       });
     });
 
@@ -238,10 +264,17 @@ async function extractElementsFromPage(page: Page, pageName: string): Promise<We
       const parent = el.parentElement;
       if (parent && parent.textContent?.trim() === text) return;
 
+      const fallbackSelectors: string[] = [];
+      if (el.getAttribute('data-testid')) fallbackSelectors.push(`[data-testid="${el.getAttribute('data-testid')}"]`);
+      if (el.id) fallbackSelectors.push(`#${el.id}`);
+      fallbackSelectors.push(`${el.tagName.toLowerCase()}:has-text("${text.slice(0, 50)}")`);
+
       texts.push({
         text: text.slice(0, 200),
         tag: el.tagName.toLowerCase(),
-        selector: el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}:has-text("${text.slice(0, 50)}")`,
+        testId: el.getAttribute('data-testid') || undefined,
+        selector: fallbackSelectors[0] || `${el.tagName.toLowerCase()}`,
+        fallbackSelectors,
       });
     });
 
@@ -268,10 +301,15 @@ async function extractElementsFromPage(page: Page, pageName: string): Promise<We
     label: el.label,
     type: el.type,
     selector: el.selector,
-    xpath: '', // Will be filled by Playwright
+    xpath: '',
     name: el.name,
     placeholder: el.placeholder,
     page: pageName,
+    testId: el.testId,
+    ariaLabel: el.ariaLabel,
+    tag: el.tag,
+    role: el.role,
+    fallbackSelectors: el.fallbackSelectors,
   }));
 
   const buttons: WebButtonElement[] = elements.buttons.map((el, i) => ({
@@ -284,6 +322,11 @@ async function extractElementsFromPage(page: Page, pageName: string): Promise<We
     action: el.text.toLowerCase().includes('submit') || el.text.toLowerCase().includes('login') || el.text.toLowerCase().includes('sign')
       ? 'form_submit'
       : undefined,
+    testId: el.testId,
+    ariaLabel: el.ariaLabel,
+    tag: el.tag,
+    role: el.role,
+    fallbackSelectors: el.fallbackSelectors,
   }));
 
   const texts: WebTextElement[] = elements.texts.slice(0, 50).map((el, i) => ({
@@ -293,6 +336,9 @@ async function extractElementsFromPage(page: Page, pageName: string): Promise<We
     xpath: '',
     page: pageName,
     isStatic: true,
+    testId: el.testId,
+    tag: el.tag,
+    fallbackSelectors: el.fallbackSelectors,
   }));
 
   const links: WebLinkElement[] = elements.links.slice(0, 30).map((el, i) => ({
@@ -330,8 +376,31 @@ async function crawlSite(
     pageCount++;
 
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.timeout });
-      await page.waitForTimeout(1000); // Let JS render
+      // Add polite delay between requests (except for first request)
+      if (pageCount > 1 && config.requestDelay > 0) {
+        await page.waitForTimeout(config.requestDelay);
+      }
+
+      const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.timeout });
+
+      // Check for rate limit headers
+      if (response && response.headers()) {
+        const rateLimitRemaining = response.headers()['x-ratelimit-remaining'];
+        const rateLimitReset = response.headers()['x-ratelimit-reset'];
+
+        if (rateLimitRemaining === '0' && rateLimitReset) {
+          const resetTime = parseInt(rateLimitReset) * 1000;
+          const now = Date.now();
+          if (resetTime > now) {
+            const waitTime = resetTime - now;
+            logger.info(`[WebScraper] Rate limit hit, waiting ${waitTime}ms until reset`);
+            await page.waitForTimeout(waitTime);
+          }
+        }
+      }
+
+      // Let JS render
+      await page.waitForTimeout(500);
 
       const pageName = await page.title().then(t => t || `Page ${pageCount}`);
       const elements = await extractElementsFromPage(page, pageName);
@@ -363,14 +432,17 @@ async function crawlSite(
 
 export async function scanWebProject(
   url: string,
-  config?: ScraperConfig,
+  config?: unknown,
 ): Promise<WebElementCatalog> {
-  const cfg: Required<ScraperConfig> = { ...DEFAULT_CONFIG, ...config };
+  // Validate config
+  const validatedConfig = config ? validateScraperConfig(config) : undefined;
+  const cfg: Required<ScraperConfig> = { ...DEFAULT_CONFIG, ...validatedConfig };
 
   logger.info(`[WebScraper] Scanning ${url} with config: ${JSON.stringify(cfg)}`);
 
   const browser: Browser = await chromium.launch({ headless: cfg.headless });
-  const context = await browser.newContext({ viewport: cfg.viewport });
+  const viewportSize = { width: cfg.viewport?.width || 1280, height: cfg.viewport?.height || 720 };
+  const context = await browser.newContext({ viewport: viewportSize });
   const page = await context.newPage();
 
   try {

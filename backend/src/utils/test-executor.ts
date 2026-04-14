@@ -1,5 +1,7 @@
 import { Client } from 'ssh2';
 import * as fs from 'fs';
+import logger from './logger';
+import { writeFileSSH, execSSH } from './ssh-client';
 
 const SSH_KEY_PATH = process.env.MAESTRO_RUNNER_KEY_PATH || '/home/nodejs/.ssh/id_ed25519';
 
@@ -107,4 +109,108 @@ echo "EXIT_CODE:$?"`;
   const exitCode = exitMatch ? parseInt(exitMatch[1]) : -1;
 
   return { success: exitCode === 0, output: result.output, duration };
+}
+
+// ─── Environment Configuration ───────────────────────────────────────────────────
+
+const FLUTTER_PROJECT_PATH: string =
+  process.env.FLUTTER_PROJECT_PATH ||
+  '/Users/clawbot/actions-runner/_work/discipline-tracker/discipline-tracker';
+const FLUTTER_BIN: string =
+  process.env.FLUTTER_BIN || '/Users/clawbot/development/flutter/bin/flutter';
+
+// ─── Additional Test Types ───────────────────────────────────────────────────────
+
+export interface TestExecutionResult {
+  success: boolean;
+  output: string;
+  duration: number;
+  exitCode?: number;
+}
+
+// ─── Test Execution via Default SSH ───────────────────────────────────────────────
+
+export async function executeFlutterTest(
+  testFilePath: string,
+  projectId: string,
+): Promise<TestExecutionResult> {
+  const startTime = Date.now();
+  const logs: string[] = [];
+
+  try {
+    logs.push(`=== Flutter Test Execution ===`);
+    logs.push(`Project: ${projectId}`);
+    logs.push(`Test file: ${testFilePath}`);
+    logs.push('');
+
+    // Ensure test directory exists
+    const testDir = `${FLUTTER_PROJECT_PATH}/integration_test`;
+    await execSSH(`mkdir -p "${testDir}"`, 10000);
+
+    // Write test file remotely
+    logs.push(`Writing test file to remote...`);
+    const remoteTestPath = `${testDir}/${testFilePath.split('/').pop()}`;
+
+    // Read local test file content
+    const testContent = fs.readFileSync(testFilePath, 'utf-8');
+
+    // Write to remote via SSH
+    await writeFileSSH(remoteTestPath, testContent);
+    logs.push(`  → Test file written to: ${remoteTestPath}`);
+    logs.push('');
+
+    // Run the test
+    logs.push(`Running Flutter test...`);
+    const testCmd = `cd "${FLUTTER_PROJECT_PATH}" && "${FLUTTER_BIN}" test integration_test/${testFilePath.split('/').pop()} --dart-define=CI=true`;
+
+    const result = await execSSH(testCmd, 180000); // 3 minute timeout
+
+    logs.push(`Test output:`);
+    logs.push(result.output);
+    logs.push('');
+
+    const duration = Date.now() - startTime;
+    const success = result.code === 0;
+
+    logs.push(`=== Test ${success ? 'PASSED' : 'FAILED'} ===`);
+    logs.push(`Duration: ${duration}ms`);
+    logs.push(`Exit code: ${result.code}`);
+
+    return {
+      success,
+      output: logs.join('\n'),
+      duration,
+      exitCode: result.code,
+    };
+  } catch (err: any) {
+    const duration = Date.now() - startTime;
+    logs.push('');
+    logs.push(`❌ ERROR: ${err.message}`);
+    logs.push(`=== Test FAILED ===`);
+
+    return {
+      success: false,
+      output: logs.join('\n'),
+      duration,
+      exitCode: -1,
+    };
+  }
+}
+
+// ─── List Available Tests ───────────────────────────────────────────────────────
+
+export async function listIntegrationTests(): Promise<string[]> {
+  try {
+    const result = await execSSH(`ls -1 "${FLUTTER_PROJECT_PATH}/integration_test/" 2>/dev/null || echo ''`, 10000);
+    return result.output.split('\n').filter(Boolean).filter(f => f.endsWith('.dart'));
+  } catch {
+    return [];
+  }
+}
+
+// ─── Get Test File Content ───────────────────────────────────────────────────────
+
+export async function getTestFileContent(testFileName: string): Promise<string> {
+  const result = await execSSH(`cat "${FLUTTER_PROJECT_PATH}/integration_test/${testFileName}" 2>/dev/null`, 10000);
+  return result.output;
 }

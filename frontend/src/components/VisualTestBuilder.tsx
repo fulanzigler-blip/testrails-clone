@@ -5,11 +5,12 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { MOBILE_DEVICES, type MobileDevice, DEVICE_CATEGORIES } from '../config/devices';
 import {
   Scan, Play, Loader2, CheckCircle2, XCircle, GripVertical,
   FileText,
   Type, MousePointerClick, Clock, Terminal, Code2, AlertTriangle,
-  Eye, EyeOff, ArrowUp, ArrowDown, Plus, Trash2, Layers,
+  Eye, EyeOff, ArrowUp, ArrowDown, Plus, Trash2, Layers, Smartphone,
 } from 'lucide-react';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -399,6 +400,33 @@ const VisualTestBuilder: React.FC = () => {
   const [savingTestCase, setSavingTestCase] = useState(false);
   const [savedTestCase, setSavedTestCase] = useState<{id: string; title: string} | null>(null);
 
+  // ─── Device Selection ─────────────────────────────────────────────────────
+  const [selectedDevice, setSelectedDevice] = useState<string>('');
+  const [showDevicePicker, setShowDevicePicker] = useState(false);
+
+  const currentDevice = MOBILE_DEVICES.find(d => d.id === selectedDevice) || MOBILE_DEVICES[0];
+
+  // Auto-generate set_surface_size step when device changes
+  const applyDevice = (deviceId: string) => {
+    setSelectedDevice(deviceId);
+    const dev = MOBILE_DEVICES.find(d => d.id === deviceId);
+    if (!dev) return;
+
+    // Remove existing set_surface_size step
+    setSteps(prev => prev.filter(s => s.type !== 'set_surface_size'));
+
+    // Add new one at the beginning
+    if (dev.id) {
+      const sizeStep: TestStep = {
+        id: `device_size_${Date.now()}`,
+        type: 'set_surface_size',
+        value: String(dev.w),
+        value2: String(dev.h),
+      };
+      setSteps(prev => [sizeStep, ...prev]);
+    }
+  };
+
   // Load runners on mount (no auto-scan)
   useEffect(() => {
     const load = async () => {
@@ -415,6 +443,19 @@ const VisualTestBuilder: React.FC = () => {
     };
     load();
   }, []);
+
+  // Close device picker on outside click
+  useEffect(() => {
+    if (!showDevicePicker) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-device-picker]')) {
+        setShowDevicePicker(false);
+      }
+    };
+    setTimeout(() => document.addEventListener('mousedown', handler), 100);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showDevicePicker]);
 
   const handleScan = async () => {
     if (!codebasePath.trim()) {
@@ -625,6 +666,47 @@ const VisualTestBuilder: React.FC = () => {
               </select>
             </div>
           )}
+
+          {/* Device Picker */}
+          <div className="flex flex-col gap-1 relative" data-device-picker>
+            <Label className="text-xs text-muted-foreground">Device:</Label>
+            <div className="relative">
+              <button
+                onClick={() => setShowDevicePicker(!showDevicePicker)}
+                className="flex items-center gap-2 px-3 py-2 rounded border bg-background hover:bg-muted transition-colors text-xs min-w-[140px]"
+              >
+                <span className="text-base">{currentDevice.icon}</span>
+                <span className="truncate text-left">{selectedDevice ? currentDevice.label : 'Default (375x812)'}</span>
+                <span className="text-[10px] text-muted-foreground ml-auto">▼</span>
+              </button>
+              {showDevicePicker && (
+                <div className="absolute left-0 top-full mt-1 bg-card border rounded-lg shadow-lg w-72 z-50">
+                  {['Default', 'iOS', 'Android', 'Tablet'].map(category => {
+                    const devices = MOBILE_DEVICES.filter(d => d.category === category);
+                    if (devices.length === 0) return null;
+                    return (
+                      <div key={category} className="p-2">
+                        <div className="text-[10px] font-semibold text-muted-foreground uppercase px-2 mb-1">{category}</div>
+                        {devices.map(d => (
+                          <button
+                            key={d.id || 'default'}
+                            onClick={() => { applyDevice(d.id); setShowDevicePicker(false); }}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
+                              selectedDevice === d.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                            }`}
+                          >
+                            <span>{d.icon}</span>
+                            <span className="truncate flex-1 text-left">{d.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="flex flex-col gap-1 self-end">
             <Button onClick={handleScan} disabled={scanning} size="sm">
               {scanning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Scan className="w-3 h-3 mr-1" />}
@@ -829,7 +911,16 @@ const VisualTestBuilder: React.FC = () => {
         {/* Right: Code + Results */}
         <div className="col-span-4">
           <Card className="h-full">
-            <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Code2 className="w-4 h-4" /> Generated Code</CardTitle></CardHeader>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2"><Code2 className="w-4 h-4" /> Generated Code</CardTitle>
+                {selectedDevice && (
+                  <Badge variant="outline" className="text-xs">
+                    {currentDevice.icon} {currentDevice.label.split('(')[0].trim()} ({currentDevice.w}x{currentDevice.h})
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
             <CardContent className="pt-0 space-y-3">
               <div className="flex gap-2 items-center flex-wrap">
                 <Button onClick={handleGenerate} disabled={generating || steps.length === 0} size="sm">

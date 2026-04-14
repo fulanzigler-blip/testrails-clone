@@ -74,6 +74,22 @@ export default async function webIntegrationRoutes(fastify: FastifyInstance) {
         { type: 'screenshot', label: 'Screenshot', icon: 'Eye', desc: 'Take a screenshot', category: 'Utilities' },
         { type: 'set_viewport', label: 'Set Viewport', icon: 'Type', desc: 'Set browser viewport size', category: 'Utilities' },
       ],
+      devices: {
+        desktop: [
+          { id: '', label: 'Desktop (1280x720)', icon: '🖥️' },
+          { id: '1920x1080', label: 'Full HD (1920x1080)', icon: '🖥️' },
+          { id: '1440x900', label: 'Laptop (1440x900)', icon: '💻' },
+        ],
+        mobile: [
+          { id: 'iPhone 15', label: 'iPhone 15 (393x852)', icon: '📱' },
+          { id: 'iPhone 14', label: 'iPhone 14 (390x844)', icon: '📱' },
+          { id: 'Pixel 7', label: 'Google Pixel 7 (412x892)', icon: '📱' },
+          { id: 'Pixel 5', label: 'Google Pixel 5 (393x851)', icon: '📱' },
+          { id: 'Galaxy S23', label: 'Samsung Galaxy S23 (384x854)', icon: '📱' },
+          { id: 'iPad Mini', label: 'iPad Mini (768x1024)', icon: '📟' },
+          { id: 'iPad Pro 11', label: 'iPad Pro 11" (834x1194)', icon: '📟' },
+        ],
+      },
     });
   });
 
@@ -101,8 +117,9 @@ export default async function webIntegrationRoutes(fastify: FastifyInstance) {
     try {
       const body = generateWebTestSchema.parse(request.body);
       const steps: WebTestStep[] = body.steps as WebTestStep[];
+      const device = (body as any).device;
 
-      const code = generatePlaywrightCode(steps, body.baseUrl);
+      const code = generatePlaywrightCode(steps, body.baseUrl, device);
 
       return successResponse(reply, { playwrightCode: code });
     } catch (err: any) {
@@ -116,9 +133,10 @@ export default async function webIntegrationRoutes(fastify: FastifyInstance) {
     try {
       const body = runWebTestSchema.parse(request.body);
       const steps: WebTestStep[] = body.steps as WebTestStep[];
+      const device = (body as any).device;
 
-      logger.info(`[WebTest] Running test with ${steps.length} steps`);
-      const result = await runWebTest(steps, body.baseUrl);
+      logger.info(`[WebTest] Running test with ${steps.length} steps${device ? ` (device: ${device})` : ''}`);
+      const result = await runWebTest(steps, body.baseUrl, device);
 
       return successResponse(reply, {
         success: result.success,

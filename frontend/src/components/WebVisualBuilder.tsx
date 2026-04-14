@@ -5,6 +5,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { MOBILE_DEVICES, type MobileDevice, DEVICE_CATEGORIES } from '../config/devices';
 import {
   Scan, Play, Loader2, CheckCircle2, XCircle, GripVertical,
   FileText, Type, MousePointerClick, Clock, Terminal, Code2, AlertTriangle,
@@ -68,6 +69,12 @@ interface WebTestStep {
   value?: string;
   value2?: string;
   text?: string;
+  // Smart locator metadata (from scraper)
+  role?: string;
+  label?: string;
+  placeholder?: string;
+  tag?: string;
+  fallbackSelectors?: string[];
 }
 
 interface WebTestResult {
@@ -205,7 +212,14 @@ const StepRow: React.FC<{
               value={step.elementId || ''}
               onChange={(e) => {
                 const el = catalog?.inputs.find(i => i.id === e.target.value);
-                onUpdate(step.id, { elementId: e.target.value, selector: el?.selector || '' });
+                onUpdate(step.id, {
+                  elementId: e.target.value,
+                  selector: el?.selector || '',
+                  label: el?.label || el?.placeholder,
+                  placeholder: el?.placeholder,
+                  tag: el?.tag || el?.type,
+                  fallbackSelectors: el?.fallbackSelectors,
+                });
               }}
             >
               <option value="">Select input field...</option>
@@ -234,7 +248,14 @@ const StepRow: React.FC<{
                 const btn = catalog?.buttons.find(b => b.id === e.target.value);
                 const txt = catalog?.texts.find(t => t.id === e.target.value);
                 const el = btn || txt;
-                onUpdate(step.id, { elementId: e.target.value, selector: el?.selector || '' });
+                onUpdate(step.id, {
+                  elementId: e.target.value,
+                  selector: el?.selector || '',
+                  text: el?.text || (el as any)?.label,
+                  tag: el?.tag,
+                  role: el?.role || 'button',
+                  fallbackSelectors: el?.fallbackSelectors,
+                });
               }}
             >
               <option value="">Select element...</option>
@@ -308,7 +329,14 @@ const StepRow: React.FC<{
                 const txt = catalog?.texts.find(t => t.id === e.target.value);
                 const inp = catalog?.inputs.find(i => i.id === e.target.value);
                 const el = btn || txt || inp;
-                onUpdate(step.id, { elementId: e.target.value, selector: el?.selector || '' });
+                onUpdate(step.id, {
+                  elementId: e.target.value,
+                  selector: el?.selector || '',
+                  text: el?.text || '',
+                  tag: el?.tag,
+                  role: el?.role,
+                  fallbackSelectors: el?.fallbackSelectors,
+                });
               }}
             >
               <option value="">Select element...</option>
@@ -412,6 +440,21 @@ const WebVisualBuilder: React.FC = () => {
   const [error, setError] = useState('');
   const [savingTestCase, setSavingTestCase] = useState(false);
   const [savedTestCase, setSavedTestCase] = useState<{id: string; title: string} | null>(null);
+  const [devices, setDevices] = useState<{ desktop: any[]; mobile: any[] }>({ desktop: [], mobile: [] });
+  const [selectedDevice, setSelectedDevice] = useState<string>('');
+  const [showDevicePicker, setShowDevicePicker] = useState(false);
+
+  // Load devices on mount
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const resp = await api.get('/web-tests/web-test-steps');
+        const data = resp.data?.data || resp.data;
+        if (data?.devices) setDevices(data.devices);
+      } catch {}
+    };
+    load();
+  }, []);
 
   const handleScan = async () => {
     if (!targetUrl.trim()) {
@@ -470,6 +513,7 @@ const WebVisualBuilder: React.FC = () => {
       const resp = await api.post('/web-tests/generate', {
         steps,
         baseUrl: catalog?.baseUrl || undefined,
+        device: selectedDevice || undefined,
       });
       setGeneratedCode(resp.data?.data?.playwrightCode || '');
     } catch (err: any) {
@@ -489,6 +533,7 @@ const WebVisualBuilder: React.FC = () => {
       const resp = await api.post('/web-tests/run', {
         steps,
         baseUrl: catalog?.baseUrl || undefined,
+        device: selectedDevice || undefined,
       }, { timeout: 120000 });
       setTestResult({
         success: resp.data?.data?.success ?? resp.data?.success ?? false,
@@ -547,7 +592,57 @@ const WebVisualBuilder: React.FC = () => {
           <h1 className="text-2xl font-bold">Web Visual Builder</h1>
           <p className="text-muted-foreground">Scan a website, pick elements, compose Playwright test scenarios</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* Device Picker */}
+          <div className="relative">
+            <button
+              onClick={() => setShowDevicePicker(!showDevicePicker)}
+              className="flex items-center gap-2 px-3 py-2 rounded border bg-background hover:bg-muted transition-colors text-sm"
+            >
+              <span className="text-lg">{selectedDevice ? (devices.mobile.find(d => d.id === selectedDevice)?.icon || devices.desktop.find(d => d.id === selectedDevice)?.icon || '🖥️') : '🖥️'}</span>
+              <span className="text-sm">{selectedDevice ? (devices.mobile.find(d => d.id === selectedDevice)?.label || devices.desktop.find(d => d.id === selectedDevice)?.label || 'Desktop') : 'Desktop'}</span>
+              <span className="text-xs text-muted-foreground">▼</span>
+            </button>
+            {showDevicePicker && (
+              <div className="absolute right-0 top-full mt-1 bg-card border rounded-lg shadow-lg w-64 z-50">
+                <div className="p-3">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Desktop</div>
+                  <div className="space-y-1">
+                    {devices.desktop.map(d => (
+                      <button
+                        key={d.id || 'default'}
+                        onClick={() => { setSelectedDevice(d.id); setShowDevicePicker(false); }}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors ${
+                          selectedDevice === d.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                        }`}
+                      >
+                        <span>{d.icon}</span>
+                        <span className="truncate">{d.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="border-t p-3">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Mobile</div>
+                  <div className="space-y-1">
+                    {devices.mobile.map(d => (
+                      <button
+                        key={d.id}
+                        onClick={() => { setSelectedDevice(d.id); setShowDevicePicker(false); }}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors ${
+                          selectedDevice === d.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                        }`}
+                      >
+                        <span>{d.icon}</span>
+                        <span className="truncate">{d.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* URL Input */}
           <div className="flex flex-col gap-1">
             <Label className="text-xs text-muted-foreground">Target URL:</Label>

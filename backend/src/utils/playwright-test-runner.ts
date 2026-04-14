@@ -1,7 +1,8 @@
-import { chromium, Browser, BrowserContext, Page } from 'playwright';
+import { chromium, devices, Browser, BrowserContext, Page } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
 import logger from '../utils/logger';
+import { smartLocate, LocatorContext } from './smart-locator';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -13,6 +14,11 @@ export interface WebTestStep {
   value?: string;
   value2?: string;
   text?: string;
+  // Extended locator data from scraper
+  role?: string;
+  label?: string;
+  placeholder?: string;
+  tag?: string;
 }
 
 export interface WebTestResult {
@@ -35,6 +41,20 @@ function ensureOutputDir(): string {
   return runDir;
 }
 
+/**
+ * Build LocatorContext from a test step + element metadata.
+ */
+function buildLocatorCtx(step: WebTestStep): LocatorContext {
+  return {
+    selector: step.selector,
+    role: step.role,
+    text: step.text || step.value,
+    label: step.label,
+    placeholder: step.placeholder,
+    tag: step.tag,
+  };
+}
+
 async function executeStep(
   page: Page,
   step: WebTestStep,
@@ -54,64 +74,65 @@ async function executeStep(
     }
 
     case 'tap': {
-      const selector = step.selector || step.value || '';
-      logs.push(`Clicking: ${selector}`);
-      // Wait for element to be visible first
-      try {
-        await page.locator(selector).waitFor({ state: 'visible', timeout: 10000 });
-      } catch {
-        logs.push(`  → Element not found, trying alternative...`);
-      }
-      const locator = page.locator(selector).first();
-      const count = await locator.count();
-      if (count === 0) {
-        throw new Error(`Element "${selector}" not found on page`);
-      }
-      await locator.click({ timeout: 5000 });
+      const ctx = buildLocatorCtx(step);
+      logs.push(`Clicking: ${ctx.selector || ctx.text || 'unknown'}`);
+      const result = await smartLocate(page, ctx);
+      if (!result.locator) throw new Error(`Element not found. Tried: ${ctx.selector || ctx.text}`);
+      logs.push(`  → Found via: ${result.strategy} ("${result.selector}")`);
+      await result.locator.click({ timeout: 5000 });
       await page.waitForTimeout(300);
       logs.push(`  → Clicked`);
       break;
     }
 
     case 'enter_text': {
-      const selector = step.selector || '';
-      const value = step.value || '';
-      logs.push(`Entering "${value}" into: ${selector}`);
-      await page.locator(selector).click({ timeout: 10000 });
-      await page.locator(selector).fill(value, { timeout: 10000 });
+      const ctx = buildLocatorCtx(step);
+      logs.push(`Entering "${step.value || ''}" into: ${ctx.selector || ctx.label || ctx.placeholder || 'unknown'}`);
+      const result = await smartLocate(page, ctx);
+      if (!result.locator) throw new Error(`Input not found. Tried: ${ctx.selector || ctx.label || ctx.placeholder}`);
+      logs.push(`  → Found via: ${result.strategy} ("${result.selector}")`);
+      await result.locator.click();
+      await result.locator.fill(step.value || '', { timeout: 5000 });
       logs.push(`  → Filled`);
       break;
     }
 
     case 'hover': {
-      const selector = step.selector || step.value || '';
-      logs.push(`Hovering: ${selector}`);
-      await page.locator(selector).hover({ timeout: 10000 });
+      const ctx = buildLocatorCtx(step);
+      logs.push(`Hovering: ${ctx.selector || ctx.text || 'unknown'}`);
+      const result = await smartLocate(page, ctx);
+      if (!result.locator) throw new Error(`Element not found. Tried: ${ctx.selector || ctx.text}`);
+      await result.locator.hover({ timeout: 5000 });
       logs.push(`  → Hovered`);
       break;
     }
 
     case 'select': {
-      const selector = step.selector || '';
-      const value = step.value || '';
-      logs.push(`Selecting "${value}" from: ${selector}`);
-      await page.locator(selector).selectOption(value, { timeout: 10000 });
+      const ctx = buildLocatorCtx(step);
+      logs.push(`Selecting "${step.value || ''}" from: ${ctx.selector || 'unknown'}`);
+      const result = await smartLocate(page, ctx);
+      if (!result.locator) throw new Error(`Dropdown not found. Tried: ${ctx.selector}`);
+      await result.locator.selectOption(step.value || '', { timeout: 5000 });
       logs.push(`  → Selected`);
       break;
     }
 
     case 'check': {
-      const selector = step.selector || step.value || '';
-      logs.push(`Checking: ${selector}`);
-      await page.locator(selector).check({ timeout: 10000 });
+      const ctx = buildLocatorCtx(step);
+      logs.push(`Checking: ${ctx.selector || ctx.label || 'unknown'}`);
+      const result = await smartLocate(page, ctx);
+      if (!result.locator) throw new Error(`Checkbox not found. Tried: ${ctx.selector || ctx.label}`);
+      await result.locator.check({ timeout: 5000 });
       logs.push(`  → Checked`);
       break;
     }
 
     case 'uncheck': {
-      const selector = step.selector || step.value || '';
-      logs.push(`Unchecking: ${selector}`);
-      await page.locator(selector).uncheck({ timeout: 10000 });
+      const ctx = buildLocatorCtx(step);
+      logs.push(`Unchecking: ${ctx.selector || ctx.label || 'unknown'}`);
+      const result = await smartLocate(page, ctx);
+      if (!result.locator) throw new Error(`Checkbox not found. Tried: ${ctx.selector || ctx.label}`);
+      await result.locator.uncheck({ timeout: 5000 });
       logs.push(`  → Unchecked`);
       break;
     }
@@ -126,38 +147,46 @@ async function executeStep(
     }
 
     case 'assert_visible': {
-      const selector = step.selector || step.value || '';
-      logs.push(`Asserting visible: ${selector}`);
-      const locator = page.locator(selector);
-      const isVisible = await locator.first().isVisible({ timeout: 10000 });
-      if (!isVisible) throw new Error(`Assertion failed: "${selector}" is not visible`);
-      logs.push(`  → Visible ✓`);
+      const ctx = buildLocatorCtx(step);
+      logs.push(`Asserting visible: ${ctx.selector || ctx.text || 'unknown'}`);
+      const result = await smartLocate(page, ctx);
+      if (!result.locator) throw new Error(`Element not found for assertion. Tried: ${ctx.selector || ctx.text}`);
+      await result.locator.first().waitFor({ state: 'visible', timeout: 10000 });
+      logs.push(`  → Visible ✓ (via ${result.strategy})`);
       break;
     }
 
     case 'assert_not_visible': {
-      const selector = step.selector || step.value || '';
-      logs.push(`Asserting not visible: ${selector}`);
-      const locator = page.locator(selector);
-      const count = await locator.count();
-      if (count > 0) {
-        const isVisible = await locator.first().isVisible();
-        if (isVisible) throw new Error(`Assertion failed: "${selector}" is visible but should be hidden`);
+      const ctx = buildLocatorCtx(step);
+      logs.push(`Asserting not visible: ${ctx.selector || ctx.text || 'unknown'}`);
+      const result = await smartLocate(page, { ...ctx }, 3000);
+      if (!result.locator) {
+        logs.push(`  → Not visible ✓ (not found)`);
+      } else {
+        const isVisible = await result.locator.first().isVisible().catch(() => false);
+        if (isVisible) throw new Error(`Element "${ctx.selector || ctx.text}" is visible but should be hidden`);
+        logs.push(`  → Not visible ✓ (found but hidden)`);
       }
-      logs.push(`  → Not visible ✓`);
       break;
     }
 
     case 'assert_text': {
-      const selector = step.selector || '';
+      const ctx = buildLocatorCtx(step);
       const expectedText = step.text || step.value || '';
       logs.push(`Asserting text contains: "${expectedText}"`);
-      const locator = page.locator(selector || 'body');
-      const text = await locator.first().textContent({ timeout: 10000 });
-      if (!text?.includes(expectedText)) {
-        throw new Error(`Assertion failed: text "${text?.slice(0, 100)}" does not contain "${expectedText}"`);
+      // If selector provided, assert on that element; otherwise assert on body
+      let result: any;
+      if (ctx.selector) {
+        result = await smartLocate(page, ctx);
+        if (!result.locator) throw new Error(`Element not found for text assertion. Tried: ${ctx.selector}`);
+      } else {
+        result = { locator: page.locator('body'), strategy: 'body', selector: 'body' };
       }
-      logs.push(`  → Text found ✓`);
+      const text = await result.locator.first().textContent({ timeout: 10000 });
+      if (!text?.includes(expectedText)) {
+        throw new Error(`Text "${text?.slice(0, 100)}" does not contain "${expectedText}"`);
+      }
+      logs.push(`  → Text found ✓ (via ${result.strategy})`);
       break;
     }
 
@@ -195,10 +224,16 @@ async function executeStep(
 export async function runWebTest(
   steps: WebTestStep[],
   baseUrl?: string,
+  device?: string,
 ): Promise<WebTestResult> {
   const startTime = Date.now();
   const outputDir = ensureOutputDir();
   const logs: string[] = ['=== Web Test Run ===', ''];
+
+  if (device) {
+    logs.push(`Device: ${device}`);
+  }
+  logs.push('');
 
   let browser: Browser | null = null;
   let context: BrowserContext | null = null;
@@ -206,10 +241,45 @@ export async function runWebTest(
 
   try {
     browser = await chromium.launch({ headless: true });
-    context = await browser.newContext({
-      viewport: { width: 1280, height: 720 },
-      recordVideo: { dir: outputDir },
-    });
+
+    // Apply device emulation if specified
+    if (device && devices[device]) {
+      const deviceConfig = devices[device];
+      logs.push(`→ Using Playwright device preset: ${device}`);
+      logs.push(`  Viewport: ${deviceConfig.viewport?.width}x${deviceConfig.viewport?.height}`);
+      logs.push(`  User Agent: ${deviceConfig.userAgent?.slice(0, 80)}...`);
+      logs.push('');
+      context = await browser.newContext({
+        ...deviceConfig,
+        recordVideo: { dir: outputDir },
+      });
+    } else if (device) {
+      // Custom viewport format: "widthxheight"
+      const match = device.match(/^(\d+)x(\d+)$/);
+      if (match) {
+        const w = parseInt(match[1]);
+        const h = parseInt(match[2]);
+        logs.push(`→ Using custom viewport: ${w}x${h}`);
+        logs.push('');
+        context = await browser.newContext({
+          viewport: { width: w, height: h },
+          recordVideo: { dir: outputDir },
+        });
+      } else {
+        logs.push(`→ Unknown device: ${device} (using default desktop)`);
+        logs.push('');
+        context = await browser.newContext({
+          viewport: { width: 1280, height: 720 },
+          recordVideo: { dir: outputDir },
+        });
+      }
+    } else {
+      // Default desktop
+      context = await browser.newContext({
+        viewport: { width: 1280, height: 720 },
+        recordVideo: { dir: outputDir },
+      });
+    }
     page = await context.newPage();
 
     // Capture console logs (filter out analytics/tracking noise)
@@ -250,6 +320,47 @@ export async function runWebTest(
         logs.push(stepLog);
       } catch (err: any) {
         logs.push(`  ❌ ERROR: ${err.message}`);
+
+        // Try to capture available elements for debugging
+        try {
+          const availableElements = await page!.evaluate(() => {
+            const buttons = Array.from(globalThis.document.querySelectorAll('button, [role="button"]'))
+              .map((el: any) => ({
+                tag: el.tagName,
+                text: el.textContent?.trim().slice(0, 60),
+                id: el.id || '',
+                selector: el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}`,
+              }))
+              .slice(0, 20);
+
+            const inputs = Array.from(globalThis.document.querySelectorAll('input, textarea, select'))
+              .map((el: any) => ({
+                tag: el.tagName,
+                type: el.type,
+                id: el.id || '',
+                name: el.name || '',
+                placeholder: el.placeholder || '',
+              }))
+              .slice(0, 15);
+
+            return { buttons, inputs };
+          });
+
+          if (availableElements.buttons.length > 0) {
+            logs.push('  → Available buttons on page:');
+            availableElements.buttons.forEach((b: any) => {
+              logs.push(`    - ${b.tag} "${b.text}" ${b.id ? `(id=${b.id})` : ''} ${b.selector ? `→ ${b.selector}` : ''}`);
+            });
+          }
+          if (availableElements.inputs.length > 0) {
+            logs.push('  → Available inputs on page:');
+            availableElements.inputs.forEach((inp: any) => {
+              logs.push(`    - ${inp.tag}[${inp.type}] ${inp.id ? `(id=${inp.id})` : ''} ${inp.name ? `(name=${inp.name})` : ''} "${inp.placeholder}"`);
+            });
+          }
+        } catch {
+          // Page might be in bad state, skip element listing
+        }
 
         // Take error screenshot
         const errorScreenshot = path.join(outputDir, `error_step_${i + 1}.png`);
@@ -307,12 +418,36 @@ export async function runWebTest(
 export function generatePlaywrightCode(
   steps: WebTestStep[],
   baseUrl?: string,
+  device?: string,
 ): string {
   const lines: string[] = [
-    `import { test, expect } from '@playwright/test';`,
+    `import { test, expect, devices } from '@playwright/test';`,
     '',
-    `test('Web Test', async ({ page }) => {`,
   ];
+
+  // Device config
+  if (device) {
+    lines.push(`// Device: ${device}`);
+    lines.push(`export const test = test.extend({`);
+    lines.push(`  context: async ({ browser }, use) => {`);
+    if (devices[device as any]) {
+      lines.push(`    const context = await browser.newContext({ ...devices['${device}'] });`);
+    } else {
+      const match = device?.match(/^(\d+)x(\d+)$/);
+      if (match) {
+        lines.push(`    const context = await browser.newContext({ viewport: { width: ${match[1]}, height: ${match[2]} } });`);
+      } else {
+        lines.push(`    const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });`);
+      }
+    }
+    lines.push(`    await use(context);`);
+    lines.push(`    await context.close();`);
+    lines.push(`  },`);
+    lines.push(`});`);
+    lines.push('');
+  }
+
+  lines.push(`test('Web Test', async ({ page }) => {`);
 
   // Add base URL if provided
   if (baseUrl) {
