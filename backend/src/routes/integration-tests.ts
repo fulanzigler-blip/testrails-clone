@@ -324,7 +324,7 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
         });
       });
       client.on('error', e => { clearTimeout(timer); reject(e); });
-      client.connect({ host: runner.host, username: runner.username, privateKey: fs.readFileSync(runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519'), readyTimeout: 15000 });
+      client.connect({ host: runner.host, username: runner.username, privateKey: fs.readFileSync(runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519'), readyTimeout: 15000 });
     });
 
     if (!sftpResult.success) throw new Error('Failed to write script via SFTP');
@@ -334,7 +334,7 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
     const result = await execSSHWithConfig(execCmd, {
       host: runner.host,
       username: runner.username,
-      sshKeyPath: runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519',
+      sshKeyPath: runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519',
     }, 600000); // 10 minute timeout for flutter test
 
     const duration = Date.now() - startTime;
@@ -1093,7 +1093,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       const catalog = await scanFlutterProjectSSH({
         host: runner.host,
         username: runner.username,
-        sshKeyPath: runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519',
+        sshKeyPath: runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519',
         projectPath: runner.projectPath,
         deviceId: runner.deviceId,
       });
@@ -1184,7 +1184,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       const catalog = await scanFlutterProjectSSH({
         host: runner.host,
         username: runner.username,
-        sshKeyPath: runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519',
+        sshKeyPath: runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519',
         projectPath: runner.projectPath,
         deviceId: runner.deviceId,
       });
@@ -1217,7 +1217,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       const staticResult = await scanFlutterProjectSSH({
         host: runner.host,
         username: runner.username,
-        sshKeyPath: runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519',
+        sshKeyPath: runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519',
         projectPath: scanPath,
         deviceId: runner.deviceId,
       });
@@ -1228,7 +1228,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       const hybridConfig: HybridScannerConfig = {
         host: runner.host,
         username: runner.username,
-        sshKeyPath: runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519',
+        sshKeyPath: runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519',
         projectPath: scanPath,
       };
       const hybridResult = await hybridScanFlutterProject(hybridConfig, staticResult);
@@ -1267,7 +1267,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       const catalog = await scanFlutterProjectSSH({
         host: runner.host,
         username: runner.username,
-        sshKeyPath: runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519',
+        sshKeyPath: runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519',
         projectPath: scanPath,
         deviceId: runner.deviceId,
       });

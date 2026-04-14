@@ -6,7 +6,7 @@ import logger from './logger';
 
 const SSH_HOST: string = process.env.MAESTRO_RUNNER_HOST || '';
 const SSH_USER: string = process.env.MAESTRO_RUNNER_USER || 'clawbot';
-const SSH_KEY_PATH: string = process.env.MAESTRO_RUNNER_KEY_PATH || '/home/nodejs/.ssh/id_ed25519';
+const SSH_KEY_PATH: string = process.env.MAESTRO_RUNNER_KEY_PATH || '/home/clawdbot/.ssh/id_ed25519';
 const FLUTTER_PROJECT_PATH: string = process.env.FLUTTER_PROJECT_PATH || '';
 
 let cachedKey: Buffer | null = null;
