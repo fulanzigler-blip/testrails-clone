@@ -1,6 +1,8 @@
 import { Client } from 'ssh2';
 import * as fs from 'fs';
 import { validateScannerConfig, ScannerConfig } from '../config/schemas';
+import { getCached, setCached, getScanCacheKey } from './scan-cache';
+import logger from './logger';
 
 const SSH_HOST: string = process.env.MAESTRO_RUNNER_HOST || '';
 const SSH_USER: string = process.env.MAESTRO_RUNNER_USER || 'clawbot';
@@ -296,6 +298,14 @@ export async function scanFlutterProjectSSH(config?: unknown): Promise<ElementCa
   const sshKeyPath = validatedConfig?.sshKeyPath || SSH_KEY_PATH;
   const deviceId = validatedConfig?.deviceId;
 
+  // Check cache first (30 minute TTL)
+  const cacheKey = getScanCacheKey(path, deviceId);
+  const cached = await getCached<ElementCatalog>(cacheKey, '');
+  if (cached) {
+    logger.info(`[ElementScanner] Using cached scan for ${cacheKey}`);
+    return cached;
+  }
+
   const catalog: ElementCatalog = {
     packageName: '', projectPath: path, scannedAt: new Date().toISOString(),
     screens: [], inputs: [], buttons: [], texts: [], routes: [], source: 'ssh',
@@ -368,6 +378,10 @@ export async function scanFlutterProjectSSH(config?: unknown): Promise<ElementCa
   // Deduplicate texts
   const seen = new Set<string>();
   catalog.texts = catalog.texts.filter(t => { if (seen.has(t.text)) return false; seen.add(t.text); return true; });
+
+  // Save to cache (30 minute TTL)
+  setCached(cacheKey, '', catalog);
+  logger.info(`[ElementScanner] Cached scan result for ${cacheKey} (TTL: 30min)`);
 
   return catalog;
 }
