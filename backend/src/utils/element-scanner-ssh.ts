@@ -197,13 +197,22 @@ function extractElements(content: string): { inputs: ScreenElement['inputs']; bu
     const semanticsMatch = nearby.match(/label:\s*['"]([^'"]+)['"]/);
     const semanticsLabel = semanticsMatch?.[1];
 
-    // Determine button type
-    const btnTypeMatch = line.match(/(ElevatedButton|TextButton|OutlinedButton|IconButton|FloatingActionButton|PopupMenuButton|InkWell|GestureDetector|RawMaterialButton|Tooltip)\s*\(/);
+    // Determine button type - includes custom widgets
+    const btnTypeMatch = line.match(/(ElevatedButton|TextButton|OutlinedButton|IconButton|FloatingActionButton|PopupMenuButton|InkWell|GestureDetector|RawMaterialButton|Tooltip|CustomTextButton|CustomElevatedButton|CustomOutlinedButton|CustomIconButton)\s*\(/);
 
     if (btnTypeMatch) {
       const btnType = btnTypeMatch[1];
       let textMatch = nearby.match(/Text\(\s*(?:const\s+)?['"]([^'"]{2,20})['"]\s*\)/);
       let text = textMatch?.[1];
+
+      // For custom buttons like CustomTextButton, extract label parameter
+      if (btnType.startsWith('Custom') && !text) {
+        const labelMatch = nearby.match(/label:\s*['"]([^'"]+)['"]/);
+        if (labelMatch) {
+          text = labelMatch[1];
+        }
+      }
+
       const iconMatch = nearby.match(/Icon\(\s*(?:const\s+)?Icons\.(\w+)/);
       const iconName = iconMatch?.[1];
 
