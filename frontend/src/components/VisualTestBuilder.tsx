@@ -885,6 +885,7 @@ const VisualTestBuilder: React.FC = () => {
                     )}
                   </div>
                   {expandedScreens.has(screen.name) && (
+                    <>
                     {screen.inputs && screen.inputs.length > 0 && (
                       <div>
                         <div className="text-muted-foreground font-medium mb-1">Inputs ({screen.inputs.length})</div>
@@ -946,8 +947,8 @@ const VisualTestBuilder: React.FC = () => {
                     {(!screen.inputs?.length && !screen.buttons?.length && !screen.texts?.length) && (
                       <div className="text-muted-foreground">No elements detected</div>
                     )}
-                    )}
-                  </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
