@@ -152,8 +152,9 @@ function extractElements(content: string): { inputs: ScreenElement['inputs']; bu
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const nearby = lines.slice(i, Math.min(i + 12, lines.length)).join('\n');
-    const fullNearby = lines.slice(i, Math.min(i + 20, lines.length)).join('\n');
+    // Increase look-ahead range to catch widgets nested in Stack, IndexedStack, etc.
+    const nearby = lines.slice(i, Math.min(i + 25, lines.length)).join('\n');
+    const fullNearby = lines.slice(i, Math.min(i + 40, lines.length)).join('\n');
 
     // ─── Input Fields ───
     if (line.includes('TextFormField') || line.includes('TextField(')) {
