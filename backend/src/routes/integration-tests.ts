@@ -463,37 +463,82 @@ void main() {
 
         // Longer delay to let keyboard auto-dismiss from previous text entry
         code += `    await tester.pump(const Duration(milliseconds: 500));\n`;
-        
-        // Generate correct finder based on button type and detected attributes
-        if (button?.finderStrategy) {
-          switch (button.finderStrategy) {
-            case 'text':
-              code += `    await tester.tap(find.text('${button.finderValue}'), warnIfMissed: false);\n`;
-              break;
-            case 'icon':
-              code += `    await tester.tap(find.byIcon(Icons.${button.finderValue}), warnIfMissed: false);\n`;
-              break;
-            case 'key':
-              code += `    await tester.tap(find.byKey(const ValueKey('${button.finderValue}')));\n`;
-              break;
-            case 'tooltip':
-              code += `    await tester.tap(find.byTooltip('${button.finderValue}'), warnIfMissed: false);\n`;
-              break;
-            case 'semantics':
-              code += `    await tester.tap(find.bySemanticsLabel('${button.finderValue}'), warnIfMissed: false);\n`;
-              break;
-            case 'type':
-            default:
-              code += `    await tester.tap(find.byType(${button.finderValue}), warnIfMissed: false);\n`;
-              break;
+
+        // Smart selector: try multiple finder strategies with fallback
+        // Priority: key > semantics/tooltip > text > type > icon
+        const tryTapStrategies = (primaryFinder?: string, fallbackFinders?: string[]) => {
+          if (primaryFinder) {
+            code += `    // Try primary finder first\n`;
+            code += `    try {\n`;
+            code += `      await tester.tap(${primaryFinder});\n`;
+            code += `      await tester.pumpAndSettle();\n`;
+            code += `    } catch (e) {\n`;
+            if (fallbackFinders && fallbackFinders.length > 0) {
+              fallbackFinders.forEach((fallback, idx) => {
+                code += `      try {\n`;
+                code += `        await tester.tap(${fallback});\n`;
+                code += `        await tester.pumpAndSettle();\n`;
+                if (idx < fallbackFinders.length - 1) {
+                  code += `      } catch (e${idx + 1}) {\n`;
+                } else {
+                  code += `      } catch (e2) {\n`;
+                  code += `        throw Exception('Failed to tap button: all strategies failed');\n`;
+                  code += `      }\n`;
+                }
+              });
+            } else {
+              code += `      throw e;\n`;
+            }
+            code += `    }\n`;
+          } else {
+            // No primary finder, use fallback only
+            if (fallbackFinders && fallbackFinders.length > 0) {
+              fallbackFinders.forEach((fallback, idx) => {
+                code += `    try {\n`;
+                code += `      await tester.tap(${fallback});\n`;
+                if (idx < fallbackFinders.length - 1) {
+                  code += `      await tester.pumpAndSettle();\n`;
+                  code += `    } catch (e${idx}) {\n`;
+                } else {
+                  code += `      await tester.pumpAndSettle();\n`;
+                }
+              });
+              // Close all try-catch blocks
+              for (let i = 1; i < fallbackFinders.length; i++) {
+                code += `    }\n`;
+              }
+            }
           }
-        } else if (button?.iconName) {
-          // Fallback: icon button
-          code += `    await tester.tap(find.byIcon(Icons.${button.iconName}), warnIfMissed: false);\n`;
+        };
+
+        // Build finder strategies based on button properties
+        if (button?.finderStrategy === 'key') {
+          // Key is most reliable - use directly
+          code += `    await tester.tap(find.byKey(const ValueKey('${button.finderValue}')));\n`;
+        } else if (button?.finderStrategy === 'semantics') {
+          code += `    await tester.tap(find.bySemanticsLabel('${button.finderValue}'));\n`;
+        } else if (button?.finderStrategy === 'tooltip') {
+          code += `    await tester.tap(find.byTooltip('${button.finderValue}'));\n`;
         } else {
-          // Fallback: text button
-          code += `    await tester.tap(find.text('${btnText}'), warnIfMissed: false);\n`;
+          // For text/type/icon finders, use smart fallback
+          const fallbackFinders: string[] = [];
+
+          if (button?.finderStrategy === 'text') {
+            fallbackFinders.push(`find.text('${button.finderValue}')`);
+          }
+          if (button?.type) {
+            fallbackFinders.push(`find.byType(${button.type}).first`);
+          }
+          if (button?.iconName) {
+            fallbackFinders.push(`find.byIcon(Icons.${button.iconName})`);
+          }
+          if (button?.text && button?.finderStrategy !== 'text') {
+            fallbackFinders.push(`find.text('${button.text}')`);
+          }
+
+          tryTapStrategies(undefined, fallbackFinders);
         }
+
         code += `    await tester.pump(const Duration(seconds: 2));\n`;
         code += `    await tester.pumpAndSettle();\n`;
         break;
