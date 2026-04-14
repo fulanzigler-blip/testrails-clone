@@ -329,32 +329,55 @@ export async function scanFlutterProjectSSH(config?: unknown): Promise<ElementCa
   //   - *_view.dart (Stacked/MVC pattern, used by Raya-dev)
   //   - *_widget.dart (standalone widgets with complex UI)
   const screenResult = await execSSHWithConfig(
-    `find "${path}/lib" -type f \\( -name "*screen*.dart" -o -name "*_page.dart" -o -name "*_view.dart" \\) 2>/dev/null | head -100`,
+    `find "${path}/lib" -type f \\( -name "*screen*.dart" -o -name "*_page.dart" -o -name "*_view.dart" \\) 2>/dev/null`,
     config, 30000
   );
   const screenFiles = screenResult.output.split('\n').filter(Boolean);
 
-  for (const file of screenFiles) {
-    const contentResult = await execSSHWithConfig(`cat "${file}" 2>/dev/null`, config, 15000);
-    const content = contentResult.output;
-    const fileName = file.split('/').pop()?.replace('.dart', '') || '';
-    const screenName = fileName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    const route = catalog.routes.find(r => r.toLowerCase().includes(fileName.toLowerCase().replace('_screen', '').replace('_page', '').replace('_view', '')));
-    const elements = extractElements(content);
+  // Process files in parallel batches for better performance
+  const BATCH_SIZE = 20;
+  for (let i = 0; i < screenFiles.length; i += BATCH_SIZE) {
+    const batch = screenFiles.slice(i, Math.min(i + BATCH_SIZE, screenFiles.length));
+    const batchResults = await Promise.all(
+      batch.map(async (file) => {
+        try {
+          const contentResult = await execSSHWithConfig(`cat "${file}" 2>/dev/null`, config, 15000);
+          const content = contentResult.output;
+          const fileName = file.split('/').pop()?.replace('.dart', '') || '';
+          const screenName = fileName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          const route = catalog.routes.find(r => r.toLowerCase().includes(fileName.toLowerCase().replace('_screen', '').replace('_page', '').replace('_view', '')));
+          const elements = extractElements(content);
+          return { file, screenName, route, elements };
+        } catch (e) {
+          logger.warn(`[ElementScanner] Failed to scan ${file}: ${e}`);
+          return null;
+        }
+      })
+    );
 
-    catalog.screens.push({ name: screenName, file, route, ...elements });
-    for (const inp of elements.inputs) {
-      catalog.inputs.push({ ...inp, screen: screenName });
-      if (inp.hasOnFieldSubmitted) {
-        catalog.auth = catalog.auth || { flow: 'onFieldSubmitted', credentials: [] };
-        catalog.auth.flow = 'onFieldSubmitted';
+    for (const result of batchResults) {
+      if (!result) continue;
+      const { file, screenName, route, elements } = result;
+
+      catalog.screens.push({ name: screenName, file, route, ...elements });
+      for (const inp of elements.inputs) {
+        catalog.inputs.push({ ...inp, screen: screenName });
+        if (inp.hasOnFieldSubmitted) {
+          catalog.auth = catalog.auth || { flow: 'onFieldSubmitted', credentials: [] };
+          catalog.auth.flow = 'onFieldSubmitted';
+        }
+      }
+      for (const btn of elements.buttons) {
+        catalog.buttons.push({ ...btn, screen: screenName });
+      }
+      for (const txt of elements.texts) {
+        catalog.texts.push({ ...txt, screen: screenName, isStatic: true });
       }
     }
-    for (const btn of elements.buttons) {
-      catalog.buttons.push({ ...btn, screen: screenName });
-    }
-    for (const txt of elements.texts) {
-      catalog.texts.push({ ...txt, screen: screenName, isStatic: true });
+
+    // Log progress every batch
+    if ((i / BATCH_SIZE) % 5 === 0) {
+      logger.info(`[ElementScanner] Scanned ${Math.min(i + BATCH_SIZE, screenFiles.length)}/${screenFiles.length} files`);
     }
   }
 
