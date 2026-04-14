@@ -7,7 +7,7 @@ import logger from './logger';
 
 const SSH_HOST: string = process.env.MAESTRO_RUNNER_HOST || '';
 const SSH_USER: string = process.env.MAESTRO_RUNNER_USER || 'clawbot';
-const SSH_KEY_PATH: string = process.env.MAESTRO_RUNNER_KEY_PATH || '/home/nodejs/.ssh/id_ed25519';
+const SSH_KEY_PATH: string = process.env.MAESTRO_RUNNER_KEY_PATH || '/home/clawdbot/.ssh/id_ed25519';
 
 // Cache SSH key at module init
 let cachedKey: Buffer | null = null;
@@ -138,7 +138,7 @@ export interface SSHRunnerConfig {
 }
 
 async function writeFileSSHWithRunner(remotePath: string, content: string, runner: SSHRunnerConfig): Promise<void> {
-  const privateKey = fs.readFileSync(runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519');
+  const privateKey = fs.readFileSync(runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519');
   const escaped = content.replace(/'/g, "'\\''");
 
   return new Promise((resolve, reject) => {

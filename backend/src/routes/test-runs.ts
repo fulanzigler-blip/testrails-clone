@@ -431,7 +431,7 @@ export default async function testRunRoutes(fastify: FastifyInstance) {
       const runnerConfig = {
         host: runner.host,
         username: runner.username,
-        sshKeyPath: runner.sshKeyPath || '/home/nodejs/.ssh/id_ed25519',
+        sshKeyPath: runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519',
         projectPath: runner.projectPath,
         deviceId: runner.deviceId || 'emulator-5554',
       };

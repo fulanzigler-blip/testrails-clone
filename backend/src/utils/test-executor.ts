@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import logger from './logger';
 import { writeFileSSH, execSSH } from './ssh-client';
 
-const SSH_KEY_PATH = process.env.MAESTRO_RUNNER_KEY_PATH || '/home/nodejs/.ssh/id_ed25519';
+const SSH_KEY_PATH = process.env.MAESTRO_RUNNER_KEY_PATH || '/home/clawdbot/.ssh/id_ed25519';
 
 export interface RunnerConfig {
   host: string;
