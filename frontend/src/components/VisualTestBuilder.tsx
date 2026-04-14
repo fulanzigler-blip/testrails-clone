@@ -188,28 +188,56 @@ const StepRow: React.FC<{
         );
       case 'tap':
         return (
-          <div className="flex gap-2 mt-2">
-            <select
-              className="flex-1 rounded border px-3 py-2 text-sm bg-background"
-              value={step.elementId || ''}
-              onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
-            >
-              <option value="">Select button...</option>
-              {catalog?.screens.filter(s => (s.buttons?.length || 0) > 0).map(screen => (
-                <optgroup key={screen.name} label={`📱 ${screen.name}`}>
-                  {(screen.buttons || []).map(btn => (
-                    <option key={btn.id} value={btn.id}>"{btn.text}" ({btn.type})</option>
-                  ))}
-                  {(screen.texts || []).slice(0, 30).map(txt => (
-                    <option key={txt.id} value={txt.id}>
-                      {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            {catalog?.auth?.flow === 'onFieldSubmitted' && (
-              <Badge variant="outline" className="text-xs self-center">⚡ prev field auto-submits</Badge>
+          <div className="flex flex-col gap-2 mt-2">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Search buttons..."
+                value={stepSearches[step.id] || ''}
+                onChange={(e) => updateStepSearch(step.id, e.target.value)}
+                className="flex-1 h-9 text-sm"
+              />
+              <select
+                className="flex-1 rounded border px-3 py-2 text-sm bg-background"
+                value={step.elementId || ''}
+                onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
+              >
+                <option value="">Select button...</option>
+                {catalog?.screens.filter(s => (s.buttons?.length || 0) > 0).map(screen => {
+                  const searchTerm = stepSearches[step.id]?.toLowerCase() || '';
+                  const hasMatchingButton = (screen.buttons || []).some(b =>
+                    b.text?.toLowerCase().includes(searchTerm) ||
+                    b.type?.toLowerCase().includes(searchTerm) ||
+                    screen.name.toLowerCase().includes(searchTerm)
+                  ) || (screen.texts || []).some(t =>
+                    t.text?.toLowerCase().includes(searchTerm)
+                  );
+                  if (!hasMatchingButton && searchTerm) return null;
+                  return (
+                    <optgroup key={screen.name} label={`📱 ${screen.name}`}>
+                      {(screen.buttons || []).filter(btn =>
+                        !searchTerm ||
+                        btn.text?.toLowerCase().includes(searchTerm) ||
+                        btn.type?.toLowerCase().includes(searchTerm)
+                      ).map(btn => (
+                        <option key={btn.id} value={btn.id}>"{btn.text}" ({btn.type})</option>
+                      ))}
+                      {(screen.texts || []).filter(txt =>
+                        (!searchTerm || txt.text?.toLowerCase().includes(searchTerm)) &&
+                        (screen.buttons?.length || 0) === 0
+                      ).slice(0, 30).map(txt => (
+                        <option key={txt.id} value={txt.id}>
+                          {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+              </select>
+            </div>
+            {stepSearches[step.id] && (
+              <div className="text-xs text-muted-foreground">
+                Showing filtered results for "{stepSearches[step.id]}"
+              </div>
             )}
           </div>
         );
@@ -222,26 +250,47 @@ const StepRow: React.FC<{
       case 'double_tap':
       case 'long_press':
         return (
-          <div className="flex gap-2 mt-2">
-            <select
-              className="flex-1 rounded border px-3 py-2 text-sm bg-background"
-              value={step.elementId || ''}
-              onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
-            >
-              <option value="">Select element...</option>
-              {catalog?.screens.filter(s => (s.buttons?.length || 0) > 0).map(screen => (
-                <optgroup key={screen.name} label={`📱 ${screen.name}`}>
-                  {(screen.buttons || []).map(btn => (
-                    <option key={btn.id} value={btn.id}>"{btn.text}"</option>
-                  ))}
-                  {(screen.texts || []).slice(0, 30).map(txt => (
-                    <option key={txt.id} value={txt.id}>
-                      {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+          <div className="flex flex-col gap-2 mt-2">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Search elements..."
+                value={stepSearches[step.id] || ''}
+                onChange={(e) => updateStepSearch(step.id, e.target.value)}
+                className="flex-1 h-9 text-sm"
+              />
+              <select
+                className="flex-1 rounded border px-3 py-2 text-sm bg-background"
+                value={step.elementId || ''}
+                onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
+              >
+                <option value="">Select element...</option>
+                {catalog?.screens.filter(s => (s.buttons?.length || 0) > 0).map(screen => {
+                  const searchTerm = stepSearches[step.id]?.toLowerCase() || '';
+                  const hasMatch = (screen.buttons || []).some(b =>
+                    b.text?.toLowerCase().includes(searchTerm)
+                  ) || (screen.texts || []).some(t =>
+                    t.text?.toLowerCase().includes(searchTerm)
+                  ) || screen.name.toLowerCase().includes(searchTerm);
+                  if (!hasMatch && searchTerm) return null;
+                  return (
+                    <optgroup key={screen.name} label={`📱 ${screen.name}`}>
+                      {(screen.buttons || []).filter(btn =>
+                        !searchTerm || btn.text?.toLowerCase().includes(searchTerm)
+                      ).map(btn => (
+                        <option key={btn.id} value={btn.id}>"{btn.text}"</option>
+                      ))}
+                      {(screen.texts || []).filter(txt =>
+                        !searchTerm || txt.text?.toLowerCase().includes(searchTerm)
+                      ).slice(0, 30).map(txt => (
+                        <option key={txt.id} value={txt.id}>
+                          {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+              </select>
+            </div>
           </div>
         );
       case 'scroll':
@@ -255,26 +304,47 @@ const StepRow: React.FC<{
         );
       case 'scroll_until_visible':
         return (
-          <div className="flex gap-2 mt-2">
-            <select
-              className="flex-1 rounded border px-3 py-2 text-sm bg-background"
-              value={step.elementId || ''}
-              onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
-            >
-              <option value="">Select target element...</option>
-              {catalog?.screens.filter(s => (s.texts?.length || 0) > 0 || (s.buttons?.length || 0) > 0).map(screen => (
-                <optgroup key={screen.name} label={`📱 ${screen.name}`}>
-                  {(screen.buttons || []).map(btn => (
-                    <option key={btn.id} value={btn.id}>"{btn.text}"</option>
-                  ))}
-                  {(screen.texts || []).slice(0, 40).map(txt => (
-                    <option key={txt.id} value={txt.id}>
-                      {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+          <div className="flex flex-col gap-2 mt-2">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Search target element..."
+                value={stepSearches[step.id] || ''}
+                onChange={(e) => updateStepSearch(step.id, e.target.value)}
+                className="flex-1 h-9 text-sm"
+              />
+              <select
+                className="flex-1 rounded border px-3 py-2 text-sm bg-background"
+                value={step.elementId || ''}
+                onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
+              >
+                <option value="">Select target element...</option>
+                {catalog?.screens.filter(s => (s.texts?.length || 0) > 0 || (s.buttons?.length || 0) > 0).map(screen => {
+                  const searchTerm = stepSearches[step.id]?.toLowerCase() || '';
+                  const hasMatch = (screen.buttons || []).some(b =>
+                    b.text?.toLowerCase().includes(searchTerm)
+                  ) || (screen.texts || []).some(t =>
+                    t.text?.toLowerCase().includes(searchTerm)
+                  ) || screen.name.toLowerCase().includes(searchTerm);
+                  if (!hasMatch && searchTerm) return null;
+                  return (
+                    <optgroup key={screen.name} label={`📱 ${screen.name}`}>
+                      {(screen.buttons || []).filter(btn =>
+                        !searchTerm || btn.text?.toLowerCase().includes(searchTerm)
+                      ).map(btn => (
+                        <option key={btn.id} value={btn.id}>"{btn.text}"</option>
+                      ))}
+                      {(screen.texts || []).filter(txt =>
+                        !searchTerm || txt.text?.toLowerCase().includes(searchTerm)
+                      ).slice(0, 40).map(txt => (
+                        <option key={txt.id} value={txt.id}>
+                          {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+              </select>
+            </div>
           </div>
         );
       case 'send_key':
@@ -323,26 +393,47 @@ const StepRow: React.FC<{
       case 'assert_visible':
       case 'assert_not_visible':
         return (
-          <div className="flex gap-2 mt-2">
-            <select
-              className="flex-1 rounded border px-3 py-2 text-sm bg-background"
-              value={step.elementId || ''}
-              onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
-            >
-              <option value="">Select text/button...</option>
-              {catalog?.screens.filter(s => ((s.buttons?.length || 0) > 0 || (s.texts?.length || 0) > 0)).map(screen => (
-                <optgroup key={screen.name} label={`📱 ${screen.name}`}>
-                  {(screen.buttons || []).map(btn => (
-                    <option key={btn.id} value={btn.id}>"{btn.text}"</option>
-                  ))}
-                  {(screen.texts || []).slice(0, 30).map(txt => (
-                    <option key={txt.id} value={txt.id}>
-                      {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+          <div className="flex flex-col gap-2 mt-2">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Search elements..."
+                value={stepSearches[step.id] || ''}
+                onChange={(e) => updateStepSearch(step.id, e.target.value)}
+                className="flex-1 h-9 text-sm"
+              />
+              <select
+                className="flex-1 rounded border px-3 py-2 text-sm bg-background"
+                value={step.elementId || ''}
+                onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
+              >
+                <option value="">Select text/button...</option>
+                {catalog?.screens.filter(s => ((s.buttons?.length || 0) > 0 || (s.texts?.length || 0) > 0)).map(screen => {
+                  const searchTerm = stepSearches[step.id]?.toLowerCase() || '';
+                  const hasMatch = (screen.buttons || []).some(b =>
+                    b.text?.toLowerCase().includes(searchTerm)
+                  ) || (screen.texts || []).some(t =>
+                    t.text?.toLowerCase().includes(searchTerm)
+                  ) || screen.name.toLowerCase().includes(searchTerm);
+                  if (!hasMatch && searchTerm) return null;
+                  return (
+                    <optgroup key={screen.name} label={`📱 ${screen.name}`}>
+                      {(screen.buttons || []).filter(btn =>
+                        !searchTerm || btn.text?.toLowerCase().includes(searchTerm)
+                      ).map(btn => (
+                        <option key={btn.id} value={btn.id}>"{btn.text}"</option>
+                      ))}
+                      {(screen.texts || []).filter(txt =>
+                        !searchTerm || txt.text?.toLowerCase().includes(searchTerm)
+                      ).slice(0, 30).map(txt => (
+                        <option key={txt.id} value={txt.id}>
+                          {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+              </select>
+            </div>
           </div>
         );
       case 'wait':
@@ -401,7 +492,12 @@ const VisualTestBuilder: React.FC = () => {
   const [savingTestCase, setSavingTestCase] = useState(false);
   const [savedTestCase, setSavedTestCase] = useState<{id: string; title: string} | null>(null);
 
-  // ─── Element Catalog Filters ─────────────────────────────────────────────────
+  // ─── Step Palette Search ────────────────────────────────────────────────────────
+  const [stepSearches, setStepSearches] = useState<Record<string, string>>({});
+
+  const updateStepSearch = (stepId: string, value: string) => {
+    setStepSearches(prev => ({ ...prev, [stepId]: value }));
+  };
   const [elementFilter, setElementFilter] = useState<'all' | 'inputs' | 'buttons' | 'texts'>('all');
   const [elementSearch, setElementSearch] = useState('');
   const [expandedScreens, setExpandedScreens] = useState<Set<string>>(new Set());
