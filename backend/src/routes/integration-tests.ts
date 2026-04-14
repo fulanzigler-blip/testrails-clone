@@ -300,8 +300,8 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
     '  echo "EXIT_CODE:$PUB_EXIT"',
     '  exit $PUB_EXIT',
     'fi',
-    `echo "Running test..."`,
-    `flutter test integration_test/${testFileName} -d ${deviceId} 2>&1`,
+    `echo "Running test..."${noBuild ? ' (no-build mode - skipping APK build)' : ''}`,
+    `flutter test integration_test/${testFileName} -d ${deviceId} ${noBuild ? '--no-build' : ''} 2>&1`,
     'echo "EXIT_CODE:$?"',
   ];
   const scriptContent = scriptLines.join('\n') + '\n';
