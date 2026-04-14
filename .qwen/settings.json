@@ -52,7 +52,10 @@
       "Bash(du *)",
       "Bash(find *)",
       "Bash(docker images *)",
-      "Bash(docker compose down *)"
+      "Bash(docker compose down *)",
+      "Bash(npm ls *)",
+      "Bash(rm *)",
+      "Bash(npm config *)"
     ]
   },
   "$version": 3
