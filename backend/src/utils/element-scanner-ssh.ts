@@ -282,6 +282,23 @@ function extractElements(content: string): { inputs: ScreenElement['inputs']; bu
         finderValue: txtKeyName || textLineMatch[1],
       });
     }
+
+    // ─── Navigation Tab Labels (BottomNavigationBarItem, NavigationDestination, NavigationRailDestination) ───
+    const navItemMatch = line.match(/(BottomNavigationBarItem|NavigationDestination|NavigationRailDestination)\s*\(/);
+    if (navItemMatch) {
+      const labelMatch = nearby.match(/label:\s*(?:const\s+)?['"]([^'"]{2,50})['"]/);
+      if (labelMatch && !/\$/.test(labelMatch[1])) {
+        const navId = labelMatch[1].toLowerCase().replace(/\s+/g, '_').slice(0, 40);
+        if (!texts.some(t => t.id === navId)) {
+          texts.push({
+            id: navId,
+            text: labelMatch[1],
+            finderStrategy: 'text' as const,
+            finderValue: labelMatch[1],
+          });
+        }
+      }
+    }
   }
 
   return { inputs, buttons, texts };

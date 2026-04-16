@@ -42,9 +42,12 @@ const runWebTestSchema = z.object({
 
 const saveWebTestCaseSchema = z.object({
   title: z.string().min(1, 'Title is required').max(255),
+  description: z.string().max(2000).optional(),
+  priority: z.enum(['low', 'medium', 'high']).optional().default('medium'),
+  suiteId: z.string().uuid().optional(),
   steps: z.array(z.any()),
   generatedCode: z.string().min(1, 'Generated code is required'),
-  baseUrl: z.string().url(),
+  baseUrl: z.string().url().optional(),
   testResult: z.object({
     success: z.boolean(),
     output: z.string(),
@@ -155,20 +158,32 @@ export default async function webIntegrationRoutes(fastify: FastifyInstance) {
     try {
       const body = saveWebTestCaseSchema.parse(request.body);
 
+      const userId = (request.user as any).userId as string;
+
       // Create test case in DB
       const testCase = await prisma.testCase.create({
         data: {
           title: body.title,
-          description: `Web test for ${body.baseUrl}`,
+          description: body.description || (body.baseUrl ? `Web test for ${body.baseUrl}` : 'Web test'),
+          priority: (body.priority as any) || 'medium',
+          automationType: 'automated' as any,
+          suiteId: body.suiteId || null,
           customFields: {
             type: 'web',
             steps: body.steps,
             playwrightCode: body.generatedCode,
             baseUrl: body.baseUrl,
           },
-          createdBy: (request.user as any)?.userId || 'system',
+          createdById: userId,
         },
       });
+
+      // Add to suite members if suite is provided
+      if (body.suiteId) {
+        await prisma.testSuiteMember.create({
+          data: { testSuiteId: body.suiteId, testCaseId: testCase.id },
+        }).catch(() => {}); // ignore if already exists
+      }
 
       logger.info(`[WebTest] Saved test case: ${testCase.id}`);
 

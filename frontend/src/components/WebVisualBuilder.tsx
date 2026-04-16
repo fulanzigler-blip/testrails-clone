@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -183,6 +184,153 @@ const TEMPLATES = [
 
 // ─── Step Row Component ────────────────────────────────────────────────────────
 
+// ─── Searchable Element Picker ─────────────────────────────────────────────────
+
+interface ElementOption {
+  id: string;
+  label: string;
+  sublabel?: string;
+  icon?: string;
+  page?: string;   // page name for grouping
+  data: any;
+}
+
+// Portal-based element picker — dropdown renders in document.body, avoids overflow/clip issues
+const ElementSearchSelect: React.FC<{
+  value: string;
+  placeholder?: string;
+  options: ElementOption[];
+  onChange: (opt: ElementOption | null) => void;
+  className?: string;
+}> = ({ value, placeholder = 'Search element...', options, onChange, className = '' }) => {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Assign stable index-based keys to prevent duplicate-id collisions
+  const indexed = options.map((opt, idx) => ({ ...opt, _idx: idx }));
+
+  const filtered = query.trim()
+    ? indexed.filter(o =>
+        o.label.toLowerCase().includes(query.toLowerCase()) ||
+        (o.sublabel || '').toLowerCase().includes(query.toLowerCase()) ||
+        (o.page || '').toLowerCase().includes(query.toLowerCase())
+      )
+    : indexed;
+
+  const currentOpt = value ? indexed.find(o => o.id === value) : undefined;
+  const selectedLabel = currentOpt ? `${currentOpt.icon || ''} ${currentOpt.label}` : '';
+
+  const openDropdown = () => {
+    setOpen(true);
+    setQuery('');
+    setTimeout(() => searchRef.current?.focus(), 0);
+  };
+
+  const handleSelect = (opt: typeof indexed[0]) => {
+    onChange(opt);
+    setOpen(false);
+    setQuery('');
+  };
+
+  const shortPage = (page: string) => {
+    try { return new URL(page).pathname || page; } catch { return page; }
+  };
+
+  const grouped: { page: string; items: typeof indexed }[] = [];
+  filtered.forEach(opt => {
+    const page = opt.page || 'General';
+    let g = grouped.find(x => x.page === page);
+    if (!g) { g = { page, items: [] }; grouped.push(g); }
+    g.items.push(opt);
+  });
+
+  // Modal-style dialog: backdrop + centered panel — no relative positioning needed
+  const portal = open && createPortal(
+    <>
+      {/* Full-screen backdrop — catches outside clicks */}
+      <div
+        style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.3)' }}
+        onClick={() => { setOpen(false); setQuery(''); }}
+      />
+      {/* Centered picker panel */}
+      <div
+        className="ess-portal rounded-lg border bg-popover shadow-2xl overflow-hidden"
+        style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 440, maxWidth: '94vw', zIndex: 9999 }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 pt-3 pb-2 border-b">
+          <span className="text-sm font-semibold text-foreground">Select element ({filtered.length})</span>
+          <button
+            className="text-muted-foreground hover:text-foreground text-lg leading-none"
+            onClick={() => { setOpen(false); setQuery(''); }}
+          >✕</button>
+        </div>
+        {/* Search */}
+        <div className="px-3 py-2">
+          <input
+            ref={searchRef}
+            className="w-full rounded border px-2 py-1.5 text-sm bg-background outline-none focus:border-primary"
+            placeholder={`Search ${options.length} elements...`}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
+        </div>
+        {/* List */}
+        <div style={{ maxHeight: '480px', overflowY: 'auto' }} className="border-t">
+          {filtered.length === 0 && (
+            <div className="px-3 py-4 text-sm text-muted-foreground text-center">No elements found</div>
+          )}
+          {grouped.map(group => (
+            <div key={group.page}>
+              {grouped.length > 1 && (
+                <div className="sticky top-0 flex items-center gap-1 px-3 py-1 bg-muted/80 border-b text-[10px] font-semibold text-muted-foreground uppercase">
+                  <Globe className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{shortPage(group.page)}</span>
+                  <span className="ml-auto">{group.items.length}</span>
+                </div>
+              )}
+              {group.items.map(opt => (
+                <div
+                  key={opt._idx}
+                  className={`flex items-center gap-2 px-3 py-2.5 text-sm cursor-pointer hover:bg-accent/60 active:bg-accent border-b border-border/30 ${opt.id === value ? 'bg-accent/30 font-medium' : ''}`}
+                  onClick={() => handleSelect(opt)}
+                >
+                  {opt.icon && <span className="shrink-0 text-base">{opt.icon}</span>}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{opt.label}</div>
+                    {opt.sublabel && <div className="text-xs text-muted-foreground truncate mt-0.5">{opt.sublabel}</div>}
+                  </div>
+                  {opt.id === value && <span className="text-xs text-primary shrink-0 font-bold">✓</span>}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </>,
+    document.body
+  );
+
+  return (
+    <div ref={triggerRef} className={`relative ${className}`}>
+      <div
+        className="flex items-center rounded border bg-background px-2 py-1.5 text-sm cursor-pointer gap-1 min-h-[32px]"
+        onClick={() => { open ? (setOpen(false), setQuery('')) : openDropdown(); }}
+      >
+        <span className={`flex-1 truncate ${selectedLabel ? 'text-foreground' : 'text-muted-foreground'}`}>
+          {selectedLabel || placeholder}
+        </span>
+        <ChevronDown className={`h-3 w-3 text-muted-foreground shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </div>
+      {portal}
+    </div>
+  );
+};
+
+// ─── Step Row ───────────────────────────────────────────────────────────────────
+
 const StepRow: React.FC<{
   step: WebTestStep;
   index: number;
@@ -205,16 +353,26 @@ const StepRow: React.FC<{
           </div>
         );
 
-      case 'enter_text':
+      case 'enter_text': {
+        const inputOpts: ElementOption[] = (catalog?.inputs || []).map(inp => ({
+          id: inp.id,
+          label: inp.label || inp.placeholder || inp.id,
+          sublabel: `${inp.type} · ${inp.selector}`,
+          icon: '📥',
+          page: inp.page,
+          data: inp,
+        }));
         return (
           <div className="flex gap-2 mt-2">
-            <select
-              className="flex-1 rounded border px-3 py-2 text-sm bg-background min-w-0"
+            <ElementSearchSelect
+              className="flex-1 min-w-0"
               value={step.elementId || ''}
-              onChange={(e) => {
-                const el = catalog?.inputs.find(i => i.id === e.target.value);
+              placeholder="Search input field..."
+              options={inputOpts}
+              onChange={(opt) => {
+                const el = opt?.data;
                 onUpdate(step.id, {
-                  elementId: e.target.value,
+                  elementId: opt?.id || '',
                   selector: el?.selector || '',
                   label: el?.label || el?.placeholder,
                   placeholder: el?.placeholder,
@@ -222,35 +380,47 @@ const StepRow: React.FC<{
                   fallbackSelectors: el?.fallbackSelectors,
                 });
               }}
-            >
-              <option value="">Select input field...</option>
-              {catalog?.pages.filter(p => (p.inputs?.length || 0) > 0).map(page => (
-                <optgroup key={page.name} label={`🌐 ${page.name}`}>
-                  {(page.inputs || []).map(inp => (
-                    <option key={inp.id} value={inp.id}>{inp.label || inp.placeholder || inp.id} ({inp.type})</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+            />
             <Input placeholder="Value to enter" value={step.value || ''} onChange={(e) => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-sm" />
           </div>
         );
+      }
 
       case 'tap':
       case 'hover':
       case 'check':
-      case 'uncheck':
+      case 'uncheck': {
+        // Use array index in ID to guarantee uniqueness even when backend IDs collide
+        // (happens when multiple pages share the same title — scraper generates duplicate btn_pagename_N)
+        const clickOpts: ElementOption[] = [
+          ...(catalog?.buttons || []).map((btn, i) => ({
+            id: `b:${i}:${btn.id}`,
+            label: `"${btn.text}"`,
+            sublabel: `${btn.type} · ${btn.selector}`,
+            icon: btn.type === 'link' ? '🔗' : '🔘',
+            page: btn.page,
+            data: btn,
+          })),
+          ...(catalog?.texts || []).map((txt, i) => ({
+            id: `t:${i}:${txt.id}`,
+            label: `"${txt.text.slice(0, 60)}"`,
+            sublabel: `text · ${txt.selector}`,
+            icon: '📝',
+            page: txt.page,
+            data: txt,
+          })),
+        ];
         return (
           <div className="flex gap-2 mt-2">
-            <select
-              className="flex-1 rounded border px-3 py-2 text-sm bg-background"
+            <ElementSearchSelect
+              className="flex-1"
               value={step.elementId || ''}
-              onChange={(e) => {
-                const btn = catalog?.buttons.find(b => b.id === e.target.value);
-                const txt = catalog?.texts.find(t => t.id === e.target.value);
-                const el = btn || txt;
+              placeholder="Search element..."
+              options={clickOpts}
+              onChange={(opt) => {
+                const el = opt?.data;
                 onUpdate(step.id, {
-                  elementId: e.target.value,
+                  elementId: opt?.id || '',
                   selector: el?.selector || '',
                   text: el?.text || (el as any)?.label,
                   tag: el?.tag,
@@ -258,45 +428,38 @@ const StepRow: React.FC<{
                   fallbackSelectors: el?.fallbackSelectors,
                 });
               }}
-            >
-              <option value="">Select element...</option>
-              {catalog?.pages.filter(p => (p.buttons?.length || 0) > 0).map(page => (
-                <optgroup key={page.name} label={`🌐 ${page.name}`}>
-                  {(page.buttons || []).map(btn => (
-                    <option key={btn.id} value={btn.id}>"{btn.text}" ({btn.type})</option>
-                  ))}
-                </optgroup>
-              ))}
-              {catalog?.pages.filter(p => (p.texts?.length || 0) > 0).map(page => (
-                <optgroup key={`texts-${page.name}`} label={`📝 ${page.name} (Texts)`}>
-                  {(page.texts || []).slice(0, 30).map(txt => (
-                    <option key={txt.id} value={txt.id}>"{txt.text.slice(0, 60)}"</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+            />
           </div>
         );
+      }
 
-      case 'select':
+      case 'select': {
+        const selectOpts: ElementOption[] = (catalog?.inputs || [])
+          .filter(i => i.type === 'select')
+          .map(inp => ({
+            id: inp.id,
+            label: inp.label || inp.id,
+            sublabel: inp.selector,
+            icon: '▾',
+            page: inp.page,
+            data: inp,
+          }));
         return (
           <div className="flex gap-2 mt-2">
-            <select
-              className="flex-1 rounded border px-3 py-2 text-sm bg-background"
+            <ElementSearchSelect
+              className="flex-1"
               value={step.elementId || ''}
-              onChange={(e) => {
-                const el = catalog?.inputs.find(i => i.id === e.target.value);
-                onUpdate(step.id, { elementId: e.target.value, selector: el?.selector || '' });
+              placeholder="Search dropdown..."
+              options={selectOpts}
+              onChange={(opt) => {
+                const el = opt?.data;
+                onUpdate(step.id, { elementId: opt?.id || '', selector: el?.selector || '' });
               }}
-            >
-              <option value="">Select dropdown...</option>
-              {catalog?.inputs.filter(i => i.type === 'select').map(inp => (
-                <option key={inp.id} value={inp.id}>{inp.label || inp.id}</option>
-              ))}
-            </select>
+            />
             <Input placeholder="Option value" value={step.value || ''} onChange={(e) => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-sm" />
           </div>
         );
+      }
 
       case 'press_key':
         return (
@@ -319,19 +482,44 @@ const StepRow: React.FC<{
         );
 
       case 'assert_visible':
-      case 'assert_not_visible':
+      case 'assert_not_visible': {
+        const assertOpts: ElementOption[] = [
+          ...(catalog?.buttons || []).map((btn, i) => ({
+            id: `b:${i}:${btn.id}`,
+            label: `"${btn.text}"`,
+            sublabel: btn.selector,
+            icon: btn.type === 'link' ? '🔗' : '🔘',
+            page: btn.page,
+            data: btn,
+          })),
+          ...(catalog?.texts || []).map((txt, i) => ({
+            id: `t:${i}:${txt.id}`,
+            label: `"${txt.text.slice(0, 60)}"`,
+            sublabel: txt.selector,
+            icon: '📝',
+            page: txt.page,
+            data: txt,
+          })),
+          ...(catalog?.inputs || []).map((inp, i) => ({
+            id: `i:${i}:${inp.id}`,
+            label: inp.label || inp.id,
+            sublabel: inp.selector,
+            icon: '📥',
+            page: inp.page,
+            data: inp,
+          })),
+        ];
         return (
           <div className="flex gap-2 mt-2">
-            <select
-              className="flex-1 rounded border px-3 py-2 text-sm bg-background"
+            <ElementSearchSelect
+              className="flex-1"
               value={step.elementId || ''}
-              onChange={(e) => {
-                const btn = catalog?.buttons.find(b => b.id === e.target.value);
-                const txt = catalog?.texts.find(t => t.id === e.target.value);
-                const inp = catalog?.inputs.find(i => i.id === e.target.value);
-                const el = btn || txt || inp;
+              placeholder="Search element..."
+              options={assertOpts}
+              onChange={(opt) => {
+                const el = opt?.data;
                 onUpdate(step.id, {
-                  elementId: e.target.value,
+                  elementId: opt?.id || '',
                   selector: el?.selector || '',
                   text: el?.text || '',
                   tag: el?.tag,
@@ -339,37 +527,36 @@ const StepRow: React.FC<{
                   fallbackSelectors: el?.fallbackSelectors,
                 });
               }}
-            >
-              <option value="">Select element...</option>
-              {catalog?.buttons.map(btn => (
-                <option key={btn.id} value={btn.id}>🔘 "{btn.text}"</option>
-              ))}
-              {catalog?.texts.slice(0, 50).map(txt => (
-                <option key={txt.id} value={txt.id}>📝 "{txt.text.slice(0, 60)}"</option>
-              ))}
-              {catalog?.inputs.map(inp => (
-                <option key={inp.id} value={inp.id}>📥 {inp.label || inp.id}</option>
-              ))}
-            </select>
+            />
           </div>
         );
+      }
 
-      case 'assert_text':
+      case 'assert_text': {
+        const assertTextOpts: ElementOption[] = [
+          { id: '', label: '(body — any text on page)', sublabel: 'searches entire page', icon: '🌐', data: null },
+          ...(catalog?.texts || []).map(txt => ({
+            id: txt.selector,
+            label: `"${txt.text.slice(0, 60)}"`,
+            sublabel: txt.selector,
+            icon: '📝',
+            page: txt.page,
+            data: txt,
+          })),
+        ];
         return (
           <div className="flex gap-2 mt-2">
-            <select
-              className="flex-1 rounded border px-3 py-2 text-sm bg-background"
+            <ElementSearchSelect
+              className="flex-1"
               value={step.selector || ''}
-              onChange={(e) => onUpdate(step.id, { selector: e.target.value })}
-            >
-              <option value="">(body - any text on page)</option>
-              {catalog?.texts.slice(0, 50).map(txt => (
-                <option key={txt.id} value={txt.selector}>"{txt.text.slice(0, 60)}"</option>
-              ))}
-            </select>
+              placeholder="Search text element..."
+              options={assertTextOpts}
+              onChange={(opt) => onUpdate(step.id, { selector: opt?.id || '' })}
+            />
             <Input placeholder="Text to search for" value={step.text || ''} onChange={(e) => onUpdate(step.id, { text: e.target.value })} className="flex-1 text-sm" />
           </div>
         );
+      }
 
       case 'wait':
         return (
@@ -441,6 +628,9 @@ const WebVisualBuilder: React.FC = () => {
   const [error, setError] = useState('');
   const [savingTestCase, setSavingTestCase] = useState(false);
   const [savedTestCase, setSavedTestCase] = useState<{id: string; title: string} | null>(null);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveForm, setSaveForm] = useState({ title: '', description: '', priority: 'medium', suiteId: '' });
+  const [suites, setSuites] = useState<{ id: string; name: string; projectName: string }[]>([]);
   const [devices, setDevices] = useState<{ desktop: any[]; mobile: any[] }>({ desktop: [], mobile: [] });
   const [selectedDevice, setSelectedDevice] = useState<string>('');
   const [showDevicePicker, setShowDevicePicker] = useState(false);
@@ -467,9 +657,9 @@ const WebVisualBuilder: React.FC = () => {
     try {
       const resp = await api.post('/web-tests/scan', {
         url: targetUrl.trim(),
-        maxPages: 20,
-        maxDepth: 3,
-      }, { timeout: 60000 });
+        maxPages: 10,
+        maxDepth: 2,
+      }, { timeout: 300000 }); // 5 min — crawling can be slow
       setCatalog(resp.data?.data || resp.data);
     } catch (err: any) {
       setScanError(err.response?.data?.error?.message || err.message || 'Scan failed');
@@ -550,12 +740,28 @@ const WebVisualBuilder: React.FC = () => {
 
   const handleSaveAsTestCase = async () => {
     if (!generatedCode) { setError('Generate code first'); return; }
+    // Pre-fill title with a sensible default, then open dialog
+    const defaultTitle = `Web Test - ${catalog?.baseUrl || targetUrl || 'untitled'}`;
+    setSaveForm(f => ({ ...f, title: f.title || defaultTitle }));
+    // Fetch suites for the dropdown
+    try {
+      const resp = await api.get('/test-suites?perPage=100');
+      const list = resp.data?.data || [];
+      setSuites(list.map((s: any) => ({ id: s.id, name: s.name, projectName: '' })));
+    } catch { setSuites([]); }
+    setShowSaveDialog(true);
+  };
+
+  const handleSaveDialogSubmit = async () => {
+    if (!saveForm.title.trim()) return;
     setSavingTestCase(true);
     setError('');
     try {
-      const title = `Web Test - ${catalog?.baseUrl || targetUrl || 'untitled'}`;
       const resp = await api.post('/web-tests/save-testcase', {
-        title,
+        title: saveForm.title.trim(),
+        description: saveForm.description.trim() || undefined,
+        priority: saveForm.priority,
+        suiteId: saveForm.suiteId || undefined,
         steps,
         generatedCode,
         baseUrl: catalog?.baseUrl || targetUrl,
@@ -567,6 +773,7 @@ const WebVisualBuilder: React.FC = () => {
       });
       const saved = resp.data?.data;
       setSavedTestCase({ id: saved?.id, title: saved?.title });
+      setShowSaveDialog(false);
     } catch (err: any) {
       setError(err.response?.data?.error?.message || err.message || 'Save failed');
     } finally {
@@ -579,16 +786,25 @@ const WebVisualBuilder: React.FC = () => {
     return `${(ms / 1000).toFixed(1)}s`;
   };
 
-  // ─── Catalog pagination ───────────────────────────────────────────────────
-  const [currentPage, setCurrentPage] = useState(0);
+  // ─── Catalog state ────────────────────────────────────────────────────────
   const pages = catalog?.pages || [];
-  const totalPages = pages.length;
-  const current = pages[currentPage];
 
   // ─── Element Filters ───────────────────────────────────────────────────────
   const [elementFilter, setElementFilter] = useState<'all' | 'inputs' | 'buttons' | 'texts'>('all');
   const [elementSearch, setElementSearch] = useState('');
   const [expandedPages, setExpandedPages] = useState<Set<number>>(new Set());
+  const [pageTabMap, setPageTabMap] = useState<Record<number, 'inputs' | 'buttons' | 'texts'>>({});
+
+  const getPageTab = (idx: number, page: WebPageElement): 'inputs' | 'buttons' | 'texts' => {
+    if (pageTabMap[idx]) return pageTabMap[idx];
+    if ((page.inputs?.length || 0) > 0) return 'inputs';
+    if ((page.buttons?.length || 0) > 0) return 'buttons';
+    return 'texts';
+  };
+
+  const setPageTab = (idx: number, tab: 'inputs' | 'buttons' | 'texts') => {
+    setPageTabMap(prev => ({ ...prev, [idx]: tab }));
+  };
 
   const togglePageExpanded = (pageIndex: number) => {
     setExpandedPages(prev => {
@@ -708,181 +924,163 @@ const WebVisualBuilder: React.FC = () => {
         </div>
       )}
 
-      {/* Catalog Summary */}
-      {catalog && current && (
+      {/* Element Catalog */}
+      {catalog && pages.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">
-                Element Catalog — {current.name}
-              </CardTitle>
-              <div className="flex gap-3">
-                <Badge variant="outline">{current.inputs?.length || 0} Inputs</Badge>
-                <Badge variant="outline">{current.buttons?.length || 0} Buttons</Badge>
-                <Badge variant="outline">{current.texts?.length || 0} Texts</Badge>
-                <Badge variant="secondary">Page {currentPage + 1} / {totalPages}</Badge>
+              <CardTitle className="text-base">Element Catalog</CardTitle>
+              <div className="flex gap-2">
+                <Badge variant="outline">{pages.length} Pages</Badge>
+                <Badge variant="outline">{catalog.inputs?.length || 0} Inputs</Badge>
+                <Badge variant="outline">{catalog.buttons?.length || 0} Buttons</Badge>
+                <Badge variant="outline">{catalog.texts?.length || 0} Texts</Badge>
               </div>
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            {/* Filters */}
-            <div className="flex flex-wrap gap-3 mb-3 p-3 bg-muted/30 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm">Filter:</Label>
-                <div className="flex rounded-md shadow-sm">
+            {/* Search + Filter bar */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              <Input
+                placeholder="Search pages or elements..."
+                value={elementSearch}
+                onChange={e => setElementSearch(e.target.value)}
+                className="h-8 text-sm flex-1 min-w-[180px]"
+              />
+              <div className="flex rounded-md border overflow-hidden text-xs">
+                {(['all', 'inputs', 'buttons', 'texts'] as const).map(f => (
                   <button
-                    onClick={() => setElementFilter('all')}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-l-md border ${
-                      elementFilter === 'all'
-                        ? 'bg-primary text-primary-foreground border-primary'
+                    key={f}
+                    onClick={() => setElementFilter(f)}
+                    className={`px-3 py-1.5 font-medium capitalize transition-colors ${
+                      elementFilter === f
+                        ? 'bg-primary text-primary-foreground'
                         : 'bg-background hover:bg-muted'
                     }`}
                   >
-                    All
+                    {f === 'all' ? 'All' : f === 'inputs' ? '⌨ Inputs' : f === 'buttons' ? '🖱 Buttons' : '📝 Texts'}
                   </button>
-                  <button
-                    onClick={() => setElementFilter('inputs')}
-                    className={`px-3 py-1.5 text-xs font-medium border-t border-b ${
-                      elementFilter === 'inputs'
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background hover:bg-muted'
-                    }`}
-                  >
-                    <Type className="w-3 h-3 inline mr-1" />
-                    Inputs
-                  </button>
-                  <button
-                    onClick={() => setElementFilter('buttons')}
-                    className={`px-3 py-1.5 text-xs font-medium border-t border-b ${
-                      elementFilter === 'buttons'
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background hover:bg-muted'
-                    }`}
-                  >
-                    <MousePointerClick className="w-3 h-3 inline mr-1" />
-                    Buttons
-                  </button>
-                  <button
-                    onClick={() => setElementFilter('texts')}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-r-md border ${
-                      elementFilter === 'texts'
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background hover:bg-muted'
-                    }`}
-                  >
-                    <FileText className="w-3 h-3 inline mr-1" />
-                    Texts
-                  </button>
-                </div>
-              </div>
-              <div className="flex-1 min-w-[200px]">
-                <Input
-                  placeholder="Search elements..."
-                  value={elementSearch}
-                  onChange={e => setElementSearch(e.target.value)}
-                  className="h-8 text-sm"
-                />
+                ))}
               </div>
               {filteredPages.length !== pages.length && (
-                <Badge variant="secondary" className="text-xs">
-                  Showing {filteredPages.length} of {pages.length} pages
+                <Badge variant="secondary" className="text-xs self-center">
+                  {filteredPages.length} / {pages.length} pages
                 </Badge>
               )}
             </div>
 
-            <div className="text-xs text-muted-foreground mb-3 truncate">{current.url}</div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Inputs */}
-              {current.inputs && current.inputs.length > 0 && (
-                <div>
-                  <div className="text-sm font-semibold mb-2 flex items-center gap-2">
-                    <div className="w-2 h-2 rounded bg-blue-500" /> Inputs
-                  </div>
-                  <div className="space-y-1">
-                    {current.inputs.map(inp => (
-                      <div key={inp.id} className="flex items-center gap-1.5 bg-muted/30 rounded px-2 py-1">
-                        <Type className="w-3 h-3 text-blue-500" />
-                        <span className="truncate text-xs">{inp.label || inp.placeholder || inp.id}</span>
-                        <span className="text-[10px] text-muted-foreground ml-auto">({inp.type})</span>
+            {/* Collapsed page list */}
+            <div className="space-y-1 max-h-[420px] overflow-y-auto pr-1">
+              {filteredPages.map((page, idx) => {
+                const realIdx = pages.indexOf(page);
+                const isOpen = expandedPages.has(realIdx);
+                const tab = getPageTab(realIdx, page);
+                const hasInputs = (page.inputs?.length || 0) > 0;
+                const hasButtons = (page.buttons?.length || 0) > 0;
+                const hasTexts = (page.texts?.length || 0) > 0;
+
+                return (
+                  <div key={realIdx} className="rounded border bg-background">
+                    {/* Page header row — click to expand */}
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors text-left"
+                      onClick={() => togglePageExpanded(realIdx)}
+                    >
+                      {isOpen
+                        ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                        : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                      }
+                      <Globe className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                      <span className="text-sm font-medium truncate flex-1">{page.name || page.url}</span>
+                      <div className="flex gap-1.5 flex-shrink-0">
+                        {hasInputs && <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-blue-600 border-blue-200">{page.inputs.length} in</Badge>}
+                        {hasButtons && <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-green-600 border-green-200">{page.buttons.length} btn</Badge>}
+                        {hasTexts && <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-purple-600 border-purple-200">{page.texts.length} txt</Badge>}
+                        {!hasInputs && !hasButtons && !hasTexts && (
+                          <span className="text-[10px] text-muted-foreground">empty</span>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* Buttons */}
-              {current.buttons && current.buttons.length > 0 && (
-                <div>
-                  <div className="text-sm font-semibold mb-2 flex items-center gap-2">
-                    <div className="w-2 h-2 rounded bg-green-500" /> Buttons
-                  </div>
-                  <div className="space-y-1">
-                    {current.buttons.map(btn => (
-                      <div key={btn.id} className="flex items-center gap-1.5 bg-muted/30 rounded px-2 py-1">
-                        <MousePointerClick className="w-3 h-3 text-green-500" />
-                        <span className="truncate text-xs">"{btn.text}"</span>
-                        <span className="text-[10px] text-muted-foreground ml-auto">({btn.type})</span>
+                    </button>
+
+                    {/* Expanded content with tabs */}
+                    {isOpen && (
+                      <div className="border-t px-3 pb-3">
+                        <div className="text-[10px] text-muted-foreground truncate py-1.5">{page.url}</div>
+
+                        {/* Tabs */}
+                        {(hasInputs || hasButtons || hasTexts) && (
+                          <>
+                            <div className="flex gap-0 mb-2 border-b">
+                              {hasInputs && (
+                                <button
+                                  onClick={() => setPageTab(realIdx, 'inputs')}
+                                  className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+                                    tab === 'inputs' ? 'border-blue-500 text-blue-600' : 'border-transparent text-muted-foreground hover:text-foreground'
+                                  }`}
+                                >
+                                  <Type className="w-3 h-3 inline mr-1" />Inputs ({page.inputs.length})
+                                </button>
+                              )}
+                              {hasButtons && (
+                                <button
+                                  onClick={() => setPageTab(realIdx, 'buttons')}
+                                  className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+                                    tab === 'buttons' ? 'border-green-500 text-green-600' : 'border-transparent text-muted-foreground hover:text-foreground'
+                                  }`}
+                                >
+                                  <MousePointerClick className="w-3 h-3 inline mr-1" />Buttons ({page.buttons.length})
+                                </button>
+                              )}
+                              {hasTexts && (
+                                <button
+                                  onClick={() => setPageTab(realIdx, 'texts')}
+                                  className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
+                                    tab === 'texts' ? 'border-purple-500 text-purple-600' : 'border-transparent text-muted-foreground hover:text-foreground'
+                                  }`}
+                                >
+                                  <FileText className="w-3 h-3 inline mr-1" />Texts ({page.texts.length})
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Tab content */}
+                            <div className="max-h-[200px] overflow-y-auto space-y-1">
+                              {tab === 'inputs' && hasInputs && page.inputs.map(inp => (
+                                <div key={inp.id} className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/20 rounded px-2 py-1">
+                                  <Type className="w-3 h-3 text-blue-500 flex-shrink-0" />
+                                  <span className="truncate text-xs flex-1">{inp.label || inp.placeholder || inp.id}</span>
+                                  <span className="text-[10px] text-muted-foreground flex-shrink-0">({inp.type})</span>
+                                </div>
+                              ))}
+                              {tab === 'buttons' && hasButtons && page.buttons.map(btn => (
+                                <div key={btn.id} className="flex items-center gap-1.5 bg-green-50 dark:bg-green-950/20 rounded px-2 py-1">
+                                  <MousePointerClick className="w-3 h-3 text-green-500 flex-shrink-0" />
+                                  <span className="truncate text-xs flex-1">"{btn.text}"</span>
+                                  <span className="text-[10px] text-muted-foreground flex-shrink-0">({btn.type})</span>
+                                </div>
+                              ))}
+                              {tab === 'texts' && hasTexts && page.texts.map(txt => (
+                                <div key={txt.id} className="flex items-center gap-1.5 bg-purple-50 dark:bg-purple-950/20 rounded px-2 py-1">
+                                  <FileText className="w-3 h-3 text-purple-500 flex-shrink-0" />
+                                  <span className="truncate text-xs flex-1">"{txt.text.slice(0, 80)}"</span>
+                                  {txt.isStatic && <span className="text-[10px] text-muted-foreground flex-shrink-0">static</span>}
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                        {!hasInputs && !hasButtons && !hasTexts && (
+                          <p className="text-xs text-muted-foreground py-2">No elements detected on this page</p>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* Texts */}
-              {current.texts && current.texts.length > 0 && (
-                <div>
-                  <div className="text-sm font-semibold mb-2 flex items-center gap-2">
-                    <div className="w-2 h-2 rounded bg-purple-500" /> Texts
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {current.texts.slice(0, 20).map(txt => (
-                      <span key={txt.id} className="rounded px-1.5 py-0.5 truncate max-w-full text-[11px] bg-muted/30 border">
-                        "{txt.text.slice(0, 50)}"
-                      </span>
-                    ))}
-                    {current.texts.length > 20 && (
-                      <span className="text-muted-foreground text-xs">+{current.texts.length - 20} more</span>
                     )}
                   </div>
-                </div>
-              )}
-              {(!current.inputs?.length && !current.buttons?.length && !current.texts?.length) && (
-                <div className="col-span-3 text-center text-muted-foreground py-4">No elements detected</div>
+                );
+              })}
+              {filteredPages.length === 0 && (
+                <div className="text-center py-6 text-muted-foreground text-sm">No pages match the filter</div>
               )}
             </div>
-
-            {/* Pagination controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4 pt-3 border-t">
-                <button
-                  disabled={currentPage === 0}
-                  onClick={() => setCurrentPage(p => p - 1)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted transition-colors"
-                >
-                  ← Prev
-                </button>
-                <div className="flex gap-1">
-                  {Array.from({ length: totalPages }, (_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setCurrentPage(i)}
-                      className={`w-8 h-8 rounded text-xs font-medium transition-colors ${
-                        i === currentPage
-                          ? 'bg-primary text-primary-foreground'
-                          : 'hover:bg-muted'
-                      }`}
-                    >
-                      {i + 1}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  disabled={currentPage >= totalPages - 1}
-                  onClick={() => setCurrentPage(p => p + 1)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted transition-colors"
-                >
-                  Next →
-                </button>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
@@ -1015,6 +1213,97 @@ const WebVisualBuilder: React.FC = () => {
           </Card>
         </div>
       </div>
+
+      {/* ── Save as Test Case Dialog ─────────────────────────────────────── */}
+      {showSaveDialog && createPortal(
+        <>
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.4)' }}
+            onClick={() => setShowSaveDialog(false)}
+          />
+          <div
+            className="rounded-lg border bg-popover shadow-2xl overflow-hidden"
+            style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 480, maxWidth: '94vw', zIndex: 9999 }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <div>
+                <h3 className="text-sm font-semibold">Save as Test Case</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Fill in test case details before saving</p>
+              </div>
+              <button className="text-muted-foreground hover:text-foreground text-lg leading-none" onClick={() => setShowSaveDialog(false)}>✕</button>
+            </div>
+            {/* Form */}
+            <div className="px-4 py-3 space-y-3">
+              {/* Name */}
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Name <span className="text-red-500">*</span></label>
+                <input
+                  className="w-full rounded border px-2 py-1.5 text-sm bg-background outline-none focus:border-primary"
+                  placeholder="e.g. Login flow test"
+                  value={saveForm.title}
+                  onChange={e => setSaveForm(f => ({ ...f, title: e.target.value }))}
+                  autoFocus
+                />
+              </div>
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Description</label>
+                <textarea
+                  className="w-full rounded border px-2 py-1.5 text-sm bg-background outline-none focus:border-primary resize-none"
+                  placeholder="Optional description of what this test validates"
+                  rows={2}
+                  value={saveForm.description}
+                  onChange={e => setSaveForm(f => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+              {/* Priority + Suite row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Priority</label>
+                  <select
+                    className="w-full rounded border px-2 py-1.5 text-sm bg-background outline-none focus:border-primary"
+                    value={saveForm.priority}
+                    onChange={e => setSaveForm(f => ({ ...f, priority: e.target.value }))}
+                  >
+                    <option value="low">🟢 Low</option>
+                    <option value="medium">🟡 Medium</option>
+                    <option value="high">🔴 High</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Test Suite (optional)</label>
+                  <select
+                    className="w-full rounded border px-2 py-1.5 text-sm bg-background outline-none focus:border-primary"
+                    value={saveForm.suiteId}
+                    onChange={e => setSaveForm(f => ({ ...f, suiteId: e.target.value }))}
+                  >
+                    <option value="">— No suite —</option>
+                    {suites.map(s => (
+                      <option key={s.id} value={s.id}>{s.projectName ? `[${s.projectName}] ` : ''}{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t bg-muted/30">
+              <button
+                className="px-3 py-1.5 rounded text-sm text-muted-foreground hover:bg-muted"
+                onClick={() => setShowSaveDialog(false)}
+              >Cancel</button>
+              <button
+                className="px-4 py-1.5 rounded text-sm bg-primary text-primary-foreground hover:bg-primary/90 font-medium disabled:opacity-50"
+                disabled={!saveForm.title.trim() || savingTestCase}
+                onClick={handleSaveDialogSubmit}
+              >
+                {savingTestCase ? 'Saving...' : 'Save Test Case'}
+              </button>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
     </div>
   );
 };

@@ -284,47 +284,82 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
 
   const projectPath = overrideProjectPath || runner.projectPath;
   const deviceId = runner.deviceId || 'emulator-5554';
+  const ts = Date.now();
+  const scriptPath = `/tmp/run_test_${ts}.sh`;
+  const tempKeyPath = `/tmp/gh_key_${ts}`;
+  const sshKeyPath = runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519';
 
-  // Use SFTP to write the test script, then execute it (avoids SSH shell escaping issues)
-  const scriptPath = `/tmp/run_test_${Date.now()}.sh`;
-  // Determine flutter path - use login shell to get correct PATH
   const scriptLines = [
-    '#!/bin/bash -l',  // -l for login shell to load PATH with flutter
+    '#!/bin/bash -l',
     `cd "${projectPath}"`,
-    '# Run flutter pub get first (required before testing)',
-    `echo "Running flutter pub get..."`,
-    `flutter pub get 2>&1`,
-    'PUB_EXIT=$?',
-    'if [ $PUB_EXIT -ne 0 ]; then',
-    '  echo "flutter pub get failed with exit code $PUB_EXIT"',
-    '  echo "EXIT_CODE:$PUB_EXIT"',
-    '  exit $PUB_EXIT',
-    'fi',
-    `echo "Running test..."${noBuild ? ' (no-build mode - skipping APK build)' : ''}`,
-    `flutter test integration_test/${testFileName} -d ${deviceId} ${noBuild ? '--no-build' : ''} 2>&1`,
-    'echo "EXIT_CODE:$?"',
   ];
+
+  if (noBuild) {
+    // Use the forwarded SSH key for git to access private repos
+    scriptLines.push(
+      `echo "Running flutter pub get (using forwarded SSH key)..."`,
+      `GIT_SSH_COMMAND="ssh -i ${tempKeyPath} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" flutter pub get 2>&1`,
+      'PUB_EXIT=$?',
+      `rm -f ${tempKeyPath}`,
+      'if [ $PUB_EXIT -ne 0 ]; then',
+      '  echo "flutter pub get failed with exit code $PUB_EXIT"',
+      '  echo "EXIT_CODE:$PUB_EXIT"',
+      '  exit $PUB_EXIT',
+      'fi',
+    );
+  } else {
+    scriptLines.push(
+      `echo "Running flutter pub get..."`,
+      `flutter pub get 2>&1`,
+      'PUB_EXIT=$?',
+      'if [ $PUB_EXIT -ne 0 ]; then',
+      '  echo "flutter pub get failed with exit code $PUB_EXIT"',
+      '  echo "EXIT_CODE:$PUB_EXIT"',
+      '  exit $PUB_EXIT',
+      'fi',
+    );
+  }
+
+  scriptLines.push(
+    `echo "Running test..."`,
+    `flutter test integration_test/${testFileName} -d ${deviceId}${noBuild ? ' --no-pub' : ''} 2>&1`,
+    'echo "EXIT_CODE:$?"',
+  );
   const scriptContent = scriptLines.join('\n') + '\n';
 
   logger.info(`[IntegrationTest] Running test on ${runner.name}: ${testFileName} (project: ${projectPath})`);
   const startTime = Date.now();
 
   try {
-    // Step 1: SFTP write the script
+    // Step 1: SFTP — write the script and (if noBuild) the SSH key for private repo access
     const sftpResult = await new Promise<{ success: boolean; error?: string }>((resolve, reject) => {
       const client = new (require('ssh2').Client)();
       const timer = setTimeout(() => { try { client.end(); } catch {} reject(new Error('SFTP timeout')); }, 30000);
       client.on('ready', () => {
         client.sftp((err, sftp) => {
           if (err) { client.end(); clearTimeout(timer); reject(err); return; }
-          const writeStream = sftp.createWriteStream(scriptPath, { mode: 0o755 });
-          writeStream.on('close', () => { client.end(); clearTimeout(timer); resolve({ success: true }); });
-          writeStream.on('error', (e) => { client.end(); clearTimeout(timer); reject(e); });
-          writeStream.end(scriptContent);
+
+          const writeScript = () => {
+            const writeStream = sftp.createWriteStream(scriptPath, { mode: 0o755 });
+            writeStream.on('close', () => { client.end(); clearTimeout(timer); resolve({ success: true }); });
+            writeStream.on('error', (e: Error) => { client.end(); clearTimeout(timer); reject(e); });
+            writeStream.end(scriptContent);
+          };
+
+          if (noBuild) {
+            // Upload the server SSH key to runner so git can use it for private repos
+            const keyContent = fs.readFileSync(sshKeyPath);
+            const keyStream = sftp.createWriteStream(tempKeyPath, { mode: 0o600 });
+            keyStream.on('close', writeScript);
+            keyStream.on('error', (e: Error) => { client.end(); clearTimeout(timer); reject(e); });
+            keyStream.end(keyContent);
+          } else {
+            writeScript();
+          }
         });
       });
       client.on('error', e => { clearTimeout(timer); reject(e); });
-      client.connect({ host: runner.host, username: runner.username, privateKey: fs.readFileSync(runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519'), readyTimeout: 15000 });
+      client.connect({ host: runner.host, username: runner.username, privateKey: fs.readFileSync(sshKeyPath), readyTimeout: 15000 });
     });
 
     if (!sftpResult.success) throw new Error('Failed to write script via SFTP');

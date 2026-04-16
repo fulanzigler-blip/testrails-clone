@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -163,6 +163,19 @@ const StepRow: React.FC<{
 }> = ({ step, index, total, catalog, onUpdate, onDelete, onMoveUp, onMoveDown }) => {
   const stepDef = STEP_TYPES.find(s => s.type === step.type);
   const Icon = stepDef?.icon || Type;
+  const [tapSearch, setTapSearch] = React.useState('');
+  const [tapOpen, setTapOpen] = React.useState(false);
+  const [tapLabel, setTapLabel] = React.useState('');
+  const tapRef = useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!tapOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (tapRef.current && !tapRef.current.contains(e.target as Node)) setTapOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [tapOpen]);
 
   const renderControls = () => {
     switch (step.type) {
@@ -186,61 +199,56 @@ const StepRow: React.FC<{
             <Input placeholder="Value to enter" value={step.value || ''} onChange={(e) => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-base py-2" />
           </div>
         );
-      case 'tap':
+      case 'tap': {
+        // Build flat list with UNIQUE select values = `${idx}:${id}` to prevent any value collision
+        type TapOption = { idx: number; id: string; label: string; screen: string };
+        const allTapOptions: TapOption[] = [];
+        let tapIdx = 0;
+        (catalog?.buttons || []).forEach(btn => {
+          allTapOptions.push({ idx: tapIdx++, id: btn.id, label: `🔘 ${btn.text} (${btn.type})`, screen: (btn as any).screen || '' });
+        });
+        (catalog?.texts || []).forEach(txt => {
+          const prefix = (txt as any).source === 'api-inference' ? '⚡' : '📝';
+          allTapOptions.push({ idx: tapIdx++, id: txt.id, label: `${prefix} ${txt.text}`, screen: (txt as any).screen || '' });
+        });
+
+        const searchLower = tapSearch.toLowerCase();
+        const filtered = tapSearch
+          ? allTapOptions.filter(o => o.label.toLowerCase().includes(searchLower) || o.screen.toLowerCase().includes(searchLower))
+          : allTapOptions;
+
+        // Current select value — find first option whose id matches step.elementId
+        const currentOpt = step.elementId ? allTapOptions.find(o => o.id === step.elementId) : undefined;
+        const selectVal = currentOpt ? `${currentOpt.idx}:${currentOpt.id}` : '';
+
         return (
-          <div className="flex flex-col gap-2 mt-2">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Search buttons..."
-                value={stepSearches[step.id] || ''}
-                onChange={(e) => updateStepSearch(step.id, e.target.value)}
-                className="flex-1 h-9 text-sm"
-              />
-              <select
-                className="flex-1 rounded border px-3 py-2 text-sm bg-background"
-                value={step.elementId || ''}
-                onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
-              >
-                <option value="">Select button...</option>
-                {catalog?.screens.filter(s => (s.buttons?.length || 0) > 0).map(screen => {
-                  const searchTerm = stepSearches[step.id]?.toLowerCase() || '';
-                  const hasMatchingButton = (screen.buttons || []).some(b =>
-                    b.text?.toLowerCase().includes(searchTerm) ||
-                    b.type?.toLowerCase().includes(searchTerm) ||
-                    screen.name.toLowerCase().includes(searchTerm)
-                  ) || (screen.texts || []).some(t =>
-                    t.text?.toLowerCase().includes(searchTerm)
-                  );
-                  if (!hasMatchingButton && searchTerm) return null;
-                  return (
-                    <optgroup key={screen.name} label={`📱 ${screen.name}`}>
-                      {(screen.buttons || []).filter(btn =>
-                        !searchTerm ||
-                        btn.text?.toLowerCase().includes(searchTerm) ||
-                        btn.type?.toLowerCase().includes(searchTerm)
-                      ).map(btn => (
-                        <option key={btn.id} value={btn.id}>"{btn.text}" ({btn.type})</option>
-                      ))}
-                      {(screen.texts || []).filter(txt =>
-                        (!searchTerm || txt.text?.toLowerCase().includes(searchTerm)) &&
-                        (screen.buttons?.length || 0) === 0
-                      ).slice(0, 30).map(txt => (
-                        <option key={txt.id} value={txt.id}>
-                          {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
-                        </option>
-                      ))}
-                    </optgroup>
-                  );
-                })}
-              </select>
-            </div>
-            {stepSearches[step.id] && (
-              <div className="text-xs text-muted-foreground">
-                Showing filtered results for "{stepSearches[step.id]}"
-              </div>
-            )}
+          <div className="mt-2 space-y-1.5">
+            <Input
+              placeholder="Search element... (e.g. Simpanan)"
+              value={tapSearch}
+              onChange={e => setTapSearch(e.target.value)}
+              className="h-8 text-sm"
+            />
+            <select
+              className="w-full rounded border px-3 py-2 text-sm bg-background"
+              value={selectVal}
+              onChange={e => {
+                const [, ...rest] = e.target.value.split(':');
+                const realId = rest.join(':');
+                onUpdate(step.id, { elementId: realId });
+              }}
+              size={tapSearch && filtered.length > 0 ? Math.min(filtered.length + 1, 10) : 1}
+            >
+              <option value="">Select element...</option>
+              {filtered.map(o => (
+                <option key={o.idx} value={`${o.idx}:${o.id}`}>
+                  {o.label}{o.screen ? ` — ${o.screen}` : ''}
+                </option>
+              ))}
+            </select>
           </div>
         );
+      }
       case 'hide_keyboard':
         return (
           <div className="mt-1 text-xs text-muted-foreground">
@@ -250,47 +258,26 @@ const StepRow: React.FC<{
       case 'double_tap':
       case 'long_press':
         return (
-          <div className="flex flex-col gap-2 mt-2">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Search elements..."
-                value={stepSearches[step.id] || ''}
-                onChange={(e) => updateStepSearch(step.id, e.target.value)}
-                className="flex-1 h-9 text-sm"
-              />
-              <select
-                className="flex-1 rounded border px-3 py-2 text-sm bg-background"
-                value={step.elementId || ''}
-                onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
-              >
-                <option value="">Select element...</option>
-                {catalog?.screens.filter(s => (s.buttons?.length || 0) > 0).map(screen => {
-                  const searchTerm = stepSearches[step.id]?.toLowerCase() || '';
-                  const hasMatch = (screen.buttons || []).some(b =>
-                    b.text?.toLowerCase().includes(searchTerm)
-                  ) || (screen.texts || []).some(t =>
-                    t.text?.toLowerCase().includes(searchTerm)
-                  ) || screen.name.toLowerCase().includes(searchTerm);
-                  if (!hasMatch && searchTerm) return null;
-                  return (
-                    <optgroup key={screen.name} label={`📱 ${screen.name}`}>
-                      {(screen.buttons || []).filter(btn =>
-                        !searchTerm || btn.text?.toLowerCase().includes(searchTerm)
-                      ).map(btn => (
-                        <option key={btn.id} value={btn.id}>"{btn.text}"</option>
-                      ))}
-                      {(screen.texts || []).filter(txt =>
-                        !searchTerm || txt.text?.toLowerCase().includes(searchTerm)
-                      ).slice(0, 30).map(txt => (
-                        <option key={txt.id} value={txt.id}>
-                          {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
-                        </option>
-                      ))}
-                    </optgroup>
-                  );
-                })}
-              </select>
-            </div>
+          <div className="mt-2">
+            <select
+              className="w-full rounded border px-3 py-2 text-sm bg-background"
+              value={step.elementId || ''}
+              onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
+            >
+              <option value="">Select element...</option>
+              {catalog?.screens.filter(s => (s.buttons?.length || 0) > 0 || (s.texts?.length || 0) > 0).map(screen => (
+                <optgroup key={screen.name} label={`📱 ${screen.name}`}>
+                  {(screen.buttons || []).map(btn => (
+                    <option key={btn.id} value={btn.id}>"{btn.text}"</option>
+                  ))}
+                  {(screen.texts || []).slice(0, 30).map(txt => (
+                    <option key={txt.id} value={txt.id}>
+                      {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
           </div>
         );
       case 'scroll':
@@ -304,47 +291,26 @@ const StepRow: React.FC<{
         );
       case 'scroll_until_visible':
         return (
-          <div className="flex flex-col gap-2 mt-2">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Search target element..."
-                value={stepSearches[step.id] || ''}
-                onChange={(e) => updateStepSearch(step.id, e.target.value)}
-                className="flex-1 h-9 text-sm"
-              />
-              <select
-                className="flex-1 rounded border px-3 py-2 text-sm bg-background"
-                value={step.elementId || ''}
-                onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
-              >
-                <option value="">Select target element...</option>
-                {catalog?.screens.filter(s => (s.texts?.length || 0) > 0 || (s.buttons?.length || 0) > 0).map(screen => {
-                  const searchTerm = stepSearches[step.id]?.toLowerCase() || '';
-                  const hasMatch = (screen.buttons || []).some(b =>
-                    b.text?.toLowerCase().includes(searchTerm)
-                  ) || (screen.texts || []).some(t =>
-                    t.text?.toLowerCase().includes(searchTerm)
-                  ) || screen.name.toLowerCase().includes(searchTerm);
-                  if (!hasMatch && searchTerm) return null;
-                  return (
-                    <optgroup key={screen.name} label={`📱 ${screen.name}`}>
-                      {(screen.buttons || []).filter(btn =>
-                        !searchTerm || btn.text?.toLowerCase().includes(searchTerm)
-                      ).map(btn => (
-                        <option key={btn.id} value={btn.id}>"{btn.text}"</option>
-                      ))}
-                      {(screen.texts || []).filter(txt =>
-                        !searchTerm || txt.text?.toLowerCase().includes(searchTerm)
-                      ).slice(0, 40).map(txt => (
-                        <option key={txt.id} value={txt.id}>
-                          {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
-                        </option>
-                      ))}
-                    </optgroup>
-                  );
-                })}
-              </select>
-            </div>
+          <div className="mt-2">
+            <select
+              className="w-full rounded border px-3 py-2 text-sm bg-background"
+              value={step.elementId || ''}
+              onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
+            >
+              <option value="">Select target element...</option>
+              {catalog?.screens.filter(s => (s.texts?.length || 0) > 0 || (s.buttons?.length || 0) > 0).map(screen => (
+                <optgroup key={screen.name} label={`📱 ${screen.name}`}>
+                  {(screen.buttons || []).map(btn => (
+                    <option key={btn.id} value={btn.id}>"{btn.text}"</option>
+                  ))}
+                  {(screen.texts || []).slice(0, 40).map(txt => (
+                    <option key={txt.id} value={txt.id}>
+                      {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
           </div>
         );
       case 'send_key':
@@ -393,47 +359,26 @@ const StepRow: React.FC<{
       case 'assert_visible':
       case 'assert_not_visible':
         return (
-          <div className="flex flex-col gap-2 mt-2">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Search elements..."
-                value={stepSearches[step.id] || ''}
-                onChange={(e) => updateStepSearch(step.id, e.target.value)}
-                className="flex-1 h-9 text-sm"
-              />
-              <select
-                className="flex-1 rounded border px-3 py-2 text-sm bg-background"
-                value={step.elementId || ''}
-                onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
-              >
-                <option value="">Select text/button...</option>
-                {catalog?.screens.filter(s => ((s.buttons?.length || 0) > 0 || (s.texts?.length || 0) > 0)).map(screen => {
-                  const searchTerm = stepSearches[step.id]?.toLowerCase() || '';
-                  const hasMatch = (screen.buttons || []).some(b =>
-                    b.text?.toLowerCase().includes(searchTerm)
-                  ) || (screen.texts || []).some(t =>
-                    t.text?.toLowerCase().includes(searchTerm)
-                  ) || screen.name.toLowerCase().includes(searchTerm);
-                  if (!hasMatch && searchTerm) return null;
-                  return (
-                    <optgroup key={screen.name} label={`📱 ${screen.name}`}>
-                      {(screen.buttons || []).filter(btn =>
-                        !searchTerm || btn.text?.toLowerCase().includes(searchTerm)
-                      ).map(btn => (
-                        <option key={btn.id} value={btn.id}>"{btn.text}"</option>
-                      ))}
-                      {(screen.texts || []).filter(txt =>
-                        !searchTerm || txt.text?.toLowerCase().includes(searchTerm)
-                      ).slice(0, 30).map(txt => (
-                        <option key={txt.id} value={txt.id}>
-                          {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
-                        </option>
-                      ))}
-                    </optgroup>
-                  );
-                })}
-              </select>
-            </div>
+          <div className="mt-2">
+            <select
+              className="w-full rounded border px-3 py-2 text-sm bg-background"
+              value={step.elementId || ''}
+              onChange={(e) => onUpdate(step.id, { elementId: e.target.value })}
+            >
+              <option value="">Select text/button...</option>
+              {catalog?.screens.filter(s => ((s.buttons?.length || 0) > 0 || (s.texts?.length || 0) > 0)).map(screen => (
+                <optgroup key={screen.name} label={`📱 ${screen.name}`}>
+                  {(screen.buttons || []).map(btn => (
+                    <option key={btn.id} value={btn.id}>"{btn.text}"</option>
+                  ))}
+                  {(screen.texts || []).slice(0, 30).map(txt => (
+                    <option key={txt.id} value={txt.id}>
+                      {(txt as any).source === 'api-inference' ? '⚡ ' : ''}"{txt.text}"
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
           </div>
         );
       case 'wait':
@@ -492,12 +437,6 @@ const VisualTestBuilder: React.FC = () => {
   const [savingTestCase, setSavingTestCase] = useState(false);
   const [savedTestCase, setSavedTestCase] = useState<{id: string; title: string} | null>(null);
 
-  // ─── Step Palette Search ────────────────────────────────────────────────────────
-  const [stepSearches, setStepSearches] = useState<Record<string, string>>({});
-
-  const updateStepSearch = (stepId: string, value: string) => {
-    setStepSearches(prev => ({ ...prev, [stepId]: value }));
-  };
   const [elementFilter, setElementFilter] = useState<'all' | 'inputs' | 'buttons' | 'texts'>('all');
   const [elementSearch, setElementSearch] = useState('');
   const [expandedScreens, setExpandedScreens] = useState<Set<string>>(new Set());
@@ -722,135 +661,134 @@ const VisualTestBuilder: React.FC = () => {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Visual Test Builder</h1>
-          <p className="text-muted-foreground">Scan your Flutter app, pick elements, compose test scenarios</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Codebase Selector */}
-          <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">Codebase:</Label>
-            <div className="flex gap-1">
-              <select
-                value={codebasePath || '__custom__'}
-                onChange={(e) => {
-                  if (e.target.value === '__custom__') {
-                    setCodebasePath('');
-                  } else {
-                    setCodebasePath(e.target.value);
-                  }
-                }}
-                className="rounded border px-2 py-1.5 text-xs bg-background min-w-[140px]"
-              >
-                {/* Preset codebases */}
-                <option value="/Users/bankraya/Development/discipline-tracker">Discipline Tracker</option>
-                <option value="/Users/bankraya/Development/Raya-dev">Raya Dev (Bank Raya)</option>
-                <option value="__custom__">Custom Path...</option>
-              </select>
-              <input
-                type="text"
-                value={codebasePath}
-                onChange={(e) => setCodebasePath(e.target.value)}
-                placeholder="/path/to/flutter/project"
-                className="rounded border px-2 py-1.5 text-xs bg-background min-w-[200px] flex-1"
-              />
-            </div>
-          </div>
+      <div>
+        <h1 className="text-2xl font-bold">Visual Test Builder</h1>
+        <p className="text-muted-foreground">Scan your Flutter app, pick elements, compose test scenarios</p>
+      </div>
 
-          {/* Scan Mode Toggle */}
-          <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">Scan:</Label>
-            <div className="flex items-center border rounded-md overflow-hidden">
-              <button
-                onClick={() => setScanMode('regular')}
-                className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1 ${
-                  scanMode === 'regular' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
-                }`}
-              >
-                <Scan className="w-3 h-3" />
-                Static
-              </button>
-              <button
-                onClick={() => setScanMode('hybrid')}
-                className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1 ${
-                  scanMode === 'hybrid' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
-                }`}
-              >
-                <Layers className="w-3 h-3" />
-                Hybrid
-              </button>
-            </div>
-          </div>
-
-          {runners.length > 1 && (
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs text-muted-foreground">Runner:</Label>
-              <select
-                value={selectedRunner}
-                onChange={(e) => {
-                  setSelectedRunner(e.target.value);
-                  const runner = runners.find(r => r.id === e.target.value);
-                  if (runner?.projectPath) setCodebasePath(runner.projectPath);
-                }}
-                className="rounded border px-3 py-2 text-xs bg-background min-w-[140px]"
-              >
-                {runners.map(r => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} {r.deviceId ? `(${r.deviceId})` : ''} {r.isDefault ? '★' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Device Picker */}
-          <div className="flex flex-col gap-1 relative" data-device-picker>
-            <Label className="text-xs text-muted-foreground">Device:</Label>
-            <div className="relative">
-              <button
-                onClick={() => setShowDevicePicker(!showDevicePicker)}
-                className="flex items-center gap-2 px-3 py-2 rounded border bg-background hover:bg-muted transition-colors text-xs min-w-[140px]"
-              >
-                <span className="text-base">{currentDevice.icon}</span>
-                <span className="truncate text-left">{selectedDevice ? currentDevice.label : 'Default (375x812)'}</span>
-                <span className="text-[10px] text-muted-foreground ml-auto">▼</span>
-              </button>
-              {showDevicePicker && (
-                <div className="absolute left-0 top-full mt-1 bg-card border rounded-lg shadow-lg w-72 z-50">
-                  {['Default', 'iOS', 'Android', 'Tablet'].map(category => {
-                    const devices = MOBILE_DEVICES.filter(d => d.category === category);
-                    if (devices.length === 0) return null;
-                    return (
-                      <div key={category} className="p-2">
-                        <div className="text-[10px] font-semibold text-muted-foreground uppercase px-2 mb-1">{category}</div>
-                        {devices.map(d => (
-                          <button
-                            key={d.id || 'default'}
-                            onClick={() => { applyDevice(d.id); setShowDevicePicker(false); }}
-                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
-                              selectedDevice === d.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                            }`}
-                          >
-                            <span>{d.icon}</span>
-                            <span className="truncate flex-1 text-left">{d.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1 self-end">
-            <Button onClick={handleScan} disabled={scanning} size="sm">
-              {scanning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Scan className="w-3 h-3 mr-1" />}
-              {scanning ? 'Scanning...' : scanMode === 'hybrid' ? 'Hybrid Scan' : 'Scan'}
-            </Button>
+      {/* Scan Config Bar */}
+      <div className="flex flex-wrap items-end gap-3 p-3 bg-muted/30 rounded-lg border">
+        {/* Codebase Selector */}
+        <div className="flex flex-col gap-1 flex-1 min-w-[280px]">
+          <Label className="text-xs text-muted-foreground">Codebase</Label>
+          <div className="flex gap-1">
+            <select
+              value={codebasePath || '__custom__'}
+              onChange={(e) => {
+                if (e.target.value === '__custom__') {
+                  setCodebasePath('');
+                } else {
+                  setCodebasePath(e.target.value);
+                }
+              }}
+              className="rounded border px-2 py-1.5 text-xs bg-background min-w-[130px]"
+            >
+              <option value="/Users/bankraya/Development/discipline-tracker">Discipline Tracker</option>
+              <option value="/Users/bankraya/Development/Raya-dev">Raya Dev (Bank Raya)</option>
+              <option value="__custom__">Custom Path...</option>
+            </select>
+            <input
+              type="text"
+              value={codebasePath}
+              onChange={(e) => setCodebasePath(e.target.value)}
+              placeholder="/path/to/flutter/project"
+              className="rounded border px-2 py-1.5 text-xs bg-background flex-1 min-w-[160px]"
+            />
           </div>
         </div>
+
+        {/* Runner (only if multiple) */}
+        {runners.length > 1 && (
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">Runner</Label>
+            <select
+              value={selectedRunner}
+              onChange={(e) => {
+                setSelectedRunner(e.target.value);
+                const runner = runners.find(r => r.id === e.target.value);
+                if (runner?.projectPath) setCodebasePath(runner.projectPath);
+              }}
+              className="rounded border px-2 py-1.5 text-xs bg-background min-w-[130px]"
+            >
+              {runners.map(r => (
+                <option key={r.id} value={r.id}>
+                  {r.name} {r.deviceId ? `(${r.deviceId})` : ''} {r.isDefault ? '★' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Scan Mode Toggle */}
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Scan Mode</Label>
+          <div className="flex items-center border rounded-md overflow-hidden h-[30px]">
+            <button
+              onClick={() => setScanMode('regular')}
+              className={`px-3 h-full text-xs font-medium flex items-center gap-1.5 ${
+                scanMode === 'regular' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <Scan className="w-3 h-3" />
+              Static
+            </button>
+            <button
+              onClick={() => setScanMode('hybrid')}
+              className={`px-3 h-full text-xs font-medium flex items-center gap-1.5 border-l ${
+                scanMode === 'hybrid' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <Layers className="w-3 h-3" />
+              Hybrid
+            </button>
+          </div>
+        </div>
+
+        {/* Device Picker */}
+        <div className="flex flex-col gap-1 relative" data-device-picker>
+          <Label className="text-xs text-muted-foreground">Device</Label>
+          <div className="relative">
+            <button
+              onClick={() => setShowDevicePicker(!showDevicePicker)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded border bg-background hover:bg-muted transition-colors text-xs min-w-[150px] h-[30px]"
+            >
+              <span className="text-sm leading-none">{currentDevice.icon}</span>
+              <span className="truncate text-left flex-1">{selectedDevice ? currentDevice.label : 'Default (375×812)'}</span>
+              <span className="text-[10px] text-muted-foreground">▼</span>
+            </button>
+            {showDevicePicker && (
+              <div className="absolute left-0 top-full mt-1 bg-card border rounded-lg shadow-lg w-72 z-50">
+                {['Default', 'iOS', 'Android', 'Tablet'].map(category => {
+                  const devices = MOBILE_DEVICES.filter(d => d.category === category);
+                  if (devices.length === 0) return null;
+                  return (
+                    <div key={category} className="p-2">
+                      <div className="text-[10px] font-semibold text-muted-foreground uppercase px-2 mb-1">{category}</div>
+                      {devices.map(d => (
+                        <button
+                          key={d.id || 'default'}
+                          onClick={() => { applyDevice(d.id); setShowDevicePicker(false); }}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors ${
+                            selectedDevice === d.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                          }`}
+                        >
+                          <span>{d.icon}</span>
+                          <span className="truncate flex-1 text-left">{d.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Scan Button */}
+        <Button onClick={handleScan} disabled={scanning} size="sm" className="h-[30px]">
+          {scanning ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> : <Scan className="w-3 h-3 mr-1.5" />}
+          {scanning ? 'Scanning...' : scanMode === 'hybrid' ? 'Hybrid Scan' : 'Scan'}
+        </Button>
       </div>
 
       {scanError && <div className="flex items-center gap-2 text-sm text-red-500 bg-red-50 p-3 rounded"><AlertTriangle className="w-4 h-4" /> {scanError}</div>}

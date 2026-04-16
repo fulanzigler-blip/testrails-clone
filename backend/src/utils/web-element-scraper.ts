@@ -175,7 +175,17 @@ function getAccessibleLabel(element: any): string {
 
 // ─── Page Crawling ─────────────────────────────────────────────────────────────
 
-async function extractElementsFromPage(page: Page, pageName: string): Promise<WebPageElement> {
+async function extractElementsFromPage(page: Page, pageName: string, pageUrl?: string): Promise<WebPageElement> {
+  // Use URL path as ID slug — more unique than page title (many pages share the same title)
+  const urlSlug = (() => {
+    try {
+      const u = new URL(pageUrl || page.url());
+      const path = (u.pathname + u.search).replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '').toLowerCase();
+      return path || 'index';
+    } catch {
+      return pageName.toLowerCase().replace(/\s+/g, '_');
+    }
+  })();
   const elements = await page.evaluate(() => {
     const inputs: Array<{ tag: string; type: string; id: string; name: string; placeholder: string; label: string; ariaLabel: string; selector: string; testId?: string; role?: string; fallbackSelectors?: string[] }> = [];
     const buttons: Array<{ tag: string; text: string; type: string; selector: string; testId?: string; ariaLabel?: string; role?: string; fallbackSelectors?: string[] }> = [];
@@ -221,36 +231,110 @@ async function extractElementsFromPage(page: Page, pageName: string): Promise<We
       });
     });
 
-    // Extract buttons
-    const allButtons = globalThis.document.querySelectorAll('button, [role="button"], input[type="submit"], input[type="button"]');
-    allButtons.forEach((el: any) => {
+    // Extract buttons (includes tab-like interactive divs/spans with data-tab, data-toggle, etc.)
+    const allButtonEls = globalThis.document.querySelectorAll(
+      'button, [role="button"], input[type="submit"], input[type="button"], ' +
+      '[data-tab], [data-tabs], [data-toggle="tab"], [data-bs-toggle="tab"], ' +
+      '[data-toggle="dropdown"], [data-bs-toggle="dropdown"], ' +
+      '[data-bs-toggle="pill"], .tab:not(.tabs):not(.tab-content):not(.tab-pane)'
+    );
+    allButtonEls.forEach((el: any, idx: number) => {
       const btn = el as any;
-      const text = btn.textContent?.trim() ||
-                   btn.getAttribute('aria-label') ||
-                   btn.getAttribute('value') ||
-                   'Button';
+      const rawText = btn.textContent?.trim();
+      const ariaLabel = btn.getAttribute('aria-label') || btn.getAttribute('title');
+      const value = btn.getAttribute('value');
+      const hasUsableText = !!(rawText || ariaLabel || value);
 
-      // Generate multiple fallback selectors (ordered by stability)
+      // Display label — prefer real text, fallback to aria/title, then context-based name
+      const parentTag = btn.parentElement?.tagName?.toLowerCase() || '';
+      const contextHint = parentTag === 'header' || btn.closest('header') ? 'Header' :
+                          parentTag === 'nav' || btn.closest('nav') ? 'Nav' :
+                          btn.closest('footer') ? 'Footer' : '';
+      const displayText = rawText || ariaLabel || value ||
+                          `${contextHint ? contextHint + ' ' : ''}Icon Button ${idx + 1}`;
+
+      // Build CSS selectors ordered by stability
       const fallbackSelectors: string[] = [];
       if (btn.getAttribute('data-testid')) fallbackSelectors.push(`[data-testid="${btn.getAttribute('data-testid')}"]`);
       if (btn.id) fallbackSelectors.push(`#${btn.id}`);
+      // data-tab / data-toggle are very stable for tab elements
+      if (btn.getAttribute('data-tab')) fallbackSelectors.push(`[data-tab="${btn.getAttribute('data-tab')}"]`);
+      if (btn.getAttribute('data-bs-toggle') && btn.getAttribute('data-bs-target')) fallbackSelectors.push(`[data-bs-target="${btn.getAttribute('data-bs-target')}"]`);
       if (btn.getAttribute('name')) fallbackSelectors.push(`[name="${btn.getAttribute('name')}"]`);
-      if (btn.getAttribute('role')) fallbackSelectors.push(`[role="${btn.getAttribute('role')}"]`);
-      if (btn.tagName === 'INPUT' && btn.getAttribute('value')) {
-        fallbackSelectors.push(`input[type="${btn.getAttribute('type') || 'submit'}"][value="${btn.getAttribute('value').slice(0, 50)}"]`);
-      } else if (btn.tagName !== 'INPUT') {
-        fallbackSelectors.push(`button:has-text("${text.slice(0, 50)}")`);
+      if (btn.tagName === 'INPUT' && value) {
+        fallbackSelectors.push(`input[type="${btn.getAttribute('type') || 'submit'}"][value="${value.slice(0, 50)}"]`);
+      } else if (hasUsableText) {
+        const tag = btn.tagName.toLowerCase();
+        // Use tag-specific has-text for non-button interactive elements
+        const hasTextTag = tag === 'button' ? 'button' : tag;
+        fallbackSelectors.push(`${hasTextTag}:has-text("${(rawText || ariaLabel || value || '').slice(0, 50)}")`);
       }
-      fallbackSelectors.push(`${btn.tagName.toLowerCase()}`);
+      // Class-based selector as CSS fallback for icon-only buttons
+      if (!hasUsableText) {
+        const classes = Array.from(btn.classList || []).slice(0, 3).join('.');
+        if (classes) fallbackSelectors.push(`${btn.tagName.toLowerCase()}.${classes}`);
+      }
+      if (btn.getAttribute('role')) fallbackSelectors.push(`[role="${btn.getAttribute('role')}"]`);
+
+      // Always include as nth-of-type last resort
+      const nthIdx = Array.from(globalThis.document.querySelectorAll(btn.tagName.toLowerCase())).indexOf(btn) + 1;
+      fallbackSelectors.push(`${btn.tagName.toLowerCase()}:nth-of-type(${nthIdx})`);
 
       buttons.push({
         tag: btn.tagName.toLowerCase(),
-        text: text.slice(0, 100),
+        text: displayText.slice(0, 100),
         type: btn.getAttribute('type') || 'button',
         testId: btn.getAttribute('data-testid') || undefined,
-        ariaLabel: btn.getAttribute('aria-label') || undefined,
+        ariaLabel: ariaLabel || undefined,
         role: btn.getAttribute('role') || 'button',
         selector: fallbackSelectors[0] || `${btn.tagName.toLowerCase()}`,
+        fallbackSelectors,
+      });
+    });
+
+    // Extract clickable <a> links (nav items, CTAs) as buttons
+    const allLinks = globalThis.document.querySelectorAll('a[href]');
+    allLinks.forEach((el: any) => {
+      const link = el as any;
+      const text = link.textContent?.trim();
+      const href = link.getAttribute('href') || '';
+      const cls = (link.className || '').toString();
+
+      // Skip: empty text, external non-meaningful, or already captured as plain link
+      if (!text || text.length < 1 || text.length > 80) return;
+      // Allow href="#" only for dropdown/interactive nav items (e.g. data-toggle="dropdown")
+      const isDropdownTrigger = link.getAttribute('data-toggle') === 'dropdown' ||
+                                link.getAttribute('data-bs-toggle') === 'dropdown' ||
+                                (link.className || '').toString().includes('dropdown-toggle');
+      if (!href || href === 'javascript:void(0)') return;
+      if (href === '#' && !isDropdownTrigger) return;
+
+      // Only include links that look interactive/navigational
+      const isNavLike = cls.includes('nav') || cls.includes('btn') || cls.includes('button') ||
+                        cls.includes('link') || cls.includes('menu') || cls.includes('dropdown') ||
+                        link.closest('nav') || link.closest('header') || link.closest('[role="navigation"]');
+      if (!isNavLike) return;
+
+      const fallbackSelectors: string[] = [];
+      if (link.getAttribute('data-testid')) fallbackSelectors.push(`[data-testid="${link.getAttribute('data-testid')}"]`);
+      if (link.id) fallbackSelectors.push(`#${link.id}`);
+      // For dropdown triggers (href="#"), use data-toggle selector instead of href
+      if (isDropdownTrigger) {
+        const toggle = link.getAttribute('data-toggle') || link.getAttribute('data-bs-toggle');
+        if (toggle) fallbackSelectors.push(`a[data-toggle="${toggle}"]:has-text("${text.slice(0, 50)}")`);
+      } else if (href.startsWith('http') || href.startsWith('/')) {
+        fallbackSelectors.push(`a[href="${href}"]`);
+      }
+      fallbackSelectors.push(`a:has-text("${text.slice(0, 50)}")`);
+
+      buttons.push({
+        tag: 'a',
+        text: text.slice(0, 100),
+        type: isDropdownTrigger ? 'dropdown' : 'link',
+        testId: link.getAttribute('data-testid') || undefined,
+        ariaLabel: link.getAttribute('aria-label') || undefined,
+        role: link.getAttribute('role') || 'link',
+        selector: fallbackSelectors[0] || `a:has-text("${text.slice(0, 50)}")`,
         fallbackSelectors,
       });
     });
@@ -279,10 +363,11 @@ async function extractElementsFromPage(page: Page, pageName: string): Promise<We
     });
 
     // Extract links
-    const allLinks = globalThis.document.querySelectorAll('a[href]');
-    allLinks.forEach((el: any) => {
+    const allPageLinks = globalThis.document.querySelectorAll('a[href]');
+    allPageLinks.forEach((el: any) => {
       const link = el as any;
-      if (!link.href || link.href.startsWith('javascript:') || link.href.startsWith('#')) return;
+      if (!link.href || link.href.startsWith('javascript:') || link.href.startsWith('javascript:')) return;
+      if (link.href === '#') return;
       const text = link.textContent?.trim() || link.getAttribute('aria-label') || link.href;
 
       links.push({
@@ -293,11 +378,35 @@ async function extractElementsFromPage(page: Page, pageName: string): Promise<We
       });
     });
 
-    return { inputs, buttons, texts, links };
+    // ── Deduplicate buttons ──────────────────────────────────────────────────────
+    // 1. Skip carousel / slider noise
+    const carouselNoise = /^(go to slide \d+|next slide|previous slide|prev slide)$/i;
+    const filteredButtons = buttons.filter(b => !carouselNoise.test((b.text || '').trim()));
+
+    // 2. Deduplicate: by href-path for links, by text for others, also skip same selector
+    const seenKeys = new Set<string>();
+    const seenSelectors = new Set<string>();
+    const dedupedButtons = filteredButtons.filter(b => {
+      const normText = (b.text || '').toLowerCase().trim();
+      // For <a> links use full href path (without query) as unique key
+      const hrefPath = b.selector?.match(/a\[href="([^"]+)"\]/)?.[1]?.split('?')[0] || '';
+      const key = hrefPath || normText;
+      if (!key) return false;
+      if (seenKeys.has(key)) return false;
+      // Also dedup icon-only buttons that share the same CSS selector (e.g. multiple dropdown toggles)
+      const sel = b.selector || '';
+      const isGenericIconBtn = !hrefPath && normText.match(/^(nav |header |footer |icon )?icon button \d+$|^button \d+$/i);
+      if (isGenericIconBtn && sel && seenSelectors.has(sel)) return false;
+      seenKeys.add(key);
+      if (sel) seenSelectors.add(sel);
+      return true;
+    });
+
+    return { inputs, buttons: dedupedButtons, texts, links };
   });
 
   const inputs: WebInputElement[] = elements.inputs.map((el, i) => ({
-    id: `input_${pageName.toLowerCase().replace(/\s+/g, '_')}_${i}`,
+    id: `input_${urlSlug}_${i}`,
     label: el.label,
     type: el.type,
     selector: el.selector,
@@ -313,7 +422,7 @@ async function extractElementsFromPage(page: Page, pageName: string): Promise<We
   }));
 
   const buttons: WebButtonElement[] = elements.buttons.map((el, i) => ({
-    id: `btn_${pageName.toLowerCase().replace(/\s+/g, '_')}_${i}`,
+    id: `btn_${urlSlug}_${i}`,
     text: el.text,
     type: el.type,
     selector: el.selector,
@@ -330,7 +439,7 @@ async function extractElementsFromPage(page: Page, pageName: string): Promise<We
   }));
 
   const texts: WebTextElement[] = elements.texts.slice(0, 50).map((el, i) => ({
-    id: `text_${pageName.toLowerCase().replace(/\s+/g, '_')}_${i}`,
+    id: `text_${urlSlug}_${i}`,
     text: el.text,
     selector: el.selector,
     xpath: '',
@@ -342,7 +451,7 @@ async function extractElementsFromPage(page: Page, pageName: string): Promise<We
   }));
 
   const links: WebLinkElement[] = elements.links.slice(0, 30).map((el, i) => ({
-    id: `link_${pageName.toLowerCase().replace(/\s+/g, '_')}_${i}`,
+    id: `link_${urlSlug}_${i}`,
     text: el.text,
     href: el.href,
     selector: el.selector,
@@ -403,7 +512,7 @@ async function crawlSite(
       await page.waitForTimeout(500);
 
       const pageName = await page.title().then(t => t || `Page ${pageCount}`);
-      const elements = await extractElementsFromPage(page, pageName);
+      const elements = await extractElementsFromPage(page, pageName, url);
       pages.push(elements);
 
       // Find links to crawl

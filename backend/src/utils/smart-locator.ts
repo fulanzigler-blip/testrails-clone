@@ -84,19 +84,22 @@ export async function smartLocate(
     } catch {}
   }
 
-  // Strategy 6: has-text selector (for buttons/links with known text)
-  if (ctx.text && ctx.tag) {
+  // Strategy 6: has-text selector (only when text is real/meaningful)
+  const meaningfulText = ctx.text && ctx.text.length > 0;
+  if (meaningfulText && ctx.tag) {
     attempts.push({ strategy: `${ctx.tag}:has-text`, selector: `${ctx.tag}:has-text("${ctx.text}")` });
     try {
       const loc = page.locator(`${ctx.tag}:has-text("${ctx.text}")`).first();
       await loc.waitFor({ state: 'visible', timeout });
-      return { locator: loc, strategy: `${ctx.tag}:has-text`, selector: ctx.text };
+      return { locator: loc, strategy: `${ctx.tag}:has-text`, selector: ctx.text! };
     } catch {}
   }
 
-  // Strategy 7: Fallback selectors from scraper
+  // Strategy 7: Fallback selectors from scraper (CSS-based, most reliable for unnamed elements)
   if (ctx.fallbackSelectors) {
     for (const fb of ctx.fallbackSelectors) {
+      // Skip has-text fallbacks if we already tried and failed, prefer CSS selectors
+      if (fb.includes(':has-text') && !meaningfulText) continue;
       attempts.push({ strategy: 'fallback-selector', selector: fb });
       try {
         const loc = page.locator(fb).first();
@@ -106,13 +109,13 @@ export async function smartLocate(
     }
   }
 
-  // Strategy 8: :has-text (text anywhere in page)
-  if (ctx.text) {
-    attempts.push({ strategy: 'text-anywhere', selector: `text="${ctx.text}"` });
+  // Strategy 8: getByText (text anywhere in page — only meaningful text)
+  if (meaningfulText) {
+    attempts.push({ strategy: 'getByText', selector: `text="${ctx.text}"` });
     try {
-      const loc = page.locator(`:has-text("${ctx.text}")`).first();
+      const loc = page.getByText(ctx.text!, { exact: false }).first();
       await loc.waitFor({ state: 'visible', timeout });
-      return { locator: loc, strategy: 'text-anywhere', selector: ctx.text };
+      return { locator: loc, strategy: 'getByText', selector: ctx.text! };
     } catch {}
   }
 

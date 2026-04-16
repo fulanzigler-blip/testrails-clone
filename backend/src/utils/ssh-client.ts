@@ -120,7 +120,8 @@ export function execSSHWithConfig(command: string, cfg: unknown, timeoutMs: numb
         stream.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
         stream.on('close', (code: number | null) => {
           client.end(); clearTimeout(timer);
-          resolve({ output: output.trim(), code: code ?? -1 });
+          const combined = [output, stderr].filter(Boolean).join('\n').trim();
+          resolve({ output: combined, code: code ?? -1 });
         });
       });
     });

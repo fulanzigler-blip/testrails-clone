@@ -1,17 +1,34 @@
 import React, { useState } from 'react'
-import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Bell, LayoutDashboard, TestTube, Play, FolderTree, Users, BarChart3, Settings, LogOut, FolderOpen, Smartphone, Cpu, Wrench, Scan, Globe } from 'lucide-react'
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
+import { Bell, LayoutDashboard, TestTube, Play, FolderTree, Users, BarChart3, Settings, LogOut, FolderOpen, Smartphone, Cpu, Wrench, Scan, Globe, Plus } from 'lucide-react'
 import { useAppSelector } from '../store/hooks'
 import { Badge } from './ui/badge'
 import NotificationsDrawer from './NotificationsDrawer'
 import useWebSocket from '../hooks/useWebSocket'
+import { TestingConfigWizard, type TestConfig } from './TestingConfigWizard'
 
 const Layout: React.FC = () => {
   const location = useLocation()
+  const navigate = useNavigate()
   const { user } = useAppSelector((state) => state.auth)
   const { unreadCount } = useAppSelector((state) => state.notifications)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(false)
   useWebSocket()
+
+  const handleWizardLaunch = (config: TestConfig) => {
+    setWizardOpen(false)
+    if (config.type === 'web') {
+      // Pass config via sessionStorage so WebVisualBuilder can pick it up
+      sessionStorage.setItem('wvb_config', JSON.stringify(config))
+      navigate('/web-visual-builder')
+    } else if (config.type === 'mobile') {
+      sessionStorage.setItem('mobile_config', JSON.stringify(config))
+      navigate('/page-automation')
+    } else if (config.type === 'manual') {
+      navigate('/test-runs')
+    }
+  }
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -42,6 +59,17 @@ const Layout: React.FC = () => {
           <div className="flex h-16 items-center border-b px-6">
             <TestTube className="h-6 w-6 text-primary mr-2" />
             <span className="text-xl font-bold">TestRails</span>
+          </div>
+
+          {/* New Test Run CTA */}
+          <div className="px-3 py-3 border-b">
+            <button
+              onClick={() => setWizardOpen(true)}
+              className="w-full flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              New Test Run
+            </button>
           </div>
 
           {/* Navigation */}
@@ -121,6 +149,11 @@ const Layout: React.FC = () => {
         </main>
       </div>
       <NotificationsDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <TestingConfigWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onLaunch={handleWizardLaunch}
+      />
     </div>
   )
 }

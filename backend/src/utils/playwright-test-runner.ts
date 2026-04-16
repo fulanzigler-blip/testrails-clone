@@ -282,16 +282,35 @@ export async function runWebTest(
     }
     page = await context.newPage();
 
-    // Capture console logs (filter out analytics/tracking noise)
-    const ignorePatterns = [
+    // Capture console logs — split into analytics noise, website errors, and test logs
+    const analyticsPatterns = [
       'analytics.google.com', 'stats.g.doubleclick.net', 'connect.facebook.net',
       'google-analytics.com', 'region1.analytics', 'ga-audiences',
       'Failed to load resource',
     ];
+    // Patterns that indicate a website-native issue (not caused by our test steps)
+    const websiteErrorPatterns = [
+      'Content-Security-Policy', 'strict MIME type', 'MIME type (\'text/html\')',
+      'Failed to create chart', 'Swiper Loop Warning', 'ResizeObserver loop',
+      'Non-Error promise rejection', 'favicon', 'net::ERR_',
+    ];
+    const websiteWarnings: string[] = [];
+
     page.on('console', msg => {
       const text = msg.text();
-      if (ignorePatterns.some(p => text.includes(p))) return;
-      logs.push(`  [Console] ${msg.type()}: ${text.slice(0, 200)}`);
+      // Silently drop analytics/tracking noise
+      if (analyticsPatterns.some(p => text.includes(p))) return;
+      // Collect website-native errors separately
+      if (websiteErrorPatterns.some(p => text.includes(p))) {
+        websiteWarnings.push(`  ⚠ ${text.slice(0, 200)}`);
+        return;
+      }
+      const type = msg.type();
+      if (type === 'warning') {
+        websiteWarnings.push(`  ⚠ [warn] ${text.slice(0, 200)}`);
+        return;
+      }
+      logs.push(`  [Console] ${type}: ${text.slice(0, 200)}`);
     });
 
     // Auto-navigate to baseUrl if first step isn't navigate
@@ -373,6 +392,12 @@ export async function runWebTest(
         logs.push('');
         logs.push(`=== Test FAILED at step ${i + 1} ===`);
 
+        if (websiteWarnings.length > 0) {
+          logs.push('');
+          logs.push('── Website Issues (awareness) ──');
+          websiteWarnings.slice(0, 5).forEach(w => logs.push(w));
+        }
+
         return {
           success: false,
           output: logs.join('\n'),
@@ -390,6 +415,15 @@ export async function runWebTest(
     screenshots.push(finalScreenshot);
 
     logs.push('=== Test PASSED ===');
+
+    // Append website-native issues as awareness section (not test failures)
+    if (websiteWarnings.length > 0) {
+      logs.push('');
+      logs.push('── Website Issues (not test failures) ──');
+      logs.push('  These errors come from the target website itself, not from the test.');
+      websiteWarnings.slice(0, 10).forEach(w => logs.push(w));
+      if (websiteWarnings.length > 10) logs.push(`  ... and ${websiteWarnings.length - 10} more`);
+    }
 
     return {
       success: true,

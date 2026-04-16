@@ -5,9 +5,9 @@ interface Project {
   id: string
   name: string
   description: string
-  created_at: string
-  test_cases_count: number
-  test_runs_count: number
+  createdAt: string
+  testSuitesCount: number
+  testRunsCount: number
 }
 
 interface ProjectsState {
