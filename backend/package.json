@@ -38,6 +38,7 @@
     "@fastify/websocket": "^8.3.1",
     "@octokit/rest": "^22.0.1",
     "@prisma/client": "^5.19.1",
+    "@types/ws": "^8.18.1",
     "adm-zip": "^0.5.17",
     "argon2": "^0.40.3",
     "exceljs": "^4.4.0",
@@ -48,6 +49,7 @@
     "playwright": "^1.48.0",
     "ssh2": "^1.17.0",
     "winston": "^3.14.2",
+    "ws": "^8.20.0",
     "zod": "^3.23.8",
     "zxcvbn": "^4.4.2"
   },

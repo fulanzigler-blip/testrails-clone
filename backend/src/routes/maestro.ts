@@ -500,6 +500,93 @@ export default async function maestroRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // GET /screenshot - Capture current device screen as base64 PNG
+  fastify.get('/screenshot', {
+    onRequest: [fastify.authenticate, fastify.getOrganizationContext],
+  }, async (request: any, reply) => {
+    try {
+      validateSSHConfig();
+      const key = getSSHKey();
+
+      const screenshotBuf = await new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        const client = new Client();
+
+        const timer = setTimeout(() => { client.end(); reject(new Error('Screenshot timed out')); }, 15000);
+
+        client.on('ready', () => {
+          const cmd =
+            'export ANDROID_HOME="/Users/clawbot/Library/Android/sdk" && ' +
+            'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ' +
+            'adb exec-out screencap -p';
+          client.exec(cmd, (err, stream) => {
+            if (err) { clearTimeout(timer); client.end(); reject(err); return; }
+            // Collect raw binary — do NOT toString() here (would corrupt PNG)
+            stream.on('data', (d: Buffer) => chunks.push(d));
+            stream.stderr.on('data', () => {});
+            stream.on('close', () => {
+              clearTimeout(timer);
+              client.end();
+              const buf = Buffer.concat(chunks);
+              if (buf.length < 100) {
+                reject(new Error('Screenshot returned no data — is a device connected?'));
+              } else {
+                resolve(buf);
+              }
+            });
+          });
+        });
+        client.on('error', (e) => { clearTimeout(timer); reject(e); });
+        client.connect({ host: SSH_HOST, username: SSH_USER, privateKey: key, readyTimeout: 10000 });
+      });
+
+      const screenshot = screenshotBuf.toString('base64');
+      logger.info(`[LiveView] Screenshot captured (${Math.round(screenshotBuf.length / 1024)} KB)`);
+      return successResponse(reply, { screenshot, timestamp: Date.now() }, undefined);
+    } catch (error) {
+      logger.error('Screenshot failed:', error);
+      return errorResponses.handle(reply, error, 'capture screenshot');
+    }
+  });
+
+  // POST /tap - Send a tap at (x, y) device coordinates via ADB
+  fastify.post('/tap', {
+    onRequest: [fastify.authenticate, fastify.getOrganizationContext],
+  }, async (request: any, reply) => {
+    try {
+      validateSSHConfig();
+      const key = getSSHKey();
+      const { x, y } = request.body as { x: number; y: number };
+
+      if (typeof x !== 'number' || typeof y !== 'number') {
+        return errorResponses.badRequest(reply, 'x and y coordinates are required');
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const client = new Client();
+        const timer = setTimeout(() => { client.end(); reject(new Error('Tap timed out')); }, 10000);
+        client.on('ready', () => {
+          const cmd =
+            'export ANDROID_HOME="/Users/clawbot/Library/Android/sdk" && ' +
+            'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ' +
+            `adb shell input tap ${Math.round(x)} ${Math.round(y)}`;
+          client.exec(cmd, (err, stream) => {
+            if (err) { clearTimeout(timer); client.end(); reject(err); return; }
+            stream.on('close', () => { clearTimeout(timer); client.end(); resolve(); });
+          });
+        });
+        client.on('error', (e) => { clearTimeout(timer); reject(e); });
+        client.connect({ host: SSH_HOST, username: SSH_USER, privateKey: key, readyTimeout: 10000 });
+      });
+
+      logger.info(`[LiveView] Tapped at (${x}, ${y})`);
+      return successResponse(reply, { ok: true, x, y }, undefined);
+    } catch (error) {
+      logger.error('Tap failed:', error);
+      return errorResponses.handle(reply, error, 'send tap');
+    }
+  });
+
   // POST /flows - Save YAML flows to Mac runner AND to DB
   fastify.post('/flows', {
     onRequest: [fastify.authenticate, fastify.getOrganizationContext],

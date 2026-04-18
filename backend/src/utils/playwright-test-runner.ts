@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import logger from '../utils/logger';
 import { smartLocate, LocatorContext } from './smart-locator';
+import { WebAuthConfig, performLogin } from './web-element-scraper';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -225,6 +226,8 @@ export async function runWebTest(
   steps: WebTestStep[],
   baseUrl?: string,
   device?: string,
+  auth?: WebAuthConfig,
+  storageState?: object,
 ): Promise<WebTestResult> {
   const startTime = Date.now();
   const outputDir = ensureOutputDir();
@@ -242,6 +245,14 @@ export async function runWebTest(
   try {
     browser = await chromium.launch({ headless: true });
 
+    // Build shared context options — inject cookies from exploratory session if available
+    const storageStateOption = storageState as any;
+    if (storageState) {
+      const cookieCount = (storageState as any).cookies?.length ?? 0;
+      logs.push(`→ Reusing exploratory session state (${cookieCount} cookies) — skipping re-login`);
+      logs.push('');
+    }
+
     // Apply device emulation if specified
     if (device && devices[device]) {
       const deviceConfig = devices[device];
@@ -251,6 +262,7 @@ export async function runWebTest(
       logs.push('');
       context = await browser.newContext({
         ...deviceConfig,
+        storageState: storageStateOption,
         recordVideo: { dir: outputDir },
       });
     } else if (device) {
@@ -263,6 +275,7 @@ export async function runWebTest(
         logs.push('');
         context = await browser.newContext({
           viewport: { width: w, height: h },
+          storageState: storageStateOption,
           recordVideo: { dir: outputDir },
         });
       } else {
@@ -270,6 +283,7 @@ export async function runWebTest(
         logs.push('');
         context = await browser.newContext({
           viewport: { width: 1280, height: 720 },
+          storageState: storageStateOption,
           recordVideo: { dir: outputDir },
         });
       }
@@ -277,6 +291,7 @@ export async function runWebTest(
       // Default desktop
       context = await browser.newContext({
         viewport: { width: 1280, height: 720 },
+        storageState: storageStateOption,
         recordVideo: { dir: outputDir },
       });
     }
@@ -312,6 +327,21 @@ export async function runWebTest(
       }
       logs.push(`  [Console] ${type}: ${text.slice(0, 200)}`);
     });
+
+    // Auto-login — only if no session cookies were injected (avoids double-login lock)
+    if (auth && !storageState) {
+      logs.push('── Auto-login ──');
+      logs.push(`  URL: ${auth.loginUrl || baseUrl || '(first navigate step)'}`);
+      try {
+        await performLogin(page, auth.loginUrl || '', auth);
+        logs.push(`  → Logged in successfully (now at: ${page.url()})`);
+      } catch (err: any) {
+        logs.push(`  ❌ Login failed: ${err.message}`);
+        logs.push('=== Test FAILED (could not log in) ===');
+        return { success: false, output: logs.join('\n'), duration: Date.now() - startTime, screenshots: [] };
+      }
+      logs.push('');
+    }
 
     // Auto-navigate to baseUrl if first step isn't navigate
     if (steps.length === 0 || steps[0].type !== 'navigate') {

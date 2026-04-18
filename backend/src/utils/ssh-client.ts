@@ -130,6 +130,44 @@ export function execSSHWithConfig(command: string, cfg: unknown, timeoutMs: numb
   });
 }
 
+// ─── SSH Binary Exec (returns Buffer, for screencap PNG) ──────────────────────
+
+export function execSSHBinary(command: string, cfg: { host: string; username: string; sshKeyPath: string }, timeoutMs: number = 15000): Promise<Buffer> {
+  const privateKey = fs.readFileSync(cfg.sshKeyPath);
+
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const client = new Client();
+    const timer = setTimeout(() => {
+      try { client.end(); } catch {}
+      reject(new Error(`SSH binary command timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    client.on('ready', () => {
+      client.exec(command, (err, stream) => {
+        if (err) { clearTimeout(timer); client.end(); reject(err); return; }
+        // Collect raw bytes — must NOT toString() here (would corrupt PNG)
+        let stderrMsg = '';
+        stream.on('data', (d: Buffer) => chunks.push(d));
+        stream.stderr.on('data', (d: Buffer) => { stderrMsg += d.toString(); });
+        stream.on('close', () => {
+          clearTimeout(timer);
+          client.end();
+          const buf = Buffer.concat(chunks);
+          if (buf.length < 100) {
+            const detail = stderrMsg.trim() || 'no output received';
+            reject(new Error(`ADB screencap returned no data (${detail}). Is a device plugged in and ADB-authorized?`));
+          } else {
+            resolve(buf);
+          }
+        });
+      });
+    });
+    client.on('error', (err) => { clearTimeout(timer); reject(err); });
+    client.connect({ host: cfg.host, username: cfg.username, privateKey, readyTimeout: 10000 });
+  });
+}
+
 // ─── File Write via SSH ─────────────────────────────────────────────────────────
 
 export interface SSHRunnerConfig {

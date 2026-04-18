@@ -15,13 +15,16 @@ import prisma from '../config/database';
 
 // Element scanners
 import { scanFlutterProjectSSH, ElementCatalog, ButtonInfo } from '../utils/element-scanner-ssh';
+import { getScanCacheKey, deleteCachedKey } from '../utils/scan-cache';
 import { scanFlutterProjectLocal } from '../utils/element-scanner';
 import { hybridScanFlutterProject, mergeScanResults, HybridScannerConfig } from '../utils/element-scanner-hybrid';
 
 // Modular utilities (refactored from this file)
-import { execSSH, writeFileSSH, writeFileSSHWithRunner, execSSHWithConfig, type SSHRunnerConfig } from '../utils/ssh-client';
+import { execSSH, writeFileSSH, writeFileSSHWithRunner, execSSHWithConfig, execSSHBinary, type SSHRunnerConfig } from '../utils/ssh-client';
 import { discoverAppContext, captureHierarchy, getFlutterProjectPath } from '../utils/flutter-scanner';
 import { generateDartCode } from '../utils/dart-codegen';
+import { startFlutterSession, stopFlutterSession, getSession, listSessions, vmServiceRpc } from '../utils/flutter-session';
+import { parseWidgetTree } from '../utils/flutter-vm-service';
 import { executeFlutterTest, listIntegrationTests, getTestFileContent } from '../utils/test-executor';
 import type { AppContext } from '../utils/flutter-scanner';
 
@@ -294,9 +297,17 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
     `cd "${projectPath}"`,
   ];
 
+  // Workaround for macOS 13 + newer Flutter: bypass VM version check
+  const flutterEnv = [
+    'export DART_VM_OPTIONS="--no-enable-macos-version-check"',
+    'export FLUTTER_ROOT="/Users/clawbot/development/flutter"',
+    'export PATH="/Users/clawbot/development/flutter/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"',
+  ].join(' && ');
+
   if (noBuild) {
     // Use the forwarded SSH key for git to access private repos
     scriptLines.push(
+      flutterEnv,
       `echo "Running flutter pub get (using forwarded SSH key)..."`,
       `GIT_SSH_COMMAND="ssh -i ${tempKeyPath} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" flutter pub get 2>&1`,
       'PUB_EXIT=$?',
@@ -309,6 +320,7 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
     );
   } else {
     scriptLines.push(
+      flutterEnv,
       `echo "Running flutter pub get..."`,
       `flutter pub get 2>&1`,
       'PUB_EXIT=$?',
@@ -322,7 +334,7 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
 
   scriptLines.push(
     `echo "Running test..."`,
-    `flutter test integration_test/${testFileName} -d ${deviceId}${noBuild ? ' --no-pub' : ''} 2>&1`,
+    `${flutterEnv} flutter test integration_test/${testFileName} -d ${deviceId}${noBuild ? ' --no-pub' : ''} 2>&1`,
     'echo "EXIT_CODE:$?"',
   );
   const scriptContent = scriptLines.join('\n') + '\n';
@@ -474,7 +486,16 @@ void main() {
         const value = step.value || '';
         // Use finderStrategy if available, fallback to index-based
         let finder: string;
-        if (input?.finderStrategy === 'key') {
+        // Live-view step: use finderStrategy/finderValue directly
+        if (!input && (step as any).finderStrategy && (step as any).finderValue) {
+          const fs = (step as any).finderStrategy as string;
+          const fv = (step as any).finderValue as string;
+          finder =
+            fs === 'text'      ? `find.text('${fv}')` :
+            fs === 'semantics' ? `find.bySemanticsLabel('${fv}')` :
+            fs === 'key'       ? `find.byKey(const ValueKey('${fv}'))` :
+                                 `find.byType(${fv}).first`;
+        } else if (input?.finderStrategy === 'key') {
           finder = `find.byKey(const ValueKey('${input.finderValue}'))`;
         } else if (input?.finderStrategy === 'label') {
           finder = `find.text('${input.finderValue}')`;
@@ -498,6 +519,22 @@ void main() {
 
         // Longer delay to let keyboard auto-dismiss from previous text entry
         code += `    await tester.pump(const Duration(milliseconds: 500));\n`;
+
+        // Live-view steps carry finderStrategy/finderValue — use them directly
+        if (!button && (step as any).finderStrategy && (step as any).finderValue) {
+          const fs = (step as any).finderStrategy as string;
+          const fv = (step as any).finderValue as string;
+          const finder =
+            fs === 'text'      ? `find.text('${fv}')` :
+            fs === 'semantics' ? `find.bySemanticsLabel('${fv}')` :
+            fs === 'key'       ? `find.byKey(const ValueKey('${fv}'))` :
+                                 `find.byType(${fv})`;
+          code += `    await tester.tap(${finder});\n`;
+          code += `    await tester.pumpAndSettle();\n`;
+          code += `    await tester.pump(const Duration(seconds: 2));\n`;
+          code += `    await tester.pumpAndSettle();\n`;
+          break;
+        }
 
         // Smart selector: try multiple finder strategies with fallback
         // Priority: key > semantics/tooltip > text > type > icon
@@ -1361,4 +1398,644 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       return errorResponses.handle(reply, error, 'generate deterministic test');
     }
   });
+
+  // ─── Live View: screenshot + tap + element-at ────────────────────────────────
+
+  // Parse UIAutomator XML and find the deepest (smallest) element containing (x, y)
+  function findElementAt(xml: string, x: number, y: number) {
+    // Bounds format: [x1,y1][x2,y2]
+    const boundsRe = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/;
+    const nodeRe = /<node\s+([^>]*)\/>/g;
+
+    let best: any = null;
+    let bestArea = Infinity;
+
+    let m: RegExpExecArray | null;
+    while ((m = nodeRe.exec(xml)) !== null) {
+      const attrs = m[1];
+      const get = (k: string) => { const r = new RegExp(`${k}="([^"]*)"`).exec(attrs); return r ? r[1] : ''; };
+
+      const bounds = get('bounds');
+      const bm = boundsRe.exec(bounds);
+      if (!bm) continue;
+
+      const x1 = parseInt(bm[1]), y1 = parseInt(bm[2]);
+      const x2 = parseInt(bm[3]), y2 = parseInt(bm[4]);
+
+      if (x < x1 || x > x2 || y < y1 || y > y2) continue;
+
+      const area = (x2 - x1) * (y2 - y1);
+      if (area < bestArea) {
+        bestArea = area;
+        const rawText = get('text') || '';
+        const contentDesc = get('content-desc') || '';
+        const text = rawText || contentDesc; // display text
+        const resourceId = get('resource-id') || '';
+        const className = get('class') || '';
+        const clickable = get('clickable') === 'true';
+        const isInput = className.includes('EditText');
+        const isCheckable = get('checkable') === 'true';
+
+        // Build selector: prefer resourceId short form, then text
+        const idShort = resourceId.includes('/') ? resourceId.split('/')[1] : resourceId;
+        const selector = idShort
+          ? `[resource-id="${resourceId}"]`
+          : text ? `[text="${text}"]` : bounds;
+
+        // Flutter finder strategy: text → find.text(), semantics label (content-desc) → find.bySemanticsLabel(),
+        // key (idShort, no raw text) → find.byKey(), empty → no finder (user must supply)
+        const finderStrategy: 'text' | 'semantics' | 'key' | 'type' =
+          rawText ? 'text' : contentDesc ? 'semantics' : idShort ? 'key' : 'type';
+        const finderValue = rawText || contentDesc || idShort || '';
+
+        best = { text, contentDesc, resourceId, idShort, className, clickable, isInput, isCheckable, bounds, selector,
+          elementType: isInput ? 'input' : isCheckable ? 'checkbox' : clickable ? 'button' : 'text',
+          finderStrategy, finderValue };
+      }
+    }
+    return best;
+  }
+
+  // Helper: resolve runner SSH config from runnerId (or default/first runner)
+  async function resolveRunnerSSH(runnerId?: string): Promise<{ host: string; username: string; sshKeyPath: string; deviceId: string; projectPath?: string }> {
+    let runner: any = null;
+    if (runnerId) runner = await prisma.runner.findUnique({ where: { id: runnerId } });
+    if (!runner) runner = await prisma.runner.findFirst({ where: { isDefault: true } });
+    if (!runner) runner = await prisma.runner.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (!runner) throw new Error('No runner configured. Please add a runner in Settings.');
+    return {
+      host: runner.host,
+      username: runner.username,
+      sshKeyPath: runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519',
+      deviceId: runner.deviceId || '',
+      projectPath: runner.projectPath || undefined,
+    };
+  }
+
+  // GET /screenshot?runnerId=... — capture device screen via ADB on the selected runner
+  fastify.get('/screenshot', {
+    onRequest: [fastify.authenticate],
+  }, async (request: any, reply) => {
+    try {
+      const { runnerId } = request.query as { runnerId?: string };
+      const runner = await resolveRunnerSSH(runnerId);
+
+      const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+      const cmd =
+        'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
+        'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ' +
+        `adb ${deviceArg} exec-out screencap -p`;
+
+      const buf = await execSSHBinary(cmd, runner, 25000);
+      const screenshot = buf.toString('base64');
+
+      logger.info(`[LiveView] Screenshot from runner ${runner.host} (${Math.round(buf.length / 1024)} KB)`);
+      return successResponse(reply, { screenshot, timestamp: Date.now() }, undefined);
+    } catch (error: any) {
+      logger.error('[LiveView] Screenshot failed:', error);
+      return errorResponses.handle(reply, error, 'capture screenshot');
+    }
+  });
+
+  // POST /tap — send ADB tap at (x, y) on the selected runner's device
+  fastify.post('/tap', {
+    onRequest: [fastify.authenticate],
+  }, async (request: any, reply) => {
+    try {
+      const { x, y, runnerId } = request.body as { x: number; y: number; runnerId?: string };
+
+      if (typeof x !== 'number' || typeof y !== 'number') {
+        return errorResponses.badRequest(reply, 'x and y coordinates are required');
+      }
+
+      const runner = await resolveRunnerSSH(runnerId);
+      const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+      const cmd =
+        'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
+        'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ' +
+        `adb ${deviceArg} shell input tap ${Math.round(x)} ${Math.round(y)}`;
+
+      await execSSHWithConfig(cmd, runner, 8000);
+
+      logger.info(`[LiveView] Tapped (${x}, ${y}) on runner ${runner.host}`);
+      return successResponse(reply, { ok: true, x, y }, undefined);
+    } catch (error: any) {
+      logger.error('[LiveView] Tap failed:', error);
+      return errorResponses.handle(reply, error, 'send tap');
+    }
+  });
+
+  // POST /element-at — identify element at (x, y) AND capture fresh screenshot simultaneously
+  fastify.post('/element-at', {
+    onRequest: [fastify.authenticate],
+  }, async (request: any, reply) => {
+    try {
+      const { x, y, runnerId } = request.body as { x: number; y: number; runnerId?: string };
+      const runner = await resolveRunnerSSH(runnerId);
+      const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+      const adbEnv =
+        'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
+        'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ';
+
+      const xmlCmd = adbEnv +
+        `adb ${deviceArg} shell uiautomator dump /sdcard/ui.xml 2>/dev/null && ` +
+        `adb ${deviceArg} shell cat /sdcard/ui.xml 2>/dev/null`;
+      const screencapCmd = adbEnv + `adb ${deviceArg} exec-out screencap -p`;
+
+      // Run both in parallel so screenshot and element data are from the same moment
+      const [xmlResult, screenshotBuf] = await Promise.all([
+        execSSHWithConfig(xmlCmd, runner, 20000),
+        execSSHBinary(screencapCmd, runner, 25000),
+      ]);
+
+      const element = findElementAt(xmlResult.output, Math.round(x), Math.round(y));
+      const screenshot = screenshotBuf.toString('base64');
+
+      logger.info(`[LiveView] Element at (${x},${y}): ${element?.text || element?.resourceId || 'none'}`);
+      return successResponse(reply, { element, screenshot }, undefined);
+    } catch (error: any) {
+      logger.error('[LiveView] Element-at failed:', error);
+      return errorResponses.handle(reply, error, 'identify element');
+    }
+  });
+
+  // POST /screen-elements — scan ALL interactive elements on current screen + fresh screenshot
+  // If runner has projectPath: use pure Flutter source scan (UIAutomator only for screen detection)
+  // Otherwise: fall back to raw UIAutomator elements
+  fastify.post('/screen-elements', {
+    onRequest: [fastify.authenticate],
+  }, async (request: any, reply) => {
+    try {
+      const { runnerId } = request.body as { runnerId?: string };
+      const runner = await resolveRunnerSSH(runnerId);
+      const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+      const adbEnv =
+        'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
+        'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ';
+
+      const xmlCmd = adbEnv +
+        `adb ${deviceArg} shell uiautomator dump /sdcard/ui.xml 2>/dev/null && ` +
+        `adb ${deviceArg} shell cat /sdcard/ui.xml 2>/dev/null`;
+      const screencapCmd = adbEnv + `adb ${deviceArg} exec-out screencap -p`;
+
+      // If runner has projectPath, use source-based scan for clean Flutter element labels
+      if (runner.projectPath) {
+        const projectPath = runner.projectPath;
+        const [inputGrepResult, buttonGrepResult, xmlResult, screenshotBuf] = await Promise.all([
+          execSSHWithConfig(`grep -rn 'hintText:' '${projectPath}/lib' 2>/dev/null | grep -v '.g.dart' | grep -v '.freezed.dart'`, runner, 20000).catch(() => ({ output: '' })),
+          execSSHWithConfig(`grep -rn 'ElevatedButton\\|TextButton\\|OutlinedButton\\|FilledButton\\|InkWell\\|GestureDetector\\|FloatingActionButton\\|IconButton\\|ListTile\\|Chip\\b\\|Tab\\b' '${projectPath}/lib' 2>/dev/null | grep -v '.g.dart' | grep -v '.freezed.dart'`, runner, 20000).catch(() => ({ output: '' })),
+          execSSHWithConfig(xmlCmd, runner, 20000).catch(() => ({ output: '' })),
+          execSSHBinary(screencapCmd, runner, 25000),
+        ]);
+
+        // Extract visible texts from UIAutomator for screen detection
+        const visibleTexts = new Set<string>();
+        const uiRe = /<node\s+([^>]*)\/>/g; let uiM: RegExpExecArray | null;
+        while ((uiM = uiRe.exec(xmlResult.output)) !== null) {
+          const a = uiM[1];
+          const gv = (k: string) => { const r = new RegExp(`${k}="([^"]*)"`).exec(a); return r ? r[1] : ''; };
+          const t = gv('text'); if (t && t.length > 1) visibleTexts.add(t.toLowerCase().trim());
+          const d = gv('content-desc'); if (d && d.length > 1) visibleTexts.add(d.toLowerCase().trim());
+        }
+
+        // Collect all dart files referenced in greps
+        const allFiles = new Set<string>();
+        for (const line of [...inputGrepResult.output.split('\n'), ...buttonGrepResult.output.split('\n')]) {
+          const m = line.match(/^([^:]+\.dart):/); if (m) allFiles.add(m[1]);
+        }
+
+        let sourceElements: any[] = [];
+        if (allFiles.size > 0 && allFiles.size <= 50) {
+          const batchCmd = [...allFiles].map(f => `echo "===FILE:${f}===" && cat '${f}' 2>/dev/null`).join(' && ');
+          const batchResult = await execSSHWithConfig(batchCmd, runner, 40000).catch(() => ({ output: '' }));
+
+          let curFile = '';
+          const fileContents = new Map<string, string[]>();
+          for (const line of batchResult.output.split('\n')) {
+            const fm = line.match(/^===FILE:(.+)===$/);
+            if (fm) { curFile = fm[1]; fileContents.set(curFile, []); }
+            else if (curFile) fileContents.get(curFile)!.push(line);
+          }
+
+          // Score files by matching static Text() against UIAutomator visible texts
+          const fileScores = new Map<string, number>();
+          for (const [file, lines] of fileContents) {
+            let score = 0;
+            for (const line of lines) {
+              const tm = line.match(/Text\s*\(\s*(?:const\s+)?['"]([^'"]{3,})['"]/);
+              if (tm && visibleTexts.has(tm[1].toLowerCase().trim())) score++;
+            }
+            fileScores.set(file, score);
+          }
+          const maxScore = Math.max(0, ...[...fileScores.values()]);
+          const screenFiles = new Set<string>();
+          if (maxScore > 0) {
+            for (const [f, s] of fileScores) { if (s >= Math.max(1, maxScore - 1)) screenFiles.add(f); }
+          } else {
+            // No text match — dynamic screen, use heuristic
+            const heuristicScores = new Map<string, number>();
+            for (const [file, lines] of fileContents) {
+              let inputCount = 0;
+              let buttonCount = 0;
+              for (const line of lines) {
+                if (/hintText\s*:/.test(line)) inputCount++;
+                if (/ElevatedButton|TextButton|OutlinedButton|FilledButton|InkWell|GestureDetector/.test(line)) buttonCount++;
+              }
+              heuristicScores.set(file, inputCount * 2 + buttonCount);
+            }
+            const sortedByHeuristic = [...heuristicScores.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+            for (const [file, _] of sortedByHeuristic) screenFiles.add(file);
+          }
+          logger.info(`[LiveView] Source scan screen files: ${[...screenFiles].map(f => f.split('/').pop()).join(', ')}`);
+
+          // HYBRID APPROACH:
+          // - INPUTS: from source grep (hintText) — proper labels, not raw "EditText"
+          // - BUTTONS/CLICKABLE: from UIAutomator — sees ALL visible elements including dynamic list items
+          const sourceElements: any[] = [];
+          const seenInputLabels = new Set<string>();
+
+          // 1. Source inputs for current screen (only)
+          for (const line of inputGrepResult.output.split('\n')) {
+            const fm = line.match(/^([^:]+\.dart):/);
+            if (!fm || !screenFiles.has(fm[1])) continue;
+            const hm = line.match(/hintText\s*:\s*['"]([^'"]+)['"]/);
+            const label = hm?.[1]; if (!label || seenInputLabels.has(label)) continue;
+            seenInputLabels.add(label);
+            sourceElements.push({ text: label, contentDesc: label, resourceId: '', idShort: '', className: 'android.widget.EditText', clickable: true, isInput: true, isCheckable: false, bounds: '', x1: 0, y1: 0, x2: 0, y2: 0, elementType: 'input', finderStrategy: 'text', finderValue: label, selector: `[hint="${label}"]` });
+          }
+
+          // 2. UIAutomator clickable elements (buttons, list items, tabs — everything visible now)
+          // Clean up multiline text: take first line as display label
+          const boundsRe = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/;
+          const nodeRe = /<node\s+([^>]*)\/>/g;
+          const seenClickable = new Set<string>();
+          let nm: RegExpExecArray | null;
+          let totalNodes = 0, filteredClickable = 0, filteredNoText = 0, added = 0;
+          while ((nm = nodeRe.exec(xmlResult.output)) !== null) {
+            totalNodes++;
+            const a = nm[1];
+            const gv = (k: string) => { const r = new RegExp(`${k}="([^"]*)"`).exec(a); return r ? r[1] : ''; };
+            const bounds = gv('bounds');
+            const bm = boundsRe.exec(bounds);
+            if (!bm) continue;
+            const x1 = parseInt(bm[1]), y1 = parseInt(bm[2]), x2 = parseInt(bm[3]), y2 = parseInt(bm[4]);
+            if (x2 <= x1 || y2 <= y1) continue;
+            if ((x2 - x1) > 970 && (y2 - y1) > 1720) continue; // skip root container
+
+            // More lenient filter: include elements with text, even if not clickable
+            const isClickable = gv('clickable') === 'true';
+            const isInput = gv('class').includes('EditText');
+            const hasText = gv('text') || gv('content-desc');
+
+            if (!isClickable && !isInput && !hasText) {
+              filteredNoText++;
+              continue;
+            }
+            filteredClickable++;
+
+            // Skip raw input fields — we have source inputs already
+            if (isInput) continue;
+
+            const rawText = gv('text') || gv('content-desc');
+            if (!rawText) continue;
+
+            // Clean multiline text: take first meaningful line as label (skip single letters)
+            const lines = rawText.split(/\n|&#10;/).map(s => s.trim()).filter(Boolean);
+            let firstLine = lines[0] || rawText;
+            // If first line is too short (single letter like "a", "s", "d"), try next line
+            if (firstLine.length < 2 && lines.length > 1) {
+              firstLine = lines[1];
+            }
+            if (firstLine.length < 2 && lines.length > 2) {
+              firstLine = lines[2];
+            }
+            // Still too short? Skip (probably just noise)
+            if (firstLine.length < 2) continue;
+
+            const key = bounds;
+            if (seenClickable.has(key)) continue;
+            seenClickable.add(key);
+
+            const idShort = gv('resource-id').includes('/') ? gv('resource-id').split('/')[1] : gv('resource-id');
+            const finderStrategy = idShort ? 'key' : 'text';
+            const finderValue = idShort || firstLine;
+
+            added++;
+            // Log first 5 elements for debugging
+            if (added <= 5) {
+              logger.info(`[LiveView] Added element: "${firstLine}" (raw: "${rawText.slice(0, 50).replace(/\n/g, '\\n')}") clickable=${isClickable}`);
+            }
+            sourceElements.push({
+              text: firstLine, contentDesc: rawText.replace(/&#10;/g, ' '), resourceId: gv('resource-id'), idShort,
+              className: gv('class'), clickable: isClickable, isInput: false, isCheckable: gv('checkable') === 'true',
+              bounds, x1, y1, x2, y2,
+              elementType: 'button', finderStrategy, finderValue,
+              selector: idShort ? `[resource-id="${gv('resource-id')}"]` : `[text="${firstLine}"]`,
+            });
+          }
+          logger.info(`[LiveView] UIAutomator filter: ${totalNodes} nodes, ${filteredClickable} passed clickable/text check, ${filteredNoText} no text skipped, ${added} elements added`);
+
+          // Sort: inputs first, then buttons by position (top to bottom)
+          sourceElements.sort((a, b) => {
+            if (a.elementType !== b.elementType) return a.elementType === 'input' ? -1 : 1;
+            return (a.y1 || 0) - (b.y1 || 0);
+          });
+
+          const screenshot = screenshotBuf.toString('base64');
+          logger.info(`[LiveView] Hybrid scan: ${sourceElements.filter(e => e.elementType === 'input').length} inputs (source), ${sourceElements.filter(e => e.elementType === 'button').length} buttons (UIAutomator) from ${[...screenFiles].map(f => f.split('/').pop()).join(', ')}`);
+          return successResponse(reply, { elements: sourceElements, screenshot, scannedAt: Date.now() }, undefined);
+        }
+
+        const screenshot = screenshotBuf.toString('base64');
+        return successResponse(reply, { elements: sourceElements, screenshot, scannedAt: Date.now() }, undefined);
+      }
+
+      // Fallback: no projectPath — raw UIAutomator
+      const [xmlResult, screenshotBuf] = await Promise.all([
+        execSSHWithConfig(xmlCmd, runner, 20000),
+        execSSHBinary(screencapCmd, runner, 25000),
+      ]);
+      const elements = extractAllElements(xmlResult.output);
+      const screenshot = screenshotBuf.toString('base64');
+      logger.info(`[LiveView] Screen scan (UIAutomator): ${elements.length} elements on runner ${runner.host}`);
+      return successResponse(reply, { elements, screenshot, scannedAt: Date.now() }, undefined);
+    } catch (error: any) {
+      logger.error('[LiveView] Screen scan failed:', error);
+      return errorResponses.handle(reply, error, 'scan screen elements');
+    }
+  });
+
+  // ─── Flutter Session (VM Service — per-screen exploratory builder) ───────────
+
+  // POST /flutter-session/start — launch flutter run --debug, return session ID
+  fastify.post('/flutter-session/start', {
+    onRequest: [fastify.authenticate],
+  }, async (request: any, reply) => {
+    try {
+      const { runnerId } = request.body as { runnerId?: string };
+
+      // Resolve runner with project path
+      let runner: any = null;
+      if (runnerId) runner = await prisma.runner.findUnique({ where: { id: runnerId } });
+      if (!runner) runner = await prisma.runner.findFirst({ where: { isDefault: true } });
+      if (!runner) runner = await prisma.runner.findFirst({ orderBy: { createdAt: 'asc' } });
+      if (!runner) return errorResponses.badRequest(reply, 'No runner configured');
+      if (!runner.projectPath) return errorResponses.badRequest(reply, 'Runner has no project path configured');
+
+      const session = await startFlutterSession(runnerId || runner.id, {
+        host: runner.host,
+        username: runner.username,
+        sshKeyPath: runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519',
+        deviceId: runner.deviceId || '',
+        projectPath: runner.projectPath,
+      });
+
+      return successResponse(reply, {
+        sessionId: session.id,
+        status: session.status,
+        vmServiceUrl: session.vmServiceUrl,
+      }, undefined);
+    } catch (error: any) {
+      logger.error('[FlutterSession] Start failed:', error);
+      return errorResponses.handle(reply, error, 'start flutter session');
+    }
+  });
+
+  // GET /flutter-session/:id/widget-tree — pure Flutter VM Service approach (NO UIAutomator)
+  fastify.get('/flutter-session/:id/widget-tree', {
+    onRequest: [fastify.authenticate],
+  }, async (request: any, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const session = getSession(id);
+      if (!session) return errorResponses.notFound(reply, 'Flutter session');
+      if (session.status !== 'ready') {
+        return reply.code(503).send({ success: false, error: { code: 'SESSION_NOT_READY', message: `Session status: ${session.status}` } });
+      }
+
+      // Pure Flutter approach: use VM Service via SSH relay to query live widget tree
+      logger.info(`[FlutterSession ${id}] Using pure VM Service approach (no UIAutomator)`);
+      const { elements, screenshot } = await getFlutterWidgetTreePureVM(session);
+
+      return successResponse(reply, {
+        elements,
+        widgets: elements,
+        screenshot,
+        scannedAt: Date.now(),
+        _debug: {
+          method: 'pure-vm-service',
+          elementCount: elements.length,
+          elementTypes: elements.reduce((acc, e) => {
+            acc[e.elementType] = (acc[e.elementType] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>),
+        },
+      }, undefined);
+    } catch (error: any) {
+      logger.error('[FlutterSession] Widget tree failed:', error);
+      return errorResponses.handle(reply, error, 'get widget tree');
+    }
+  });
+
+  // GET /flutter-session — list active sessions
+  fastify.get('/flutter-session', {
+    onRequest: [fastify.authenticate],
+  }, async (_request, reply) => {
+    const sessions = listSessions().map(s => ({
+      id: s.id, runnerId: s.runnerId, status: s.status,
+      startedAt: s.startedAt, error: s.error,
+    }));
+    return successResponse(reply, { sessions }, undefined);
+  });
+
+  // DELETE /flutter-session/:id — stop session, kill flutter run
+  fastify.delete('/flutter-session/:id', {
+    onRequest: [fastify.authenticate],
+  }, async (request: any, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      await stopFlutterSession(id);
+      return successResponse(reply, { stopped: true }, undefined);
+    } catch (error: any) {
+      logger.error('[FlutterSession] Stop failed:', error);
+      return errorResponses.handle(reply, error, 'stop flutter session');
+    }
+  });
+}
+
+// ─── Pure Flutter VM Service Widget Tree (NO UIAutomator) ─────────────────────
+// Converts FlutterWidget[] from VM Service to element format
+
+function flutterWidgetToElement(widget: any, index: number): any {
+  const description = widget.description || '';
+  const widgetType = description.split('(')[0] || 'Widget';
+
+  // Build finderValue based on priority: key > tooltip > text > type#index
+  let finderValue = widget.finderValue || '';
+  let finderStrategy = widget.finderStrategy || 'type';
+  let selector = '';
+
+  if (finderStrategy === 'key') {
+    selector = `[byKey='${finderValue}']`;
+  } else if (finderStrategy === 'tooltip') {
+    selector = `[byTooltip='${finderValue}']`;
+  } else if (finderStrategy === 'text') {
+    selector = `[text='${finderValue}']`;
+  } else if (finderStrategy === 'type') {
+    // Type finder with index for duplicates
+    const match = finderValue.match(/^(.+?)\s+#(\d+)$/);
+    if (match) {
+      selector = `[byType('${match[1]}').at(${match[2]} - 1)]`; // convert to 0-based index
+    } else {
+      selector = `[byType('${finderValue}')]`;
+    }
+  }
+
+  // Map elementType to standard values
+  const elementTypeMap: Record<string, 'button' | 'input' | 'text' | 'checkbox'> = {
+    'button': 'button',
+    'input': 'input',
+    'text': 'text',
+    'other': 'button', // Default 'other' to button for clickable elements
+    'checkbox': 'checkbox',
+  };
+  const elementType = elementTypeMap[widget.elementType || 'other'] || 'button';
+
+  return {
+    text: widget.text || finderValue || description,
+    contentDesc: widget.tooltip || widget.text || finderValue || '',
+    resourceId: widget.key || '',
+    idShort: widget.key || '',
+    className: `flutter.${widgetType}`,
+    clickable: elementType === 'button' || elementType === 'checkbox',
+    isInput: elementType === 'input',
+    isCheckable: elementType === 'checkbox',
+    bounds: widget.x1 !== undefined ? `[${widget.x1},${widget.y1}][${widget.x2},${widget.y2}]` : '',
+    x1: widget.x1 || 0, y1: widget.y1 || 0, x2: widget.x2 || 0, y2: widget.y2 || 0,
+    elementType,
+    finderStrategy,
+    finderValue,
+    selector,
+    // Additional Flutter-specific fields
+    widgetId: widget.widgetId || '',
+    description,
+  };
+}
+
+async function getFlutterWidgetTreePureVM(session: any): Promise<{ elements: any[]; screenshot: string }> {
+  const { id, runner } = session;
+
+  // Use vmServiceRpc to call Flutter VM Service via SSH relay
+  // Get the root widget tree (summary tree - fast, includes all widgets)
+  const rootTree = await vmServiceRpc(session, 'ext.flutter.inspector.getRootWidgetTree', {
+    groupName: 'explorer',
+    isSummaryTree: 'true',
+    withPreviews: 'true',
+  });
+
+  if (!rootTree) {
+    throw new Error('Failed to get widget tree from VM Service');
+  }
+
+  // Parse the widget tree into actionable elements
+  const flutterWidgets = parseWidgetTree(rootTree);
+  logger.info(`[FlutterSession ${id}] VM Service returned ${flutterWidgets.length} widgets`);
+
+  // Convert FlutterWidget[] to element format
+  const elements = flutterWidgets
+    .map((w, i) => flutterWidgetToElement(w, i))
+    .filter(e => {
+      // Filter out low-value elements
+      // - Keep all buttons, inputs, checkboxes
+      // - For text: keep only if has meaningful content (>2 chars)
+      if (e.elementType === 'button' || e.elementType === 'input' || e.elementType === 'checkbox') {
+        return true;
+      }
+      if (e.elementType === 'text' && e.text && e.text.length > 2) {
+        // Skip generic text labels like "/", ":", etc.
+        const skipPatterns = /^[\/\:\;\,\.\-\+\=\(\)\[\]\{\}]+$/;
+        return !skipPatterns.test(e.text.trim());
+      }
+      return false;
+    });
+
+  // Deduplicate by finderValue + elementType
+  const seen = new Set<string>();
+  const deduped = elements.filter(e => {
+    const key = `${e.elementType}|${e.finderValue}|${e.finderStrategy}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  logger.info(`[FlutterSession ${id}] After filtering: ${deduped.length} actionable elements`);
+
+  // Take screenshot at same time
+  const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+  const adbEnv = 'export ANDROID_HOME="$HOME/Library/Android/sdk" && export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ';
+  const screenshotBuf = await execSSHBinary(adbEnv + `adb ${deviceArg} exec-out screencap -p`, runner, 25000);
+  const screenshot = screenshotBuf.toString('base64');
+
+  return { elements: deduped, screenshot };
+}
+
+// ─── Extract all interactive elements from UIAutomator XML ──────────────────
+
+function extractAllElements(xml: string) {
+  const boundsRe = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/;
+  const nodeRe = /<node\s+([^>]*)\/>/g;
+  const seen = new Set<string>();
+  const elements: any[] = [];
+
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const get = (k: string) => { const r = new RegExp(`${k}="([^"]*)"`).exec(attrs); return r ? r[1] : ''; };
+
+    const bounds = get('bounds');
+    const bm = boundsRe.exec(bounds);
+    if (!bm) continue;
+
+    const x1 = parseInt(bm[1]), y1 = parseInt(bm[2]);
+    const x2 = parseInt(bm[3]), y2 = parseInt(bm[4]);
+    if (x2 <= x1 || y2 <= y1) continue; // zero-size node
+
+    const rawText = get('text') || '';
+    const contentDesc = get('content-desc') || '';
+    const resourceId = get('resource-id') || '';
+    const className = get('class') || '';
+    const clickable = get('clickable') === 'true';
+    const isInput = className.includes('EditText');
+    const isCheckable = get('checkable') === 'true';
+
+    // Skip elements that have no useful info AND are not actionable
+    if (!clickable && !isInput && !isCheckable && !rawText && !contentDesc) continue;
+    // Skip very large root containers (>90% of typical screen 1080x1920)
+    if ((x2 - x1) > 970 && (y2 - y1) > 1720) continue;
+
+    const text = rawText || contentDesc;
+    const idShort = resourceId.includes('/') ? resourceId.split('/')[1] : resourceId;
+
+    const finderStrategy: 'text' | 'semantics' | 'key' | 'type' =
+      rawText ? 'text' : contentDesc ? 'semantics' : idShort ? 'key' : 'type';
+    const finderValue = rawText || contentDesc || idShort || className.split('.').pop() || '';
+    const elementType: 'button' | 'input' | 'checkbox' | 'text' =
+      isInput ? 'input' : isCheckable ? 'checkbox' : clickable ? 'button' : 'text';
+
+    // For inputs: deduplicate by bounds only (two empty EditText at different positions must both show)
+    // For others: deduplicate by bounds+text
+    const key = isInput ? bounds : `${bounds}|${text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    elements.push({
+      text, contentDesc, resourceId, idShort, className, clickable, isInput, isCheckable,
+      bounds, x1, y1, x2, y2, elementType, finderStrategy, finderValue,
+      selector: idShort ? `[resource-id="${resourceId}"]` : text ? `[text="${text}"]` : bounds,
+    });
+  }
+
+  // Sort: inputs first, then buttons, then texts — helps UX ordering
+  const order = { input: 0, button: 1, checkbox: 2, text: 3 };
+  return elements.sort((a, b) => order[a.elementType as keyof typeof order] - order[b.elementType as keyof typeof order]);
 }

@@ -76,6 +76,25 @@ export interface WebElementCatalog {
   routes: string[];
 }
 
+export type ScanProgressCallback = (event: {
+  type: 'login' | 'page' | 'complete' | 'error';
+  pageCount: number;
+  maxPages: number;
+  pageName?: string;
+  pageUrl?: string;
+  queueSize: number;
+}) => void;
+
+export interface WebAuthConfig {
+  loginUrl?: string;         // URL of login page; defaults to baseUrl if omitted
+  usernameSelector: string;  // CSS selector for username/email field
+  usernameValue: string;     // Credential to type
+  passwordSelector: string;  // CSS selector for password field
+  passwordValue: string;     // Credential to type
+  submitSelector?: string;   // CSS selector for submit button; auto-detected if omitted
+  waitAfterLogin?: number;   // ms to wait after login redirect (default 2000)
+}
+
 // ─── Scraper Configuration ─────────────────────────────────────────────────────
 
 // Use ScraperConfig from schemas
@@ -87,7 +106,7 @@ const DEFAULT_CONFIG: Required<ScraperConfig> = {
   timeout: 30000,
   headless: true,
   viewport: { width: 1280, height: 720 },
-  requestDelay: 1000,  // 1 second between requests to be polite
+  requestDelay: 0,     // No extra delay — 1500ms SPA wait per page is already polite enough
   concurrentRequests: 1,  // Sequential requests by default
   respectRobotsTxt: true,  // Respect robots.txt by default
 };
@@ -175,7 +194,7 @@ function getAccessibleLabel(element: any): string {
 
 // ─── Page Crawling ─────────────────────────────────────────────────────────────
 
-async function extractElementsFromPage(page: Page, pageName: string, pageUrl?: string): Promise<WebPageElement> {
+export async function extractElementsFromPage(page: Page, pageName: string, pageUrl?: string): Promise<WebPageElement> {
   // Use URL path as ID slug — more unique than page title (many pages share the same title)
   const urlSlug = (() => {
     try {
@@ -240,6 +259,13 @@ async function extractElementsFromPage(page: Page, pageName: string, pageUrl?: s
     );
     allButtonEls.forEach((el: any, idx: number) => {
       const btn = el as any;
+
+      // Skip buttons inside modal/dialog overlays — they are global UI (confirmation dialogs,
+      // "Leave page?" prompts, etc.) and would appear in every page's catalog
+      if (btn.closest('[role="dialog"]') || btn.closest('[aria-modal="true"]') ||
+          btn.closest('[class*="modal"]') || btn.closest('[class*="dialog"]') ||
+          btn.closest('[class*="popup"]') || btn.closest('[class*="overlay"]')) return;
+
       const rawText = btn.textContent?.trim();
       const ariaLabel = btn.getAttribute('aria-label') || btn.getAttribute('title');
       const value = btn.getAttribute('value');
@@ -292,33 +318,69 @@ async function extractElementsFromPage(page: Page, pageName: string, pageUrl?: s
       });
     });
 
-    // Extract clickable <a> links (nav items, CTAs) as buttons
+    // ── Sidebar / nav container items (SPA-friendly) ───────────────────────────
+    // SPA frameworks (Svelte, React) often render sidebar nav as <li>, <span>, or <div>
+    // elements with click handlers — not <button> or <a href>. Query nav containers
+    // directly and capture any visible child with meaningful text as a nav element.
+    const navContainerEls = globalThis.document.querySelectorAll(
+      'nav a, nav li, nav span, nav div, ' +
+      'aside a, aside li, aside span, ' +
+      '[role="navigation"] a, [role="navigation"] li, [role="menuitem"], ' +
+      '[class*="sidebar"] a, [class*="sidebar"] li, [class*="sidebar"] span, [class*="sidebar"] div, ' +
+      '[class*="sidenav"] a, [class*="sidenav"] li, [class*="sidenav"] span, ' +
+      '[class*="nav-item"], [class*="menu-item"], [class*="navitem"], [class*="menuitem"]'
+    );
+    navContainerEls.forEach((el: any) => {
+      const text = el.textContent?.trim();
+      if (!text || text.length < 1 || text.length > 60) return;
+      if (/^\d+$/.test(text)) return;                   // skip pagination numbers
+      if (/\s+\d+$/.test(text)) return;                 // skip count-badge items
+      if (el.closest('[role="dialog"]') || el.closest('[aria-modal="true"]')) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;  // skip invisible elements
+
+      const tag = el.tagName.toLowerCase();
+      const href = el.getAttribute('href') || '';
+      const fallbackSelectors: string[] = [];
+      if (el.getAttribute('data-testid')) fallbackSelectors.push(`[data-testid="${el.getAttribute('data-testid')}"]`);
+      if (el.id) fallbackSelectors.push(`#${el.id}`);
+      if (href && href !== '#' && (href.startsWith('/') || href.startsWith('http'))) {
+        fallbackSelectors.push(`${tag}[href="${href}"]`);
+      }
+      fallbackSelectors.push(`${tag}:has-text("${text.slice(0, 50).replace(/"/g, '\\"')}")`);
+
+      buttons.push({
+        tag,
+        text: text.slice(0, 100),
+        type: href && href !== '#' ? 'link' : 'nav',
+        testId: el.getAttribute('data-testid') || undefined,
+        ariaLabel: el.getAttribute('aria-label') || undefined,
+        role: el.getAttribute('role') || 'menuitem',
+        selector: fallbackSelectors[0] || fallbackSelectors[fallbackSelectors.length - 1],
+        fallbackSelectors,
+      });
+    });
+
+    // Extract ALL <a> links with meaningful text as navigational buttons
+    // No isNavLike filter — SPA frameworks (Svelte/React/Vue) generate hashed class names
+    // that never match nav/btn patterns, so we include all same-page links with text.
     const allLinks = globalThis.document.querySelectorAll('a[href]');
     allLinks.forEach((el: any) => {
       const link = el as any;
       const text = link.textContent?.trim();
       const href = link.getAttribute('href') || '';
-      const cls = (link.className || '').toString();
 
-      // Skip: empty text, external non-meaningful, or already captured as plain link
+      // Skip: empty text, too long, external JS, bare anchors
       if (!text || text.length < 1 || text.length > 80) return;
-      // Allow href="#" only for dropdown/interactive nav items (e.g. data-toggle="dropdown")
       const isDropdownTrigger = link.getAttribute('data-toggle') === 'dropdown' ||
                                 link.getAttribute('data-bs-toggle') === 'dropdown' ||
                                 (link.className || '').toString().includes('dropdown-toggle');
       if (!href || href === 'javascript:void(0)') return;
       if (href === '#' && !isDropdownTrigger) return;
 
-      // Only include links that look interactive/navigational
-      const isNavLike = cls.includes('nav') || cls.includes('btn') || cls.includes('button') ||
-                        cls.includes('link') || cls.includes('menu') || cls.includes('dropdown') ||
-                        link.closest('nav') || link.closest('header') || link.closest('[role="navigation"]');
-      if (!isNavLike) return;
-
       const fallbackSelectors: string[] = [];
       if (link.getAttribute('data-testid')) fallbackSelectors.push(`[data-testid="${link.getAttribute('data-testid')}"]`);
       if (link.id) fallbackSelectors.push(`#${link.id}`);
-      // For dropdown triggers (href="#"), use data-toggle selector instead of href
       if (isDropdownTrigger) {
         const toggle = link.getAttribute('data-toggle') || link.getAttribute('data-bs-toggle');
         if (toggle) fallbackSelectors.push(`a[data-toggle="${toggle}"]:has-text("${text.slice(0, 50)}")`);
@@ -466,9 +528,20 @@ async function crawlSite(
   page: Page,
   baseUrl: string,
   config: Required<ScraperConfig>,
+  startUrl?: string,  // actual URL to start crawling from (e.g. post-login redirect URL)
+  onProgress?: ScanProgressCallback,
 ): Promise<WebPageElement[]> {
-  const visited = new Set<string>();
-  const toVisit: Array<{ url: string; depth: number }> = [{ url: baseUrl, depth: 0 }];
+  // Use origin as crawl boundary so all pages on the same domain are reachable
+  const origin = (() => { try { return new URL(baseUrl).origin; } catch { return baseUrl; } })();
+  const seedUrl = startUrl || baseUrl;
+
+  const visited = new Set<string>();  // URLs actually processed
+  const queued = new Set<string>();   // URLs added to queue (to avoid duplicates)
+  // Track parent menu items we've already tried sub-menu expansion for across all pages.
+  // Without this, "Monitoring", "Debitur Diproses" etc. get re-clicked on every page.
+  const triedSubMenuExpansion = new Set<string>();
+  queued.add(seedUrl.split('#')[0].split('?')[0]);
+  const toVisit: Array<{ url: string; depth: number }> = [{ url: seedUrl, depth: 0 }];
   const pages: WebPageElement[] = [];
   let pageCount = 0;
 
@@ -479,7 +552,8 @@ async function crawlSite(
     const normalizedUrl = url.split('#')[0].split('?')[0];
     if (visited.has(normalizedUrl)) continue;
     if (depth > config.maxDepth) continue;
-    if (!normalizedUrl.startsWith(baseUrl.split('#')[0].split('?')[0])) continue;
+    // Only crawl pages within the same origin
+    if (!normalizedUrl.startsWith(origin)) continue;
 
     visited.add(normalizedUrl);
     pageCount++;
@@ -490,13 +564,14 @@ async function crawlSite(
         await page.waitForTimeout(config.requestDelay);
       }
 
+      // Use domcontentloaded — apps with SSE/WebSocket keep network perpetually busy
+      // so networkidle never fires. We wait for DOM + extra time for SPA to render.
       const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: config.timeout });
 
       // Check for rate limit headers
       if (response && response.headers()) {
         const rateLimitRemaining = response.headers()['x-ratelimit-remaining'];
         const rateLimitReset = response.headers()['x-ratelimit-reset'];
-
         if (rateLimitRemaining === '0' && rateLimitReset) {
           const resetTime = parseInt(rateLimitReset) * 1000;
           const now = Date.now();
@@ -508,26 +583,184 @@ async function crawlSite(
         }
       }
 
-      // Let JS render
-      await page.waitForTimeout(500);
+      // Wait for SPA to finish rendering (Svelte/React/Vue need time after domcontentloaded)
+      await page.waitForTimeout(1500);
 
       const pageName = await page.title().then(t => t || `Page ${pageCount}`);
-      const elements = await extractElementsFromPage(page, pageName, url);
+      const actualUrl = page.url(); // may differ from requested url (e.g. SPA redirect)
+      const elements = await extractElementsFromPage(page, pageName, actualUrl);
+      logger.info(`[WebScraper] Page ${pageCount}: "${pageName}" (${actualUrl}) — ${elements.inputs.length} inputs, ${elements.buttons.length} buttons, ${elements.texts.length} texts`);
       pages.push(elements);
+      onProgress?.({ type: 'page', pageCount, maxPages: config.maxPages, pageName, pageUrl: actualUrl, queueSize: toVisit.length });
 
       // Find links to crawl
       if (depth < config.maxDepth) {
-        const links = await page.evaluate(() => {
+        // Strategy 1: follow <a href> links (standard crawling)
+        const hrefLinks = await page.evaluate((orig: string) => {
           return Array.from(globalThis.document.querySelectorAll('a[href]'))
-            .map((a: any) => a.href)
-            .filter((href: string) => href && !href.startsWith('javascript:') && !href.startsWith('#') && !href.startsWith('mailto:'));
-        });
+            .map((a: any) => a.href as string)
+            .filter((h: string) => h && !h.startsWith('javascript:') && !h.startsWith('mailto:') && h.startsWith(orig));
+        }, origin);
 
-        for (const link of links) {
-          if (!visited.has(link.split('#')[0].split('?')[0]) && link.startsWith(baseUrl)) {
+        let added = 0;
+        for (const link of hrefLinks) {
+          const norm = link.split('#')[0].split('?')[0];
+          if (!queued.has(norm) && !visited.has(norm)) {
             toVisit.push({ url: link, depth: depth + 1 });
+            queued.add(norm);
+            added++;
           }
         }
+
+        // Strategy 2: if no href links found (SPA with JS-only navigation like Svelte goto()),
+        // click each visible nav button, detect URL change, queue the new URL
+        if (hrefLinks.length === 0 && pageCount <= config.maxPages) {
+          logger.info(`[WebScraper] No href links found — trying click-to-discover for SPA navigation`);
+          const currentUrl = page.url();
+
+          // Collect clickable nav elements (sidebar items, menu items)
+          const navCandidates = await page.evaluate(() => {
+            const selectors = [
+              'nav a', 'nav button', 'nav li', 'nav [role="menuitem"]',
+              'aside a', 'aside button', 'aside li',
+              '[role="navigation"] a', '[role="navigation"] button',
+              '[class*="sidebar"] a', '[class*="sidebar"] button', '[class*="sidebar"] li',
+              '[class*="menu"] a', '[class*="menu"] button', '[class*="menu"] li',
+              '[class*="nav"] a', '[class*="nav"] button',
+            ];
+            const seen = new Set<string>();
+            const result: Array<{ text: string; index: number; selector: string }> = [];
+            for (const sel of selectors) {
+              globalThis.document.querySelectorAll(sel).forEach((el: any, i: number) => {
+                const text = el.textContent?.trim();
+                if (!text || text.length < 1 || text.length > 60) return;
+                // Skip pure numbers (pagination: "1","2","248")
+                if (/^\d+$/.test(text)) return;
+                // Skip count-badge items: text ending with whitespace+number ("Telat Bayar  36", "Aktif  0")
+                if (/\s+\d+$/.test(text)) return;
+                if (seen.has(text)) return;
+                seen.add(text);
+                result.push({ text, index: i, selector: sel });
+              });
+            }
+            return result.slice(0, 20);
+          });
+
+          logger.info(`[WebScraper] SPA nav candidates: ${JSON.stringify(navCandidates.map(n => n.text))}`);
+
+          for (const candidate of navCandidates) {
+            if (pageCount >= config.maxPages) break;
+            // Skip candidates we've already tried sub-menu expansion for on a previous page
+            if (triedSubMenuExpansion.has(candidate.text)) continue;
+            try {
+              const beforeUrl = page.url();
+              // Click the element by text
+              const el = page.locator(`${candidate.selector}:has-text("${candidate.text.replace(/"/g, '\\"')}")`).first();
+              if (!await el.isVisible({ timeout: 1000 })) continue;
+              await el.click();
+              // Wait for SPA router to update URL
+              await page.waitForTimeout(1500);
+              const afterUrl = page.url().split('#')[0].split('?')[0];
+              if (afterUrl !== beforeUrl.split('#')[0].split('?')[0] && afterUrl.startsWith(origin) && !queued.has(afterUrl) && !visited.has(afterUrl)) {
+                logger.info(`[WebScraper] SPA nav discovered: "${candidate.text}" → ${afterUrl}`);
+                toVisit.push({ url: afterUrl, depth: depth + 1 });
+                queued.add(afterUrl);
+                added++;
+                triedSubMenuExpansion.add(candidate.text); // direct nav — no sub-menu needed
+                // Navigate back to the original page for next candidate
+                await page.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+                await page.waitForTimeout(800);
+              } else if (afterUrl === beforeUrl.split('#')[0].split('?')[0]) {
+                // URL didn't change — parent menu may have expanded a sub-menu.
+                // Detect newly-visible nav items that weren't in the original candidates list.
+                const knownTexts = navCandidates.map(n => n.text);
+                const subItems = await page.evaluate((knownTextsArr: string[]) => {
+                  const knownSet = new Set(knownTextsArr);
+                  const navSelectors = [
+                    'nav a', 'nav button', 'nav li', 'nav [role="menuitem"]',
+                    'aside a', 'aside button', 'aside li',
+                    '[role="navigation"] a', '[role="navigation"] button',
+                    '[class*="sidebar"] a', '[class*="sidebar"] button', '[class*="sidebar"] li',
+                    '[class*="menu"] a', '[class*="menu"] button', '[class*="menu"] li',
+                    '[class*="nav"] a', '[class*="nav"] button',
+                  ];
+                  const seen = new Set<string>();
+                  const result: Array<{ text: string; selector: string }> = [];
+                  for (const sel of navSelectors) {
+                    (globalThis.document.querySelectorAll(sel) as any).forEach((el: any) => {
+                      const text = el.textContent?.trim();
+                      if (!text || text.length < 1 || text.length > 60) return;
+                      // Skip pure numbers (pagination) and count-badge items
+                      if (/^\d+$/.test(text)) return;
+                      if (/\s+\d+$/.test(text)) return;
+                      if (knownSet.has(text) || seen.has(text)) return;
+                      // Only include elements that are actually visible on screen
+                      const rect = el.getBoundingClientRect();
+                      if (rect.width === 0 || rect.height === 0) return;
+                      seen.add(text);
+                      result.push({ text, selector: sel });
+                    });
+                  }
+                  return result.slice(0, 15);
+                }, knownTexts);
+
+                if (subItems.length > 0) {
+                  logger.info(`[WebScraper] Sub-menu under "${candidate.text}": ${JSON.stringify(subItems.map(s => s.text))}`);
+                  const parentLocatorStr = `${candidate.selector}:has-text("${candidate.text.replace(/"/g, '\\"')}")`;
+
+                  for (const subItem of subItems) {
+                    if (pageCount >= config.maxPages) break;
+                    try {
+                      const subLocatorStr = `${subItem.selector}:has-text("${subItem.text.replace(/"/g, '\\"')}")`;
+                      let subEl = page.locator(subLocatorStr).first();
+
+                      // If sub-menu collapsed (e.g. after navigating back), re-expand parent
+                      if (!await subEl.isVisible({ timeout: 1000 })) {
+                        const parentEl = page.locator(parentLocatorStr).first();
+                        if (await parentEl.isVisible({ timeout: 1000 })) {
+                          await parentEl.click();
+                          await page.waitForTimeout(800);
+                        }
+                        subEl = page.locator(subLocatorStr).first();
+                      }
+                      if (!await subEl.isVisible({ timeout: 1000 })) continue;
+
+                      const beforeSubUrl = page.url().split('#')[0].split('?')[0];
+                      await subEl.click();
+                      await page.waitForTimeout(1500);
+                      const afterSubUrl = page.url().split('#')[0].split('?')[0];
+
+                      if (afterSubUrl !== beforeSubUrl && afterSubUrl.startsWith(origin) && !queued.has(afterSubUrl) && !visited.has(afterSubUrl)) {
+                        logger.info(`[WebScraper] Sub-menu URL: "${candidate.text}" > "${subItem.text}" → ${afterSubUrl}`);
+                        toVisit.push({ url: afterSubUrl, depth: depth + 1 });
+                        queued.add(afterSubUrl);
+                        added++;
+                      }
+
+                      // Navigate back to currentUrl and re-expand parent for next sub-item
+                      await page.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+                      await page.waitForTimeout(800);
+                      const parentReopen = page.locator(parentLocatorStr).first();
+                      if (await parentReopen.isVisible({ timeout: 1000 })) {
+                        await parentReopen.click();
+                        await page.waitForTimeout(600);
+                      }
+                    } catch { /* skip unclickable sub-item */ }
+                  }
+
+                  // Return to clean state at currentUrl for next main candidate
+                  await page.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+                  await page.waitForTimeout(800);
+                }
+                // Mark this parent as done regardless of whether sub-items were found,
+                // so we never re-expand it on subsequent pages
+                triedSubMenuExpansion.add(candidate.text);
+              }
+            } catch { /* skip unclickable */ }
+          }
+        }
+
+        logger.info(`[WebScraper] Added ${added} new URLs to queue, total queue: ${toVisit.length}`);
       }
     } catch (err: any) {
       logger.warn(`[WebScraper] Failed to crawl ${url}: ${err.message}`);
@@ -537,17 +770,150 @@ async function crawlSite(
   return pages;
 }
 
+// ─── Pre-login Helper ──────────────────────────────────────────────────────────
+
+export async function performLogin(page: Page, baseUrl: string, auth: WebAuthConfig): Promise<void> {
+  const loginUrl = auth.loginUrl || baseUrl;
+  logger.info(`[WebScraper] Performing pre-login at ${loginUrl}`);
+
+  await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  // Wait for JS-rendered login form to appear
+  await page.waitForTimeout(2000);
+
+  // Resolve a loose field name / label to a real CSS selector.
+  // If the user typed a plain word (no CSS special chars) we try common patterns.
+  async function resolveSelector(raw: string, label: string): Promise<string> {
+    // Detect real CSS selectors: starts with #/./ or contains [, >, +, ~, :, or CSS-style spaces (e.g. "div span")
+    // Plain words with spaces (e.g. "Masukkan Personal Number") are treated as labels, not CSS
+    const isCss = /^[#\.\[]/.test(raw) || /[>\+~]/.test(raw) || /\[/.test(raw) ||
+                  (/\s/.test(raw) && /^[a-z]+\s/.test(raw) && !/[A-Z]/.test(raw[0]));
+    if (isCss) return raw; // already a proper CSS selector
+
+    const candidates = [
+      `[name="${raw}"]`,
+      `#${raw}`,
+      `[id="${raw}"]`,
+      // button text match (for submit selectors like "MASUK", "Login", etc.)
+      `button:has-text("${raw}")`,
+      `input[value="${raw}"]`,
+      // placeholder / aria for input fields
+      `[placeholder="${raw}"]`,
+      `[placeholder*="${raw}" i]`,
+      `[aria-label="${raw}"]`,
+      `[aria-label*="${raw}" i]`,
+      `input[type="${raw}"]`,
+    ];
+    for (const sel of candidates) {
+      try {
+        const el = await page.$(sel);
+        if (el) {
+          logger.info(`[WebScraper] Resolved "${raw}" → "${sel}" for ${label}`);
+          return sel;
+        }
+      } catch { /* try next */ }
+    }
+    // Nothing matched — return original and let waitForSelector give a clear error
+    return raw;
+  }
+
+  const usernameSelector = await resolveSelector(auth.usernameSelector, 'username');
+  const passwordSelector = await resolveSelector(auth.passwordSelector, 'password');
+
+  // Wait for username field to be visible before interacting
+  try {
+    await page.waitForSelector(usernameSelector, { state: 'visible', timeout: 15000 });
+  } catch {
+    throw new Error(
+      `Login failed: username field not found with selector "${auth.usernameSelector}" (resolved: "${usernameSelector}"). ` +
+      `Check the selector and make sure it matches a visible element on ${loginUrl}`
+    );
+  }
+
+  // Fill username
+  await page.fill(usernameSelector, auth.usernameValue);
+
+  // Wait for password field
+  try {
+    await page.waitForSelector(passwordSelector, { state: 'visible', timeout: 10000 });
+  } catch {
+    throw new Error(
+      `Login failed: password field not found with selector "${auth.passwordSelector}" (resolved: "${passwordSelector}"). ` +
+      `Check the selector on ${loginUrl}`
+    );
+  }
+
+  // Fill password
+  await page.fill(passwordSelector, auth.passwordValue);
+
+  // Click submit
+  if (auth.submitSelector) {
+    const submitSelector = await resolveSelector(auth.submitSelector, 'submit');
+    await page.waitForSelector(submitSelector, { state: 'visible', timeout: 5000 });
+    await page.click(submitSelector);
+  } else {
+    // Auto-detect: try common submit patterns
+    // Small wait so JS-driven forms finish enabling the button
+    await page.waitForTimeout(500);
+
+    const submitPatterns = [
+      'button[type="submit"]',
+      'input[type="submit"]',
+      'button:has-text("Login")',
+      'button:has-text("Sign in")',
+      'button:has-text("Log in")',
+      'button:has-text("Submit")',
+      'button:has-text("Masuk")',
+      'button:has-text("MASUK")',
+      'button:has-text("Signin")',
+      'button:has-text("Daftar")',
+      'button:has-text("Lanjut")',
+      'form button',
+    ];
+    let clicked = false;
+    for (const sel of submitPatterns) {
+      try {
+        const el = page.locator(sel).first();
+        if (await el.isVisible({ timeout: 1000 })) {
+          await el.click();
+          clicked = true;
+          break;
+        }
+      } catch { /* try next */ }
+    }
+    if (!clicked) {
+      // Last resort: press Enter in the password field
+      await page.press(passwordSelector, 'Enter');
+    }
+  }
+
+  // Wait for URL to change away from the login page (works for both full nav and SPA routing)
+  const loginPageNorm = loginUrl.split('?')[0].split('#')[0];
+  const waitMs = auth.waitAfterLogin ?? 3000;
+  try {
+    await page.waitForURL(
+      url => url.toString().split('?')[0].split('#')[0] !== loginPageNorm,
+      { timeout: waitMs + 5000 }
+    );
+  } catch {
+    // URL didn't change — either login failed or very slow — wait a bit more
+    await page.waitForTimeout(waitMs);
+  }
+  logger.info(`[WebScraper] Login complete, current URL: ${page.url()}`);
+}
+
 // ─── Main Export ───────────────────────────────────────────────────────────────
 
 export async function scanWebProject(
   url: string,
   config?: unknown,
+  auth?: WebAuthConfig,
+  onProgress?: ScanProgressCallback,
 ): Promise<WebElementCatalog> {
   // Validate config
   const validatedConfig = config ? validateScraperConfig(config) : undefined;
   const cfg: Required<ScraperConfig> = { ...DEFAULT_CONFIG, ...validatedConfig };
 
-  logger.info(`[WebScraper] Scanning ${url} with config: ${JSON.stringify(cfg)}`);
+  logger.info(`[WebScraper] Scanning ${url} with config: ${JSON.stringify(cfg)}${auth ? ' (with auth)' : ''}`);
 
   const browser: Browser = await chromium.launch({ headless: cfg.headless });
   const viewportSize = { width: cfg.viewport?.width || 1280, height: cfg.viewport?.height || 720 };
@@ -555,7 +921,49 @@ export async function scanWebProject(
   const page = await context.newPage();
 
   try {
-    const pages = await crawlSite(page, url, cfg);
+    // Perform login before crawling if auth config is provided
+    let postLoginUrl: string | undefined;
+    if (auth) {
+      onProgress?.({ type: 'login', pageCount: 0, maxPages: cfg.maxPages, pageName: 'Logging in...', pageUrl: auth.loginUrl || url, queueSize: 0 });
+      await performLogin(page, url, auth);
+      postLoginUrl = page.url();
+      // Detect login failure: if still on a /login path, warn
+      const isStillOnLoginPage = /\/(login|signin|sign-in|auth)(\/|$|\?)/i.test(postLoginUrl);
+      if (isStillOnLoginPage) {
+        logger.warn(`[WebScraper] Login may have failed — still at ${postLoginUrl}. Check credentials or submit selector.`);
+        postLoginUrl = undefined; // fall back to crawling from baseUrl
+      } else {
+        logger.info(`[WebScraper] Login succeeded, starting crawl from: ${postLoginUrl}`);
+      }
+    }
+
+    const pages = await crawlSite(page, url, cfg, postLoginUrl, onProgress);
+
+    // Remove elements that appear on more than 60% of pages — these are global UI elements
+    // (persistent modals, layout overlays, "Leave page?" dialogs) that pollute every page.
+    if (pages.length >= 3) {
+      const threshold = Math.floor(pages.length * 0.6);
+
+      // Count how many pages each button text appears on
+      const btnCount = new Map<string, number>();
+      for (const p of pages) {
+        const seen = new Set(p.buttons.map(b => b.text.toLowerCase().trim()));
+        seen.forEach(t => btnCount.set(t, (btnCount.get(t) || 0) + 1));
+      }
+
+      // Count how many pages each text element content appears on
+      const txtCount = new Map<string, number>();
+      for (const p of pages) {
+        const seen = new Set(p.texts.map(t => t.text.toLowerCase().trim()));
+        seen.forEach(t => txtCount.set(t, (txtCount.get(t) || 0) + 1));
+      }
+
+      for (const p of pages) {
+        p.buttons = p.buttons.filter(b => (btnCount.get(b.text.toLowerCase().trim()) || 0) <= threshold);
+        p.texts = p.texts.filter(t => (txtCount.get(t.text.toLowerCase().trim()) || 0) <= threshold);
+      }
+      logger.info(`[WebScraper] Cross-page dedup: removed global elements appearing on >${threshold} pages`);
+    }
 
     const catalog: WebElementCatalog = {
       baseUrl: url,

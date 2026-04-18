@@ -6,237 +6,98 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { MOBILE_DEVICES, type MobileDevice, DEVICE_CATEGORIES } from '../config/devices';
 import {
-  Scan, Play, Loader2, CheckCircle2, XCircle, GripVertical,
+  Play, Loader2, CheckCircle2, XCircle, GripVertical,
   FileText, Type, MousePointerClick, Clock, Terminal, Code2, AlertTriangle,
   Eye, EyeOff, ArrowUp, ArrowDown, Plus, Trash2, Globe,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, MonitorPlay, LogIn, LogOut, RefreshCw,
 } from 'lucide-react';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 interface WebInputElement {
-  id: string;
-  label: string;
-  type: string;
-  selector: string;
-  name?: string;
-  placeholder?: string;
-  page?: string;
+  id: string; label: string; type: string; selector: string;
+  name?: string; placeholder?: string; page?: string;
+  tag?: string; role?: string; ariaLabel?: string; fallbackSelectors?: string[];
 }
-
 interface WebButtonElement {
-  id: string;
-  text: string;
-  type: string;
-  selector: string;
-  page?: string;
-  action?: string;
+  id: string; text: string; type: string; selector: string;
+  page?: string; action?: string; tag?: string; role?: string;
+  ariaLabel?: string; fallbackSelectors?: string[];
 }
-
 interface WebTextElement {
-  id: string;
-  text: string;
-  selector: string;
-  page?: string;
-  isStatic: boolean;
+  id: string; text: string; selector: string; page?: string;
+  isStatic: boolean; tag?: string; fallbackSelectors?: string[];
 }
-
 interface WebPageElement {
-  name: string;
-  url: string;
-  inputs: WebInputElement[];
-  buttons: WebButtonElement[];
-  texts: WebTextElement[];
-  links: any[];
+  name: string; url: string;
+  inputs: WebInputElement[]; buttons: WebButtonElement[];
+  texts: WebTextElement[]; links: any[];
 }
-
 interface WebElementCatalog {
-  baseUrl: string;
-  scannedAt: string;
-  pages: WebPageElement[];
-  inputs: WebInputElement[];
-  buttons: WebButtonElement[];
-  texts: WebTextElement[];
-  links: any[];
-  routes: string[];
+  baseUrl: string; scannedAt: string; pages: WebPageElement[];
+  inputs: WebInputElement[]; buttons: WebButtonElement[];
+  texts: WebTextElement[]; links: any[]; routes: string[];
 }
-
 interface WebTestStep {
   id: string;
-  type: 'tap' | 'enter_text' | 'navigate' | 'assert_visible' | 'assert_not_visible' | 'assert_text' | 'wait' | 'screenshot' | 'set_viewport' | 'hover' | 'select' | 'check' | 'uncheck' | 'press_key';
-  elementId?: string;
-  selector?: string;
-  value?: string;
-  value2?: string;
-  text?: string;
-  // Smart locator metadata (from scraper)
-  role?: string;
-  label?: string;
-  placeholder?: string;
-  tag?: string;
-  fallbackSelectors?: string[];
+  type: 'tap' | 'enter_text' | 'navigate' | 'assert_visible' | 'assert_not_visible' | 'assert_text'
+      | 'wait' | 'screenshot' | 'set_viewport' | 'hover' | 'select' | 'check' | 'uncheck' | 'press_key';
+  elementId?: string; selector?: string; value?: string; value2?: string; text?: string;
+  role?: string; label?: string; placeholder?: string; tag?: string; fallbackSelectors?: string[];
 }
-
-interface WebTestResult {
-  success: boolean;
-  output: string;
-  duration: number;
+interface WebTestResult { success: boolean; output: string; duration: number; }
+interface PageSnapshot {
+  url: string; title: string; screenshot: string; // base64
+  elements: WebPageElement;
 }
 
 // ─── Step Categories ───────────────────────────────────────────────────────────
 
 const STEP_CATEGORIES = [
-  {
-    name: 'Interactions',
-    icon: MousePointerClick,
-    color: 'bg-green-500',
-    steps: [
-      { type: 'tap' as const, label: 'Click', icon: MousePointerClick, desc: 'Click a button or element' },
-      { type: 'enter_text' as const, label: 'Enter Text', icon: Type, desc: 'Fill an input field' },
-      { type: 'hover' as const, label: 'Hover', icon: MousePointerClick, desc: 'Hover over an element' },
-      { type: 'select' as const, label: 'Select', icon: Type, desc: 'Select from dropdown' },
-      { type: 'check' as const, label: 'Check', icon: MousePointerClick, desc: 'Check a checkbox' },
-      { type: 'uncheck' as const, label: 'Uncheck', icon: MousePointerClick, desc: 'Uncheck a checkbox' },
-    ],
-  },
-  {
-    name: 'Navigation',
-    icon: MousePointerClick,
-    color: 'bg-blue-500',
-    steps: [
-      { type: 'navigate' as const, label: 'Navigate', icon: Globe, desc: 'Go to a URL' },
-      { type: 'press_key' as const, label: 'Press Key', icon: ArrowUp, desc: 'Press a keyboard key' },
-    ],
-  },
-  {
-    name: 'Assertions',
-    icon: Eye,
-    color: 'bg-purple-500',
-    steps: [
-      { type: 'assert_visible' as const, label: 'Assert Visible', icon: Eye, desc: 'Verify element is visible' },
-      { type: 'assert_not_visible' as const, label: 'Assert Not Visible', icon: EyeOff, desc: 'Verify element is hidden' },
-      { type: 'assert_text' as const, label: 'Assert Text', icon: Type, desc: 'Verify text content' },
-    ],
-  },
-  {
-    name: 'Utilities',
-    icon: Clock,
-    color: 'bg-gray-500',
-    steps: [
-      { type: 'wait' as const, label: 'Wait', icon: Clock, desc: 'Wait for N ms' },
-      { type: 'screenshot' as const, label: 'Screenshot', icon: Eye, desc: 'Take a screenshot' },
-      { type: 'set_viewport' as const, label: 'Set Viewport', icon: Type, desc: 'Set browser viewport size' },
-    ],
-  },
+  { name: 'Interactions', color: 'bg-green-500', steps: [
+    { type: 'tap' as const, label: 'Click', icon: MousePointerClick, desc: 'Click a button or element' },
+    { type: 'enter_text' as const, label: 'Enter Text', icon: Type, desc: 'Fill an input field' },
+    { type: 'hover' as const, label: 'Hover', icon: MousePointerClick, desc: 'Hover over an element' },
+    { type: 'select' as const, label: 'Select', icon: Type, desc: 'Select from dropdown' },
+    { type: 'check' as const, label: 'Check', icon: MousePointerClick, desc: 'Check a checkbox' },
+    { type: 'uncheck' as const, label: 'Uncheck', icon: MousePointerClick, desc: 'Uncheck a checkbox' },
+  ]},
+  { name: 'Navigation', color: 'bg-blue-500', steps: [
+    { type: 'navigate' as const, label: 'Navigate', icon: Globe, desc: 'Go to a URL' },
+    { type: 'press_key' as const, label: 'Press Key', icon: ArrowUp, desc: 'Press a keyboard key' },
+  ]},
+  { name: 'Assertions', color: 'bg-purple-500', steps: [
+    { type: 'assert_visible' as const, label: 'Assert Visible', icon: Eye, desc: 'Verify element is visible' },
+    { type: 'assert_not_visible' as const, label: 'Assert Not Visible', icon: EyeOff, desc: 'Verify element is hidden' },
+    { type: 'assert_text' as const, label: 'Assert Text', icon: Type, desc: 'Verify text content' },
+  ]},
+  { name: 'Utilities', color: 'bg-gray-500', steps: [
+    { type: 'wait' as const, label: 'Wait', icon: Clock, desc: 'Wait for N ms' },
+    { type: 'screenshot' as const, label: 'Screenshot', icon: Eye, desc: 'Take a screenshot' },
+    { type: 'set_viewport' as const, label: 'Set Viewport', icon: Type, desc: 'Set browser viewport size' },
+  ]},
 ];
-
-const STEP_TYPES = STEP_CATEGORIES.flatMap(cat => cat.steps);
-
-// ─── Templates ─────────────────────────────────────────────────────────────────
-
-const TEMPLATES = [
-  {
-    name: 'Login Flow',
-    icon: '🔐',
-    build: (catalog: WebElementCatalog, baseUrl: string): WebTestStep[] => {
-      const emailInput = catalog.inputs.find(i =>
-        i.label.toLowerCase().includes('email') ||
-        i.label.toLowerCase().includes('username') ||
-        i.type === 'email'
-      ) || catalog.inputs[0];
-
-      const passInput = catalog.inputs.find(i =>
-        i.label.toLowerCase().includes('password') ||
-        i.type === 'password'
-      ) || catalog.inputs[1];
-
-      const loginBtn = catalog.buttons.find(b =>
-        b.text.toLowerCase().includes('login') ||
-        b.text.toLowerCase().includes('sign in') ||
-        b.action === 'form_submit'
-      ) || catalog.buttons[0];
-
-      const steps: WebTestStep[] = [];
-      if (baseUrl) steps.push({ id: `s_${Date.now()}_0`, type: 'navigate', value: baseUrl });
-      if (emailInput) steps.push({ id: `s_${Date.now()}_1`, type: 'enter_text', elementId: emailInput.id, selector: emailInput.selector, value: '' });
-      if (passInput) steps.push({ id: `s_${Date.now()}_2`, type: 'enter_text', elementId: passInput.id, selector: passInput.selector, value: '' });
-      if (loginBtn) steps.push({ id: `s_${Date.now()}_3`, type: 'tap', elementId: loginBtn.id, selector: loginBtn.selector });
-      steps.push({ id: `s_${Date.now()}_4`, type: 'wait', value: '2000' });
-      if (loginBtn) steps.push({ id: `s_${Date.now()}_5`, type: 'assert_not_visible', elementId: loginBtn.id, selector: loginBtn.selector });
-      return steps;
-    },
-  },
-  {
-    name: 'Navigate + Assert',
-    icon: '🌐',
-    build: (catalog: WebElementCatalog, baseUrl: string): WebTestStep[] => {
-      const steps: WebTestStep[] = [];
-      if (baseUrl) steps.push({ id: `s_${Date.now()}_0`, type: 'navigate', value: baseUrl });
-      steps.push({ id: `s_${Date.now()}_1`, type: 'wait', value: '1000' });
-      const firstText = catalog.texts[0];
-      if (firstText) steps.push({ id: `s_${Date.now()}_2`, type: 'assert_text', selector: firstText.selector, text: firstText.text.slice(0, 50) });
-      return steps;
-    },
-  },
-];
-
-// ─── Step Row Component ────────────────────────────────────────────────────────
+const STEP_TYPES = STEP_CATEGORIES.flatMap(c => c.steps);
 
 // ─── Searchable Element Picker ─────────────────────────────────────────────────
 
-interface ElementOption {
-  id: string;
-  label: string;
-  sublabel?: string;
-  icon?: string;
-  page?: string;   // page name for grouping
-  data: any;
-}
+interface ElementOption { id: string; label: string; sublabel?: string; icon?: string; page?: string; data: any; }
 
-// Portal-based element picker — dropdown renders in document.body, avoids overflow/clip issues
 const ElementSearchSelect: React.FC<{
-  value: string;
-  placeholder?: string;
-  options: ElementOption[];
-  onChange: (opt: ElementOption | null) => void;
-  className?: string;
+  value: string; placeholder?: string; options: ElementOption[];
+  onChange: (opt: ElementOption | null) => void; className?: string;
 }> = ({ value, placeholder = 'Search element...', options, onChange, className = '' }) => {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Assign stable index-based keys to prevent duplicate-id collisions
   const indexed = options.map((opt, idx) => ({ ...opt, _idx: idx }));
-
   const filtered = query.trim()
-    ? indexed.filter(o =>
-        o.label.toLowerCase().includes(query.toLowerCase()) ||
-        (o.sublabel || '').toLowerCase().includes(query.toLowerCase()) ||
-        (o.page || '').toLowerCase().includes(query.toLowerCase())
-      )
+    ? indexed.filter(o => o.label.toLowerCase().includes(query.toLowerCase()) || (o.sublabel || '').toLowerCase().includes(query.toLowerCase()) || (o.page || '').toLowerCase().includes(query.toLowerCase()))
     : indexed;
-
   const currentOpt = value ? indexed.find(o => o.id === value) : undefined;
   const selectedLabel = currentOpt ? `${currentOpt.icon || ''} ${currentOpt.label}` : '';
-
-  const openDropdown = () => {
-    setOpen(true);
-    setQuery('');
-    setTimeout(() => searchRef.current?.focus(), 0);
-  };
-
-  const handleSelect = (opt: typeof indexed[0]) => {
-    onChange(opt);
-    setOpen(false);
-    setQuery('');
-  };
-
-  const shortPage = (page: string) => {
-    try { return new URL(page).pathname || page; } catch { return page; }
-  };
 
   const grouped: { page: string; items: typeof indexed }[] = [];
   filtered.forEach(opt => {
@@ -246,62 +107,28 @@ const ElementSearchSelect: React.FC<{
     g.items.push(opt);
   });
 
-  // Modal-style dialog: backdrop + centered panel — no relative positioning needed
+  const shortPage = (p: string) => { try { return new URL(p).pathname || p; } catch { return p; } };
+
   const portal = open && createPortal(
     <>
-      {/* Full-screen backdrop — catches outside clicks */}
-      <div
-        style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.3)' }}
-        onClick={() => { setOpen(false); setQuery(''); }}
-      />
-      {/* Centered picker panel */}
-      <div
-        className="ess-portal rounded-lg border bg-popover shadow-2xl overflow-hidden"
-        style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 440, maxWidth: '94vw', zIndex: 9999 }}
-      >
-        {/* Header */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.3)' }} onClick={() => { setOpen(false); setQuery(''); }} />
+      <div className="rounded-lg border bg-popover shadow-2xl overflow-hidden" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 440, maxWidth: '94vw', zIndex: 9999 }}>
         <div className="flex items-center justify-between px-3 pt-3 pb-2 border-b">
-          <span className="text-sm font-semibold text-foreground">Select element ({filtered.length})</span>
-          <button
-            className="text-muted-foreground hover:text-foreground text-lg leading-none"
-            onClick={() => { setOpen(false); setQuery(''); }}
-          >✕</button>
+          <span className="text-sm font-semibold">Select element ({filtered.length})</span>
+          <button className="text-muted-foreground hover:text-foreground text-lg" onClick={() => { setOpen(false); setQuery(''); }}>✕</button>
         </div>
-        {/* Search */}
         <div className="px-3 py-2">
-          <input
-            ref={searchRef}
-            className="w-full rounded border px-2 py-1.5 text-sm bg-background outline-none focus:border-primary"
-            placeholder={`Search ${options.length} elements...`}
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
+          <input ref={searchRef} className="w-full rounded border px-2 py-1.5 text-sm bg-background outline-none focus:border-primary" placeholder={`Search ${options.length} elements...`} value={query} onChange={e => setQuery(e.target.value)} />
         </div>
-        {/* List */}
         <div style={{ maxHeight: '480px', overflowY: 'auto' }} className="border-t">
-          {filtered.length === 0 && (
-            <div className="px-3 py-4 text-sm text-muted-foreground text-center">No elements found</div>
-          )}
+          {filtered.length === 0 && <div className="px-3 py-4 text-sm text-muted-foreground text-center">No elements found</div>}
           {grouped.map(group => (
             <div key={group.page}>
-              {grouped.length > 1 && (
-                <div className="sticky top-0 flex items-center gap-1 px-3 py-1 bg-muted/80 border-b text-[10px] font-semibold text-muted-foreground uppercase">
-                  <Globe className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{shortPage(group.page)}</span>
-                  <span className="ml-auto">{group.items.length}</span>
-                </div>
-              )}
+              {grouped.length > 1 && <div className="sticky top-0 flex items-center gap-1 px-3 py-1 bg-muted/80 border-b text-[10px] font-semibold text-muted-foreground uppercase"><Globe className="h-3 w-3 shrink-0" /><span className="truncate">{shortPage(group.page)}</span><span className="ml-auto">{group.items.length}</span></div>}
               {group.items.map(opt => (
-                <div
-                  key={opt._idx}
-                  className={`flex items-center gap-2 px-3 py-2.5 text-sm cursor-pointer hover:bg-accent/60 active:bg-accent border-b border-border/30 ${opt.id === value ? 'bg-accent/30 font-medium' : ''}`}
-                  onClick={() => handleSelect(opt)}
-                >
+                <div key={opt._idx} className={`flex items-center gap-2 px-3 py-2.5 text-sm cursor-pointer hover:bg-accent/60 border-b border-border/30 ${opt.id === value ? 'bg-accent/30 font-medium' : ''}`} onClick={() => { onChange(opt); setOpen(false); setQuery(''); }}>
                   {opt.icon && <span className="shrink-0 text-base">{opt.icon}</span>}
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{opt.label}</div>
-                    {opt.sublabel && <div className="text-xs text-muted-foreground truncate mt-0.5">{opt.sublabel}</div>}
-                  </div>
+                  <div className="min-w-0 flex-1"><div className="truncate font-medium">{opt.label}</div>{opt.sublabel && <div className="text-xs text-muted-foreground truncate mt-0.5">{opt.sublabel}</div>}</div>
                   {opt.id === value && <span className="text-xs text-primary shrink-0 font-bold">✓</span>}
                 </div>
               ))}
@@ -314,14 +141,9 @@ const ElementSearchSelect: React.FC<{
   );
 
   return (
-    <div ref={triggerRef} className={`relative ${className}`}>
-      <div
-        className="flex items-center rounded border bg-background px-2 py-1.5 text-sm cursor-pointer gap-1 min-h-[32px]"
-        onClick={() => { open ? (setOpen(false), setQuery('')) : openDropdown(); }}
-      >
-        <span className={`flex-1 truncate ${selectedLabel ? 'text-foreground' : 'text-muted-foreground'}`}>
-          {selectedLabel || placeholder}
-        </span>
+    <div className={`relative ${className}`}>
+      <div className="flex items-center rounded border bg-background px-2 py-1.5 text-sm cursor-pointer gap-1 min-h-[32px]" onClick={() => { open ? (setOpen(false), setQuery('')) : (setOpen(true), setQuery(''), setTimeout(() => searchRef.current?.focus(), 0)); }}>
+        <span className={`flex-1 truncate ${selectedLabel ? 'text-foreground' : 'text-muted-foreground'}`}>{selectedLabel || placeholder}</span>
         <ChevronDown className={`h-3 w-3 text-muted-foreground shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </div>
       {portal}
@@ -332,279 +154,78 @@ const ElementSearchSelect: React.FC<{
 // ─── Step Row ───────────────────────────────────────────────────────────────────
 
 const StepRow: React.FC<{
-  step: WebTestStep;
-  index: number;
-  total: number;
-  catalog: WebElementCatalog | null;
+  step: WebTestStep; index: number; total: number; catalog: WebElementCatalog | null;
   onUpdate: (id: string, updates: Partial<WebTestStep>) => void;
-  onDelete: (id: string) => void;
-  onMoveUp: (index: number) => void;
-  onMoveDown: (index: number) => void;
+  onDelete: (id: string) => void; onMoveUp: (i: number) => void; onMoveDown: (i: number) => void;
 }> = ({ step, index, total, catalog, onUpdate, onDelete, onMoveUp, onMoveDown }) => {
   const stepDef = STEP_TYPES.find(s => s.type === step.type);
   const Icon = stepDef?.icon || Type;
+  const catDef = STEP_CATEGORIES.find(c => c.steps.some(s => s.type === step.type));
 
   const renderControls = () => {
     switch (step.type) {
       case 'navigate':
-        return (
-          <div className="flex gap-2 mt-2">
-            <Input placeholder="https://example.com" value={step.value || ''} onChange={(e) => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-sm" />
-          </div>
-        );
+        return <div className="flex gap-2 mt-2"><Input placeholder="https://example.com" value={step.value || ''} onChange={e => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-sm" /></div>;
 
       case 'enter_text': {
-        const inputOpts: ElementOption[] = (catalog?.inputs || []).map(inp => ({
-          id: inp.id,
-          label: inp.label || inp.placeholder || inp.id,
-          sublabel: `${inp.type} · ${inp.selector}`,
-          icon: '📥',
-          page: inp.page,
-          data: inp,
-        }));
-        return (
-          <div className="flex gap-2 mt-2">
-            <ElementSearchSelect
-              className="flex-1 min-w-0"
-              value={step.elementId || ''}
-              placeholder="Search input field..."
-              options={inputOpts}
-              onChange={(opt) => {
-                const el = opt?.data;
-                onUpdate(step.id, {
-                  elementId: opt?.id || '',
-                  selector: el?.selector || '',
-                  label: el?.label || el?.placeholder,
-                  placeholder: el?.placeholder,
-                  tag: el?.tag || el?.type,
-                  fallbackSelectors: el?.fallbackSelectors,
-                });
-              }}
-            />
-            <Input placeholder="Value to enter" value={step.value || ''} onChange={(e) => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-sm" />
-          </div>
-        );
+        const opts: ElementOption[] = (catalog?.inputs || []).map(i => ({ id: i.id, label: i.label || i.placeholder || i.id, sublabel: `${i.type} · ${i.selector}`, icon: '📥', page: i.page, data: i }));
+        return (<div className="flex gap-2 mt-2">
+          <ElementSearchSelect className="flex-1 min-w-0" value={step.elementId || ''} placeholder="Search input..." options={opts} onChange={opt => { const el = opt?.data; onUpdate(step.id, { elementId: opt?.id, selector: el?.selector, label: el?.label || el?.placeholder, placeholder: el?.placeholder, tag: el?.tag || el?.type, fallbackSelectors: el?.fallbackSelectors }); }} />
+          <Input placeholder="Value to type" value={step.value || ''} onChange={e => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-sm" />
+        </div>);
       }
-
-      case 'tap':
-      case 'hover':
-      case 'check':
-      case 'uncheck': {
-        // Use array index in ID to guarantee uniqueness even when backend IDs collide
-        // (happens when multiple pages share the same title — scraper generates duplicate btn_pagename_N)
-        const clickOpts: ElementOption[] = [
-          ...(catalog?.buttons || []).map((btn, i) => ({
-            id: `b:${i}:${btn.id}`,
-            label: `"${btn.text}"`,
-            sublabel: `${btn.type} · ${btn.selector}`,
-            icon: btn.type === 'link' ? '🔗' : '🔘',
-            page: btn.page,
-            data: btn,
-          })),
-          ...(catalog?.texts || []).map((txt, i) => ({
-            id: `t:${i}:${txt.id}`,
-            label: `"${txt.text.slice(0, 60)}"`,
-            sublabel: `text · ${txt.selector}`,
-            icon: '📝',
-            page: txt.page,
-            data: txt,
-          })),
+      case 'tap': case 'hover': case 'check': case 'uncheck': {
+        const opts: ElementOption[] = [
+          ...(catalog?.buttons || []).map((b, i) => ({ id: `b:${i}:${b.id}`, label: `"${b.text}"`, sublabel: `${b.type} · ${b.selector}`, icon: '🔘', page: b.page, data: b })),
+          ...(catalog?.texts || []).map((t, i) => ({ id: `t:${i}:${t.id}`, label: `"${t.text.slice(0, 60)}"`, sublabel: `text · ${t.selector}`, icon: '📝', page: t.page, data: t })),
         ];
-        return (
-          <div className="flex gap-2 mt-2">
-            <ElementSearchSelect
-              className="flex-1"
-              value={step.elementId || ''}
-              placeholder="Search element..."
-              options={clickOpts}
-              onChange={(opt) => {
-                const el = opt?.data;
-                onUpdate(step.id, {
-                  elementId: opt?.id || '',
-                  selector: el?.selector || '',
-                  text: el?.text || (el as any)?.label,
-                  tag: el?.tag,
-                  role: el?.role || 'button',
-                  fallbackSelectors: el?.fallbackSelectors,
-                });
-              }}
-            />
-          </div>
-        );
+        return (<div className="flex gap-2 mt-2"><ElementSearchSelect className="flex-1" value={step.elementId || ''} placeholder="Search element..." options={opts} onChange={opt => { const el = opt?.data; onUpdate(step.id, { elementId: opt?.id, selector: el?.selector, text: el?.text || el?.label, tag: el?.tag, role: el?.role || 'button', fallbackSelectors: el?.fallbackSelectors }); }} /></div>);
       }
-
       case 'select': {
-        const selectOpts: ElementOption[] = (catalog?.inputs || [])
-          .filter(i => i.type === 'select')
-          .map(inp => ({
-            id: inp.id,
-            label: inp.label || inp.id,
-            sublabel: inp.selector,
-            icon: '▾',
-            page: inp.page,
-            data: inp,
-          }));
-        return (
-          <div className="flex gap-2 mt-2">
-            <ElementSearchSelect
-              className="flex-1"
-              value={step.elementId || ''}
-              placeholder="Search dropdown..."
-              options={selectOpts}
-              onChange={(opt) => {
-                const el = opt?.data;
-                onUpdate(step.id, { elementId: opt?.id || '', selector: el?.selector || '' });
-              }}
-            />
-            <Input placeholder="Option value" value={step.value || ''} onChange={(e) => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-sm" />
-          </div>
-        );
+        const opts: ElementOption[] = (catalog?.inputs || []).filter(i => i.type === 'select').map(i => ({ id: i.id, label: i.label || i.id, sublabel: i.selector, icon: '▾', page: i.page, data: i }));
+        return (<div className="flex gap-2 mt-2"><ElementSearchSelect className="flex-1" value={step.elementId || ''} placeholder="Search dropdown..." options={opts} onChange={opt => { onUpdate(step.id, { elementId: opt?.id, selector: opt?.data?.selector }); }} /><Input placeholder="Option value" value={step.value || ''} onChange={e => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-sm" /></div>);
       }
-
       case 'press_key':
-        return (
-          <div className="flex gap-2 mt-2">
-            <select
-              className="flex-1 rounded border px-3 py-2 text-sm bg-background"
-              value={step.value || ''}
-              onChange={(e) => onUpdate(step.id, { value: e.target.value })}
-            >
-              <option value="">Select key...</option>
-              <option value="Enter">Enter</option>
-              <option value="Tab">Tab</option>
-              <option value="Escape">Escape</option>
-              <option value="Backspace">Backspace</option>
-              <option value="Delete">Delete</option>
-              <option value="ArrowUp">Arrow Up</option>
-              <option value="ArrowDown">Arrow Down</option>
-            </select>
-          </div>
-        );
-
-      case 'assert_visible':
-      case 'assert_not_visible': {
-        const assertOpts: ElementOption[] = [
-          ...(catalog?.buttons || []).map((btn, i) => ({
-            id: `b:${i}:${btn.id}`,
-            label: `"${btn.text}"`,
-            sublabel: btn.selector,
-            icon: btn.type === 'link' ? '🔗' : '🔘',
-            page: btn.page,
-            data: btn,
-          })),
-          ...(catalog?.texts || []).map((txt, i) => ({
-            id: `t:${i}:${txt.id}`,
-            label: `"${txt.text.slice(0, 60)}"`,
-            sublabel: txt.selector,
-            icon: '📝',
-            page: txt.page,
-            data: txt,
-          })),
-          ...(catalog?.inputs || []).map((inp, i) => ({
-            id: `i:${i}:${inp.id}`,
-            label: inp.label || inp.id,
-            sublabel: inp.selector,
-            icon: '📥',
-            page: inp.page,
-            data: inp,
-          })),
+        return (<div className="flex gap-2 mt-2"><select className="flex-1 rounded border px-3 py-2 text-sm bg-background" value={step.value || ''} onChange={e => onUpdate(step.id, { value: e.target.value })}><option value="">Select key...</option>{['Enter','Tab','Escape','Backspace','Delete','ArrowUp','ArrowDown'].map(k => <option key={k} value={k}>{k}</option>)}</select></div>);
+      case 'assert_visible': case 'assert_not_visible': {
+        const opts: ElementOption[] = [
+          ...(catalog?.buttons || []).map((b, i) => ({ id: `b:${i}:${b.id}`, label: `"${b.text}"`, sublabel: b.selector, icon: '🔘', page: b.page, data: b })),
+          ...(catalog?.texts || []).map((t, i) => ({ id: `t:${i}:${t.id}`, label: `"${t.text.slice(0, 60)}"`, sublabel: t.selector, icon: '📝', page: t.page, data: t })),
+          ...(catalog?.inputs || []).map((inp, i) => ({ id: `i:${i}:${inp.id}`, label: inp.label || inp.id, sublabel: inp.selector, icon: '📥', page: inp.page, data: inp })),
         ];
-        return (
-          <div className="flex gap-2 mt-2">
-            <ElementSearchSelect
-              className="flex-1"
-              value={step.elementId || ''}
-              placeholder="Search element..."
-              options={assertOpts}
-              onChange={(opt) => {
-                const el = opt?.data;
-                onUpdate(step.id, {
-                  elementId: opt?.id || '',
-                  selector: el?.selector || '',
-                  text: el?.text || '',
-                  tag: el?.tag,
-                  role: el?.role,
-                  fallbackSelectors: el?.fallbackSelectors,
-                });
-              }}
-            />
-          </div>
-        );
+        return (<div className="flex gap-2 mt-2"><ElementSearchSelect className="flex-1" value={step.elementId || ''} placeholder="Search element..." options={opts} onChange={opt => { const el = opt?.data; onUpdate(step.id, { elementId: opt?.id, selector: el?.selector, text: el?.text || '', tag: el?.tag, role: el?.role, fallbackSelectors: el?.fallbackSelectors }); }} /></div>);
       }
-
       case 'assert_text': {
-        const assertTextOpts: ElementOption[] = [
+        const opts: ElementOption[] = [
           { id: '', label: '(body — any text on page)', sublabel: 'searches entire page', icon: '🌐', data: null },
-          ...(catalog?.texts || []).map(txt => ({
-            id: txt.selector,
-            label: `"${txt.text.slice(0, 60)}"`,
-            sublabel: txt.selector,
-            icon: '📝',
-            page: txt.page,
-            data: txt,
-          })),
+          ...(catalog?.texts || []).map(t => ({ id: t.selector, label: `"${t.text.slice(0, 60)}"`, sublabel: t.selector, icon: '📝', page: t.page, data: t })),
         ];
-        return (
-          <div className="flex gap-2 mt-2">
-            <ElementSearchSelect
-              className="flex-1"
-              value={step.selector || ''}
-              placeholder="Search text element..."
-              options={assertTextOpts}
-              onChange={(opt) => onUpdate(step.id, { selector: opt?.id || '' })}
-            />
-            <Input placeholder="Text to search for" value={step.text || ''} onChange={(e) => onUpdate(step.id, { text: e.target.value })} className="flex-1 text-sm" />
-          </div>
-        );
+        return (<div className="flex gap-2 mt-2"><ElementSearchSelect className="flex-1" value={step.selector || ''} placeholder="Search text element..." options={opts} onChange={opt => onUpdate(step.id, { selector: opt?.id || '' })} /><Input placeholder="Expected text" value={step.text || ''} onChange={e => onUpdate(step.id, { text: e.target.value })} className="flex-1 text-sm" /></div>);
       }
-
       case 'wait':
-        return (
-          <div className="flex gap-2 mt-2 items-center">
-            <span className="text-sm text-muted-foreground">Wait</span>
-            <Input type="number" value={step.value || '1000'} onChange={(e) => onUpdate(step.id, { value: e.target.value })} className="w-24 text-sm" min="100" max="30000" />
-            <span className="text-sm text-muted-foreground">ms</span>
-          </div>
-        );
-
+        return (<div className="flex gap-2 mt-2 items-center"><span className="text-sm text-muted-foreground">Wait</span><Input type="number" value={step.value || '1000'} onChange={e => onUpdate(step.id, { value: e.target.value })} className="w-24 text-sm" /><span className="text-sm text-muted-foreground">ms</span></div>);
       case 'screenshot':
-        return (
-          <div className="flex gap-2 mt-2">
-            <Input placeholder="Screenshot name" value={step.value || ''} onChange={(e) => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-sm" />
-          </div>
-        );
-
+        return (<div className="flex gap-2 mt-2"><Input placeholder="Screenshot name" value={step.value || ''} onChange={e => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-sm" /></div>);
       case 'set_viewport':
-        return (
-          <div className="flex gap-2 mt-2 items-center">
-            <span className="text-sm text-muted-foreground">W:</span>
-            <Input type="number" value={step.value || '1280'} onChange={(e) => onUpdate(step.id, { value: e.target.value })} className="w-20 text-sm" />
-            <span className="text-sm text-muted-foreground">H:</span>
-            <Input type="number" value={step.value2 || '720'} onChange={(e) => onUpdate(step.id, { value2: e.target.value })} className="w-20 text-sm" />
-          </div>
-        );
-
-      default:
-        return null;
+        return (<div className="flex gap-2 mt-2 items-center"><span className="text-sm text-muted-foreground">W:</span><Input type="number" value={step.value || '1280'} onChange={e => onUpdate(step.id, { value: e.target.value })} className="w-20 text-sm" /><span className="text-sm text-muted-foreground">H:</span><Input type="number" value={step.value2 || '720'} onChange={e => onUpdate(step.id, { value2: e.target.value })} className="w-20 text-sm" /></div>);
+      default: return null;
     }
   };
 
   return (
-    <div className="flex items-start gap-3 p-3 rounded border bg-background transition-all hover:shadow-sm">
-      <div className="flex flex-col items-center gap-0.5 text-muted-foreground cursor-grab active:cursor-grabbing select-none">
+    <div className="flex items-start gap-3 p-3 rounded border bg-background hover:shadow-sm transition-all">
+      <div className="flex flex-col items-center gap-0.5 text-muted-foreground cursor-grab select-none">
         <ArrowUp className="w-3 h-3 hover:text-primary" onClick={() => onMoveUp(index)} />
         <GripVertical className="w-4 h-4" />
         <ArrowDown className="w-3 h-3 hover:text-primary" onClick={() => onMoveDown(index)} />
       </div>
-      <div className={`w-8 h-8 rounded ${stepDef?.color} flex items-center justify-center flex-shrink-0`}>
+      <div className={`w-8 h-8 rounded ${catDef?.color || 'bg-gray-500'} flex items-center justify-center flex-shrink-0`}>
         <Icon className="w-4 h-4 text-white" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">{stepDef?.label}</span>
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onDelete(step.id)}>
-            <Trash2 className="w-3 h-3 text-red-500" />
-          </Button>
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onDelete(step.id)}><Trash2 className="w-3 h-3 text-red-500" /></Button>
         </div>
         {renderControls()}
       </div>
@@ -613,13 +234,120 @@ const StepRow: React.FC<{
   );
 };
 
+// ─── Element Quick-Add Panel ────────────────────────────────────────────────────
+
+const ElementQuickAdd: React.FC<{
+  snapshot: PageSnapshot;
+  onAddStep: (step: Partial<WebTestStep>) => void;
+  onNavigate?: (selector: string) => void;
+  navigating?: boolean;
+}> = ({ snapshot, onAddStep, onNavigate, navigating }) => {
+  const [tab, setTab] = useState<'inputs' | 'buttons' | 'texts'>('inputs');
+  const els = snapshot.elements;
+  const hasInputs = els.inputs.length > 0;
+  const hasButtons = els.buttons.length > 0;
+  const hasTexts = els.texts.length > 0;
+
+  // Auto-select first non-empty tab
+  const activeTab = (tab === 'inputs' && !hasInputs) ? (hasButtons ? 'buttons' : 'texts')
+                  : (tab === 'buttons' && !hasButtons) ? (hasInputs ? 'inputs' : 'texts')
+                  : (tab === 'texts' && !hasTexts) ? (hasInputs ? 'inputs' : 'buttons')
+                  : tab;
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Tabs */}
+      <div className="flex border-b shrink-0">
+        {hasInputs && (
+          <button onClick={() => setTab('inputs')} className={`flex-1 px-2 py-2 text-xs font-medium border-b-2 transition-colors ${activeTab === 'inputs' ? 'border-blue-500 text-blue-600' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+            📥 Inputs ({els.inputs.length})
+          </button>
+        )}
+        {hasButtons && (
+          <button onClick={() => setTab('buttons')} className={`flex-1 px-2 py-2 text-xs font-medium border-b-2 transition-colors ${activeTab === 'buttons' ? 'border-green-500 text-green-600' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+            🔘 Buttons ({els.buttons.length})
+          </button>
+        )}
+        {hasTexts && (
+          <button onClick={() => setTab('texts')} className={`flex-1 px-2 py-2 text-xs font-medium border-b-2 transition-colors ${activeTab === 'texts' ? 'border-purple-500 text-purple-600' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+            📝 Texts ({els.texts.length})
+          </button>
+        )}
+      </div>
+
+      {/* Element list */}
+      <div className="overflow-y-auto flex-1 space-y-1 p-2">
+        {activeTab === 'inputs' && els.inputs.map((inp, i) => (
+          <div key={i} className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/20 rounded px-2 py-1.5 group">
+            <Type className="w-3 h-3 text-blue-500 shrink-0" />
+            <span className="text-xs flex-1 truncate">{inp.label || inp.placeholder || inp.name || inp.id}</span>
+            <span className="text-[10px] text-muted-foreground shrink-0">({inp.type})</span>
+            <button
+              onClick={() => onAddStep({ type: 'enter_text', elementId: inp.id, selector: inp.selector, label: inp.label || inp.placeholder, placeholder: inp.placeholder, tag: inp.tag, fallbackSelectors: inp.fallbackSelectors })}
+              className="opacity-0 group-hover:opacity-100 shrink-0 bg-blue-500 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-blue-600 transition-all"
+            >
+              + Enter Text
+            </button>
+          </div>
+        ))}
+        {activeTab === 'buttons' && els.buttons.map((btn, i) => (
+          <div key={i} className="flex items-center gap-1.5 bg-green-50 dark:bg-green-950/20 rounded px-2 py-1.5 group">
+            <MousePointerClick className="w-3 h-3 text-green-500 shrink-0" />
+            <span className="text-xs flex-1 truncate">"{btn.text}"</span>
+            <span className="text-[10px] text-muted-foreground shrink-0">({btn.type})</span>
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+              {onNavigate && (
+                <button
+                  disabled={navigating}
+                  onClick={() => onNavigate(btn.selector)}
+                  className="bg-orange-400 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-orange-500 disabled:opacity-50"
+                  title="Click this element in the browser and load the resulting page"
+                >
+                  {navigating ? '...' : '→ Go'}
+                </button>
+              )}
+              <button onClick={() => onAddStep({ type: 'tap', elementId: `b:${i}:${btn.id}`, selector: btn.selector, text: btn.text, tag: btn.tag, role: btn.role || 'button', fallbackSelectors: btn.fallbackSelectors })} className="bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-green-600">+ Click</button>
+              <button onClick={() => onAddStep({ type: 'assert_visible', elementId: `b:${i}:${btn.id}`, selector: btn.selector, text: btn.text, tag: btn.tag, role: btn.role, fallbackSelectors: btn.fallbackSelectors })} className="bg-purple-500 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-purple-600">+ Assert</button>
+            </div>
+          </div>
+        ))}
+        {activeTab === 'texts' && els.texts.slice(0, 60).map((txt, i) => (
+          <div key={i} className="flex items-center gap-1.5 bg-purple-50 dark:bg-purple-950/20 rounded px-2 py-1.5 group">
+            <FileText className="w-3 h-3 text-purple-500 shrink-0" />
+            <span className="text-xs flex-1 truncate">"{txt.text.slice(0, 70)}"</span>
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+              <button onClick={() => onAddStep({ type: 'assert_text', selector: txt.selector, text: txt.text.slice(0, 80) })} className="bg-purple-500 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-purple-600">+ Assert Text</button>
+              <button onClick={() => onAddStep({ type: 'assert_visible', elementId: `t:${i}:${txt.id}`, selector: txt.selector, tag: txt.tag, fallbackSelectors: txt.fallbackSelectors })} className="bg-blue-500 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-blue-600">+ Visible</button>
+            </div>
+          </div>
+        ))}
+        {activeTab === 'inputs' && !hasInputs && <p className="text-xs text-muted-foreground py-3 text-center">No inputs on this page</p>}
+        {activeTab === 'buttons' && !hasButtons && <p className="text-xs text-muted-foreground py-3 text-center">No buttons on this page</p>}
+        {activeTab === 'texts' && !hasTexts && <p className="text-xs text-muted-foreground py-3 text-center">No texts on this page</p>}
+      </div>
+    </div>
+  );
+};
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 const WebVisualBuilder: React.FC = () => {
+  // ── Session state ──
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionStatus, setSessionStatus] = useState<'idle' | 'starting' | 'loading' | 'ready'>('idle');
+  const [sessionError, setSessionError] = useState('');
+  const [navigating, setNavigating] = useState(false);
+  const [pageUrl, setPageUrl] = useState('');
+  const [snapshot, setSnapshot] = useState<PageSnapshot | null>(null);
+  const [requiresLogin, setRequiresLogin] = useState(false);
+  const [authConfig, setAuthConfig] = useState({ loginUrl: '', usernameSelector: '', usernameValue: '', passwordSelector: '', passwordValue: '', submitSelector: '', waitAfterLogin: 2000 });
+
+  // ── Catalog (accumulates pages as user loads them) ──
   const [catalog, setCatalog] = useState<WebElementCatalog | null>(null);
-  const [scanning, setScanning] = useState(false);
-  const [scanError, setScanError] = useState('');
-  const [targetUrl, setTargetUrl] = useState('');
+  const [loadedPageUrls, setLoadedPageUrls] = useState<string[]>([]);
+  const [expandedPages, setExpandedPages] = useState<Set<number>>(new Set());
+
+  // ── Test builder state ──
   const [steps, setSteps] = useState<WebTestStep[]>([]);
   const [generatedCode, setGeneratedCode] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -630,508 +358,493 @@ const WebVisualBuilder: React.FC = () => {
   const [savedTestCase, setSavedTestCase] = useState<{id: string; title: string} | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveForm, setSaveForm] = useState({ title: '', description: '', priority: 'medium', suiteId: '' });
-  const [suites, setSuites] = useState<{ id: string; name: string; projectName: string }[]>([]);
+  const [suites, setSuites] = useState<{ id: string; name: string }[]>([]);
   const [devices, setDevices] = useState<{ desktop: any[]; mobile: any[] }>({ desktop: [], mobile: [] });
-  const [selectedDevice, setSelectedDevice] = useState<string>('');
+  const [selectedDevice, setSelectedDevice] = useState('');
   const [showDevicePicker, setShowDevicePicker] = useState(false);
 
-  // Load devices on mount
   useEffect(() => {
-    const load = async () => {
-      try {
-        const resp = await api.get('/web-tests/web-test-steps');
-        const data = resp.data?.data || resp.data;
-        if (data?.devices) setDevices(data.devices);
-      } catch {}
-    };
-    load();
+    api.get('/web-tests/web-test-steps').then(r => {
+      const d = r.data?.data || r.data;
+      if (d?.devices) setDevices(d.devices);
+    }).catch(() => {});
   }, []);
 
-  const handleScan = async () => {
-    if (!targetUrl.trim()) {
-      setScanError('Please enter a URL to scan');
-      return;
-    }
-    setScanning(true);
-    setScanError('');
+  // ── Session ──────────────────────────────────────────────────────────────────
+
+  const handleStartSession = async () => {
+    setSessionStatus('starting');
+    setSessionError('');
     try {
-      const resp = await api.post('/web-tests/scan', {
-        url: targetUrl.trim(),
-        maxPages: 10,
-        maxDepth: 2,
-      }, { timeout: 300000 }); // 5 min — crawling can be slow
-      setCatalog(resp.data?.data || resp.data);
+      const body: any = {};
+      if (requiresLogin) {
+        body.auth = {
+          loginUrl: authConfig.loginUrl || undefined,
+          usernameSelector: authConfig.usernameSelector,
+          usernameValue: authConfig.usernameValue,
+          passwordSelector: authConfig.passwordSelector,
+          passwordValue: authConfig.passwordValue,
+          submitSelector: authConfig.submitSelector || undefined,
+          waitAfterLogin: authConfig.waitAfterLogin,
+        };
+      }
+      const resp = await api.post('/web-tests/session', body, { timeout: 60000 });
+      const id = resp.data?.data?.sessionId || resp.data?.sessionId;
+      setSessionId(id);
+      setSessionStatus('ready');
     } catch (err: any) {
-      setScanError(err.response?.data?.error?.message || err.message || 'Scan failed');
-    } finally {
-      setScanning(false);
+      setSessionError(err.response?.data?.error?.message || err.message || 'Failed to start session');
+      setSessionStatus('idle');
     }
   };
 
-  const addStep = useCallback((type: string) => {
-    const newStep: WebTestStep = { id: `step_${Date.now()}`, type: type as WebTestStep['type'] };
-    if (type === 'wait') newStep.value = '1000';
-    if (type === 'navigate' && catalog?.baseUrl) newStep.value = catalog.baseUrl;
+  const handleEndSession = async () => {
+    if (sessionId) {
+      await api.delete(`/web-tests/session/${sessionId}`).catch(() => {});
+    }
+    setSessionId(null);
+    setSessionStatus('idle');
+    setSnapshot(null);
+    setSessionError('');
+  };
+
+  const handleLoadPage = async () => {
+    if (!sessionId || !pageUrl.trim()) return;
+    setSessionStatus('loading');
+    setSessionError('');
+    try {
+      const resp = await api.post(`/web-tests/session/${sessionId}/load`, { url: pageUrl.trim() }, { timeout: 45000 });
+      const data: PageSnapshot = resp.data?.data || resp.data;
+      setSnapshot(data);
+      setSessionStatus('ready');
+
+      // Merge this page into the catalog
+      setCatalog(prev => {
+        const newPage = data.elements;
+        if (!prev) {
+          return {
+            baseUrl: data.url,
+            scannedAt: new Date().toISOString(),
+            pages: [newPage],
+            inputs: newPage.inputs,
+            buttons: newPage.buttons,
+            texts: newPage.texts,
+            links: newPage.links,
+            routes: [data.url],
+          };
+        }
+        // Replace page if URL already loaded, otherwise append
+        const existingIdx = prev.pages.findIndex(p => p.url.split('?')[0] === data.url.split('?')[0]);
+        const pages = existingIdx >= 0
+          ? prev.pages.map((p, i) => i === existingIdx ? newPage : p)
+          : [...prev.pages, newPage];
+        return {
+          ...prev,
+          pages,
+          inputs: pages.flatMap(p => p.inputs),
+          buttons: pages.flatMap(p => p.buttons),
+          texts: pages.flatMap(p => p.texts),
+          links: pages.flatMap(p => p.links),
+          routes: pages.map(p => p.url),
+        };
+      });
+      setLoadedPageUrls(prev => prev.includes(data.url) ? prev : [...prev, data.url]);
+    } catch (err: any) {
+      setSessionError(err.response?.data?.error?.message || err.message || 'Failed to load page');
+      setSessionStatus('ready');
+    }
+  };
+
+  const handleClickNavigate = async (selector: string) => {
+    if (!sessionId || navigating || sessionStatus === 'loading') return;
+    setNavigating(true);
+    setSessionError('');
+    try {
+      const resp = await api.post(`/web-tests/session/${sessionId}/click`, { selector }, { timeout: 30000 });
+      const data: PageSnapshot = resp.data?.data || resp.data;
+      setSnapshot(data);
+      setPageUrl(data.url);
+
+      // Merge into catalog
+      setCatalog(prev => {
+        const newPage = data.elements;
+        if (!prev) {
+          return {
+            baseUrl: data.url,
+            scannedAt: new Date().toISOString(),
+            pages: [newPage],
+            inputs: newPage.inputs,
+            buttons: newPage.buttons,
+            texts: newPage.texts,
+            links: newPage.links,
+            routes: [data.url],
+          };
+        }
+        const existingIdx = prev.pages.findIndex(p => p.url.split('?')[0] === data.url.split('?')[0]);
+        const pages = existingIdx >= 0
+          ? prev.pages.map((p, i) => i === existingIdx ? newPage : p)
+          : [...prev.pages, newPage];
+        return {
+          ...prev,
+          pages,
+          inputs: pages.flatMap(p => p.inputs),
+          buttons: pages.flatMap(p => p.buttons),
+          texts: pages.flatMap(p => p.texts),
+          links: pages.flatMap(p => p.links),
+          routes: pages.map(p => p.url),
+        };
+      });
+      setLoadedPageUrls(prev => prev.includes(data.url) ? prev : [...prev, data.url]);
+    } catch (err: any) {
+      setSessionError(err.response?.data?.error?.message || err.message || 'Navigation failed');
+    } finally {
+      setNavigating(false);
+    }
+  };
+
+  // ── Test builder ────────────────────────────────────────────────────────────
+
+  const addStep = useCallback((overrides: Partial<WebTestStep> = {}) => {
+    const type = overrides.type || 'tap';
+    const newStep: WebTestStep = {
+      id: `step_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      type,
+      ...(type === 'wait' ? { value: '1000' } : {}),
+      ...(type === 'navigate' && catalog?.baseUrl ? { value: catalog.baseUrl } : {}),
+      ...overrides,
+    };
     setSteps(prev => [...prev, newStep]);
   }, [catalog]);
 
-  const moveStep = (index: number, direction: 'up' | 'down') => {
+  const moveStep = (index: number, dir: 'up' | 'down') => {
     setSteps(prev => {
       const updated = [...prev];
-      const newIndex = direction === 'up' ? index - 1 : index + 1;
-      if (newIndex < 0 || newIndex >= updated.length) return prev;
-      [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
+      const ni = dir === 'up' ? index - 1 : index + 1;
+      if (ni < 0 || ni >= updated.length) return prev;
+      [updated[index], updated[ni]] = [updated[ni], updated[index]];
       return updated;
     });
   };
 
-  const updateStep = (id: string, updates: Partial<WebTestStep>) => {
+  const updateStep = (id: string, updates: Partial<WebTestStep>) =>
     setSteps(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
-  };
-
   const deleteStep = (id: string) => setSteps(prev => prev.filter(s => s.id !== id));
 
-  const applyTemplate = (buildFn: (cat: WebElementCatalog, url: string) => WebTestStep[]) => {
-    if (!catalog) { setScanError('Scan a website first'); return; }
-    setSteps(buildFn(catalog, catalog.baseUrl));
-  };
-
   const handleGenerate = async () => {
-    if (steps.length === 0) { setError('Add at least one step'); return; }
-    setGenerating(true);
-    setError('');
+    if (!steps.length) { setError('Add at least one step'); return; }
+    setGenerating(true); setError('');
     try {
-      const resp = await api.post('/web-tests/generate', {
-        steps,
-        baseUrl: catalog?.baseUrl || undefined,
-        device: selectedDevice || undefined,
-      });
+      const resp = await api.post('/web-tests/generate', { steps, baseUrl: catalog?.baseUrl, device: selectedDevice || undefined });
       setGeneratedCode(resp.data?.data?.playwrightCode || '');
-    } catch (err: any) {
-      setError(err.response?.data?.error?.message || err.message || 'Generation failed');
-    } finally {
-      setGenerating(false);
-    }
+    } catch (err: any) { setError(err.response?.data?.error?.message || err.message || 'Generation failed'); }
+    finally { setGenerating(false); }
   };
 
   const handleRun = async () => {
     if (!generatedCode) { setError('Generate code first'); return; }
-    setRunning(true);
-    setError('');
-    setTestResult(null);
-    setSavedTestCase(null);
+    setRunning(true); setError(''); setTestResult(null); setSavedTestCase(null);
     try {
-      const resp = await api.post('/web-tests/run', {
-        steps,
-        baseUrl: catalog?.baseUrl || undefined,
-        device: selectedDevice || undefined,
-      }, { timeout: 120000 });
-      setTestResult({
-        success: resp.data?.data?.success ?? resp.data?.success ?? false,
-        output: resp.data?.data?.output || resp.data?.output || '',
-        duration: resp.data?.data?.duration ?? resp.data?.duration ?? 0,
-      });
-    } catch (err: any) {
-      setError(err.response?.data?.error?.message || err.message || 'Run failed');
-    } finally {
-      setRunning(false);
-    }
+      const body: any = { steps, baseUrl: catalog?.baseUrl, device: selectedDevice || undefined };
+
+      // Prefer reusing the active session's cookies over re-logging in
+      if (sessionId) {
+        body.sessionId = sessionId;
+      } else if (requiresLogin && authConfig.usernameSelector && authConfig.usernameValue && authConfig.passwordSelector && authConfig.passwordValue) {
+        // Session already ended — fall back to re-login (only if no double-login risk accepted by user)
+        body.auth = {
+          loginUrl: authConfig.loginUrl || undefined,
+          usernameSelector: authConfig.usernameSelector,
+          usernameValue: authConfig.usernameValue,
+          passwordSelector: authConfig.passwordSelector,
+          passwordValue: authConfig.passwordValue,
+          submitSelector: authConfig.submitSelector || undefined,
+          waitAfterLogin: authConfig.waitAfterLogin,
+        };
+      }
+      const resp = await api.post('/web-tests/run', body, { timeout: 120000 });
+      const d = resp.data?.data || resp.data;
+      setTestResult({ success: d?.success ?? false, output: d?.output || '', duration: d?.duration ?? 0 });
+    } catch (err: any) { setError(err.response?.data?.error?.message || err.message || 'Run failed'); }
+    finally { setRunning(false); }
   };
 
   const handleSaveAsTestCase = async () => {
     if (!generatedCode) { setError('Generate code first'); return; }
-    // Pre-fill title with a sensible default, then open dialog
-    const defaultTitle = `Web Test - ${catalog?.baseUrl || targetUrl || 'untitled'}`;
-    setSaveForm(f => ({ ...f, title: f.title || defaultTitle }));
-    // Fetch suites for the dropdown
+    setSaveForm(f => ({ ...f, title: f.title || `Web Test - ${catalog?.baseUrl || 'untitled'}` }));
     try {
       const resp = await api.get('/test-suites?perPage=100');
-      const list = resp.data?.data || [];
-      setSuites(list.map((s: any) => ({ id: s.id, name: s.name, projectName: '' })));
+      setSuites((resp.data?.data || []).map((s: any) => ({ id: s.id, name: s.name })));
     } catch { setSuites([]); }
     setShowSaveDialog(true);
   };
 
   const handleSaveDialogSubmit = async () => {
     if (!saveForm.title.trim()) return;
-    setSavingTestCase(true);
-    setError('');
+    setSavingTestCase(true); setError('');
     try {
       const resp = await api.post('/web-tests/save-testcase', {
-        title: saveForm.title.trim(),
-        description: saveForm.description.trim() || undefined,
-        priority: saveForm.priority,
-        suiteId: saveForm.suiteId || undefined,
-        steps,
-        generatedCode,
-        baseUrl: catalog?.baseUrl || targetUrl,
-        testResult: testResult ? {
-          success: testResult.success,
-          output: testResult.output,
-          duration: testResult.duration,
-        } : undefined,
+        title: saveForm.title.trim(), description: saveForm.description.trim() || undefined,
+        priority: saveForm.priority, suiteId: saveForm.suiteId || undefined,
+        steps, generatedCode, baseUrl: catalog?.baseUrl,
+        testResult: testResult ? { success: testResult.success, output: testResult.output, duration: testResult.duration } : undefined,
       });
       const saved = resp.data?.data;
       setSavedTestCase({ id: saved?.id, title: saved?.title });
       setShowSaveDialog(false);
-    } catch (err: any) {
-      setError(err.response?.data?.error?.message || err.message || 'Save failed');
-    } finally {
-      setSavingTestCase(false);
-    }
+    } catch (err: any) { setError(err.response?.data?.error?.message || err.message || 'Save failed'); }
+    finally { setSavingTestCase(false); }
   };
 
-  const formatDuration = (ms: number) => {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
-  };
+  const formatDuration = (ms: number) => ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 
-  // ─── Catalog state ────────────────────────────────────────────────────────
-  const pages = catalog?.pages || [];
-
-  // ─── Element Filters ───────────────────────────────────────────────────────
-  const [elementFilter, setElementFilter] = useState<'all' | 'inputs' | 'buttons' | 'texts'>('all');
-  const [elementSearch, setElementSearch] = useState('');
-  const [expandedPages, setExpandedPages] = useState<Set<number>>(new Set());
-  const [pageTabMap, setPageTabMap] = useState<Record<number, 'inputs' | 'buttons' | 'texts'>>({});
-
-  const getPageTab = (idx: number, page: WebPageElement): 'inputs' | 'buttons' | 'texts' => {
-    if (pageTabMap[idx]) return pageTabMap[idx];
-    if ((page.inputs?.length || 0) > 0) return 'inputs';
-    if ((page.buttons?.length || 0) > 0) return 'buttons';
-    return 'texts';
-  };
-
-  const setPageTab = (idx: number, tab: 'inputs' | 'buttons' | 'texts') => {
-    setPageTabMap(prev => ({ ...prev, [idx]: tab }));
-  };
-
-  const togglePageExpanded = (pageIndex: number) => {
-    setExpandedPages(prev => {
-      const next = new Set(prev);
-      if (next.has(pageIndex)) {
-        next.delete(pageIndex);
-      } else {
-        next.add(pageIndex);
-      }
-      return next;
-    });
-  };
-
-  const filteredPages = pages.filter((page, idx) => {
-    // Text search filter
-    if (elementSearch) {
-      const searchLower = elementSearch.toLowerCase();
-      const matchesSearch =
-        page.name?.toLowerCase().includes(searchLower) ||
-        page.url?.toLowerCase().includes(searchLower) ||
-        (page.inputs || []).some(i => i.label?.toLowerCase().includes(searchLower) || i.selector?.toLowerCase().includes(searchLower)) ||
-        (page.buttons || []).some(b => b.text?.toLowerCase().includes(searchLower) || b.selector?.toLowerCase().includes(searchLower)) ||
-        (page.texts || []).some(t => t.text?.toLowerCase().includes(searchLower) || t.selector?.toLowerCase().includes(searchLower));
-      if (!matchesSearch) return false;
-    }
-
-    // Element type filter
-    if (elementFilter === 'all') return true;
-    if (elementFilter === 'inputs') return (page.inputs?.length || 0) > 0;
-    if (elementFilter === 'buttons') return (page.buttons?.length || 0) > 0;
-    if (elementFilter === 'texts') return (page.texts?.length || 0) > 0;
-    return true;
+  const togglePageExpanded = (i: number) => setExpandedPages(prev => {
+    const next = new Set(prev);
+    next.has(i) ? next.delete(i) : next.add(i);
+    return next;
   });
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  const isSessionActive = sessionId && sessionStatus !== 'idle';
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Web Visual Builder</h1>
-          <p className="text-muted-foreground">Scan a website, pick elements, compose Playwright test scenarios</p>
+          <p className="text-muted-foreground text-sm">Navigate pages, pick elements, compose Playwright tests</p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Device Picker */}
-          <div className="relative">
-            <button
-              onClick={() => setShowDevicePicker(!showDevicePicker)}
-              className="flex items-center gap-2 px-3 py-2 rounded border bg-background hover:bg-muted transition-colors text-sm"
-            >
-              <span className="text-lg">{selectedDevice ? (devices.mobile.find(d => d.id === selectedDevice)?.icon || devices.desktop.find(d => d.id === selectedDevice)?.icon || '🖥️') : '🖥️'}</span>
-              <span className="text-sm">{selectedDevice ? (devices.mobile.find(d => d.id === selectedDevice)?.label || devices.desktop.find(d => d.id === selectedDevice)?.label || 'Desktop') : 'Desktop'}</span>
-              <span className="text-xs text-muted-foreground">▼</span>
-            </button>
-            {showDevicePicker && (
-              <div className="absolute right-0 top-full mt-1 bg-card border rounded-lg shadow-lg w-64 z-50">
-                <div className="p-3">
-                  <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Desktop</div>
-                  <div className="space-y-1">
-                    {devices.desktop.map(d => (
-                      <button
-                        key={d.id || 'default'}
-                        onClick={() => { setSelectedDevice(d.id); setShowDevicePicker(false); }}
-                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors ${
-                          selectedDevice === d.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                        }`}
-                      >
-                        <span>{d.icon}</span>
-                        <span className="truncate">{d.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="border-t p-3">
-                  <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Mobile</div>
-                  <div className="space-y-1">
-                    {devices.mobile.map(d => (
-                      <button
-                        key={d.id}
-                        onClick={() => { setSelectedDevice(d.id); setShowDevicePicker(false); }}
-                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors ${
-                          selectedDevice === d.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                        }`}
-                      >
-                        <span>{d.icon}</span>
-                        <span className="truncate">{d.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* URL Input */}
-          <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">Target URL:</Label>
-            <div className="flex gap-2">
-              <Input
-                type="url"
-                value={targetUrl}
-                onChange={(e) => setTargetUrl(e.target.value)}
-                placeholder="https://example.com"
-                className="min-w-[300px]"
-              />
-              <Button onClick={handleScan} disabled={scanning} size="sm">
-                {scanning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Globe className="w-3 h-3 mr-1" />}
-                {scanning ? 'Scanning...' : 'Scan'}
-              </Button>
+        {/* Device picker */}
+        <div className="relative">
+          <button onClick={() => setShowDevicePicker(!showDevicePicker)} className="flex items-center gap-2 px-3 py-2 rounded border bg-background hover:bg-muted text-sm">
+            <span className="text-base">{selectedDevice ? (devices.mobile.find(d => d.id === selectedDevice)?.icon || '📱') : '🖥️'}</span>
+            <span>{selectedDevice ? (devices.mobile.find(d => d.id === selectedDevice)?.label || devices.desktop.find(d => d.id === selectedDevice)?.label || 'Desktop') : 'Desktop'}</span>
+            <span className="text-xs text-muted-foreground">▼</span>
+          </button>
+          {showDevicePicker && (
+            <div className="absolute right-0 top-full mt-1 bg-card border rounded-lg shadow-lg w-64 z-50">
+              <div className="p-3">
+                <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Desktop</div>
+                <div className="space-y-1">{devices.desktop.map(d => (<button key={d.id || 'default'} onClick={() => { setSelectedDevice(d.id); setShowDevicePicker(false); }} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm ${selectedDevice === d.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}><span>{d.icon}</span><span className="truncate">{d.label}</span></button>))}</div>
+              </div>
+              <div className="border-t p-3">
+                <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Mobile</div>
+                <div className="space-y-1">{devices.mobile.map(d => (<button key={d.id} onClick={() => { setSelectedDevice(d.id); setShowDevicePicker(false); }} className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm ${selectedDevice === d.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}><span>{d.icon}</span><span className="truncate">{d.label}</span></button>))}</div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {scanError && (
-        <div className="flex items-center gap-2 text-sm text-red-500 bg-red-50 p-3 rounded">
-          <AlertTriangle className="w-4 h-4" /> {scanError}
-        </div>
-      )}
+      {/* ── Session Panel ── */}
+      <Card>
+        <CardContent className="pt-4 pb-3 space-y-3">
 
-      {/* Element Catalog */}
-      {catalog && pages.length > 0 && (
+          {/* Status bar */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${isSessionActive ? (sessionStatus === 'loading' ? 'bg-yellow-400 animate-pulse' : 'bg-green-500') : 'bg-gray-300'}`} />
+              <span className="text-sm font-medium">
+                {sessionStatus === 'idle' ? 'No session' :
+                 sessionStatus === 'starting' ? 'Starting session...' :
+                 sessionStatus === 'loading' ? 'Loading page...' : 'Session active'}
+              </span>
+            </div>
+            {isSessionActive && (
+              <button onClick={handleEndSession} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-600 border border-red-200 rounded px-2 py-1 hover:bg-red-50">
+                <LogOut className="w-3 h-3" /> End Session
+              </button>
+            )}
+            {loadedPageUrls.length > 0 && (
+              <span className="text-xs text-muted-foreground ml-auto">{loadedPageUrls.length} page{loadedPageUrls.length !== 1 ? 's' : ''} loaded</span>
+            )}
+          </div>
+
+          {/* Start session form (when idle) */}
+          {!isSessionActive && (
+            <div className="space-y-3">
+              <button type="button" onClick={() => setRequiresLogin(v => !v)} className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground w-fit">
+                <span className={`w-8 h-4 rounded-full flex items-center px-0.5 transition-colors ${requiresLogin ? 'bg-primary' : 'bg-muted-foreground/30'}`}>
+                  <span className={`w-3 h-3 rounded-full bg-white shadow transition-transform ${requiresLogin ? 'translate-x-4' : 'translate-x-0'}`} />
+                </span>
+                <LogIn className="w-3 h-3" /> Requires Login
+              </button>
+
+              {requiresLogin && (
+                <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
+                  <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Login Credentials</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-1"><Label className="text-xs">Login URL <span className="text-muted-foreground">(optional)</span></Label><Input type="url" placeholder="https://example.com/login" value={authConfig.loginUrl} onChange={e => setAuthConfig(p => ({ ...p, loginUrl: e.target.value }))} className="h-8 text-xs" /></div>
+                    <div className="flex flex-col gap-1"><Label className="text-xs">Wait after login (ms)</Label><Input type="number" value={authConfig.waitAfterLogin} onChange={e => setAuthConfig(p => ({ ...p, waitAfterLogin: parseInt(e.target.value) || 2000 }))} className="h-8 text-xs" /></div>
+                    <div className="flex flex-col gap-1"><Label className="text-xs">Username selector <span className="text-red-500">*</span></Label><Input placeholder='personalNumber' value={authConfig.usernameSelector} onChange={e => setAuthConfig(p => ({ ...p, usernameSelector: e.target.value }))} className="h-8 text-xs font-mono" /></div>
+                    <div className="flex flex-col gap-1"><Label className="text-xs">Username / Email <span className="text-red-500">*</span></Label><Input placeholder="user@example.com" value={authConfig.usernameValue} onChange={e => setAuthConfig(p => ({ ...p, usernameValue: e.target.value }))} className="h-8 text-xs" /></div>
+                    <div className="flex flex-col gap-1"><Label className="text-xs">Password selector <span className="text-red-500">*</span></Label><Input placeholder='input[type="password"]' value={authConfig.passwordSelector} onChange={e => setAuthConfig(p => ({ ...p, passwordSelector: e.target.value }))} className="h-8 text-xs font-mono" /></div>
+                    <div className="flex flex-col gap-1"><Label className="text-xs">Password <span className="text-red-500">*</span></Label><Input type="password" placeholder="••••••••" value={authConfig.passwordValue} onChange={e => setAuthConfig(p => ({ ...p, passwordValue: e.target.value }))} className="h-8 text-xs" /></div>
+                    <div className="col-span-2 flex flex-col gap-1"><Label className="text-xs">Submit selector <span className="text-muted-foreground">(optional)</span></Label><Input placeholder='button[type="submit"] or MASUK' value={authConfig.submitSelector} onChange={e => setAuthConfig(p => ({ ...p, submitSelector: e.target.value }))} className="h-8 text-xs font-mono" /></div>
+                  </div>
+                </div>
+              )}
+
+              <Button onClick={handleStartSession} disabled={sessionStatus === 'starting'} size="sm">
+                {sessionStatus === 'starting' ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <MonitorPlay className="w-3 h-3 mr-1" />}
+                {sessionStatus === 'starting' ? (requiresLogin ? 'Logging in...' : 'Starting...') : 'Start Session'}
+              </Button>
+            </div>
+          )}
+
+          {/* URL loader (when session active) */}
+          {isSessionActive && (
+            <div className="flex gap-2">
+              <Input
+                type="url"
+                value={pageUrl}
+                onChange={e => setPageUrl(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleLoadPage()}
+                placeholder="https://example.com/dashboard"
+                className="flex-1"
+              />
+              <Button onClick={handleLoadPage} disabled={sessionStatus === 'loading' || !pageUrl.trim()} size="sm">
+                {sessionStatus === 'loading' ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                {sessionStatus === 'loading' ? 'Loading...' : 'Load Page'}
+              </Button>
+            </div>
+          )}
+
+          {sessionError && (
+            <div className="flex items-center gap-2 text-sm text-red-500 bg-red-50 p-2.5 rounded">
+              <AlertTriangle className="w-4 h-4 shrink-0" /> {sessionError}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Page Preview + Elements ── */}
+      {snapshot && (
         <Card>
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Element Catalog</CardTitle>
-              <div className="flex gap-2">
-                <Badge variant="outline">{pages.length} Pages</Badge>
-                <Badge variant="outline">{catalog.inputs?.length || 0} Inputs</Badge>
-                <Badge variant="outline">{catalog.buttons?.length || 0} Buttons</Badge>
-                <Badge variant="outline">{catalog.texts?.length || 0} Texts</Badge>
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <CardTitle className="text-sm font-semibold truncate">{snapshot.title || 'Page'}</CardTitle>
+                <p className="text-[11px] text-muted-foreground truncate mt-0.5">{snapshot.url}</p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Badge variant="outline" className="text-[10px]">{snapshot.elements.inputs.length} inputs</Badge>
+                <Badge variant="outline" className="text-[10px]">{snapshot.elements.buttons.length} buttons</Badge>
+                <Badge variant="outline" className="text-[10px]">{snapshot.elements.texts.length} texts</Badge>
               </div>
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            {/* Search + Filter bar */}
-            <div className="flex flex-wrap gap-2 mb-3">
-              <Input
-                placeholder="Search pages or elements..."
-                value={elementSearch}
-                onChange={e => setElementSearch(e.target.value)}
-                className="h-8 text-sm flex-1 min-w-[180px]"
-              />
-              <div className="flex rounded-md border overflow-hidden text-xs">
-                {(['all', 'inputs', 'buttons', 'texts'] as const).map(f => (
-                  <button
-                    key={f}
-                    onClick={() => setElementFilter(f)}
-                    className={`px-3 py-1.5 font-medium capitalize transition-colors ${
-                      elementFilter === f
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-background hover:bg-muted'
-                    }`}
-                  >
-                    {f === 'all' ? 'All' : f === 'inputs' ? '⌨ Inputs' : f === 'buttons' ? '🖱 Buttons' : '📝 Texts'}
-                  </button>
-                ))}
+            <div className="grid grid-cols-5 gap-3" style={{ minHeight: 280 }}>
+              {/* Screenshot — scrollable so full-page screenshots aren't clipped */}
+              <div className="col-span-3 rounded border bg-gray-50" style={{ maxHeight: 560, overflowY: 'auto' }}>
+                <img
+                  src={`data:image/png;base64,${snapshot.screenshot}`}
+                  alt="Page preview"
+                  className="w-full h-auto"
+                />
               </div>
-              {filteredPages.length !== pages.length && (
-                <Badge variant="secondary" className="text-xs self-center">
-                  {filteredPages.length} / {pages.length} pages
-                </Badge>
-              )}
+              {/* Element quick-add */}
+              <div className="col-span-2 border rounded overflow-hidden flex flex-col" style={{ maxHeight: 560 }}>
+                <div className="px-2 pt-2 pb-1 border-b bg-muted/30 shrink-0">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                    Elements — hover to add step or navigate
+                  </p>
+                </div>
+                <ElementQuickAdd
+                  snapshot={snapshot}
+                  onAddStep={partial => addStep(partial)}
+                  onNavigate={isSessionActive ? handleClickNavigate : undefined}
+                  navigating={navigating}
+                />
+              </div>
             </div>
 
-            {/* Collapsed page list */}
-            <div className="space-y-1 max-h-[420px] overflow-y-auto pr-1">
-              {filteredPages.map((page, idx) => {
-                const realIdx = pages.indexOf(page);
-                const isOpen = expandedPages.has(realIdx);
-                const tab = getPageTab(realIdx, page);
-                const hasInputs = (page.inputs?.length || 0) > 0;
-                const hasButtons = (page.buttons?.length || 0) > 0;
-                const hasTexts = (page.texts?.length || 0) > 0;
-
-                return (
-                  <div key={realIdx} className="rounded border bg-background">
-                    {/* Page header row — click to expand */}
-                    <button
-                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors text-left"
-                      onClick={() => togglePageExpanded(realIdx)}
-                    >
-                      {isOpen
-                        ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                        : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                      }
-                      <Globe className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                      <span className="text-sm font-medium truncate flex-1">{page.name || page.url}</span>
-                      <div className="flex gap-1.5 flex-shrink-0">
-                        {hasInputs && <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-blue-600 border-blue-200">{page.inputs.length} in</Badge>}
-                        {hasButtons && <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-green-600 border-green-200">{page.buttons.length} btn</Badge>}
-                        {hasTexts && <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-purple-600 border-purple-200">{page.texts.length} txt</Badge>}
-                        {!hasInputs && !hasButtons && !hasTexts && (
-                          <span className="text-[10px] text-muted-foreground">empty</span>
-                        )}
-                      </div>
-                    </button>
-
-                    {/* Expanded content with tabs */}
-                    {isOpen && (
-                      <div className="border-t px-3 pb-3">
-                        <div className="text-[10px] text-muted-foreground truncate py-1.5">{page.url}</div>
-
-                        {/* Tabs */}
-                        {(hasInputs || hasButtons || hasTexts) && (
-                          <>
-                            <div className="flex gap-0 mb-2 border-b">
-                              {hasInputs && (
-                                <button
-                                  onClick={() => setPageTab(realIdx, 'inputs')}
-                                  className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
-                                    tab === 'inputs' ? 'border-blue-500 text-blue-600' : 'border-transparent text-muted-foreground hover:text-foreground'
-                                  }`}
-                                >
-                                  <Type className="w-3 h-3 inline mr-1" />Inputs ({page.inputs.length})
-                                </button>
-                              )}
-                              {hasButtons && (
-                                <button
-                                  onClick={() => setPageTab(realIdx, 'buttons')}
-                                  className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
-                                    tab === 'buttons' ? 'border-green-500 text-green-600' : 'border-transparent text-muted-foreground hover:text-foreground'
-                                  }`}
-                                >
-                                  <MousePointerClick className="w-3 h-3 inline mr-1" />Buttons ({page.buttons.length})
-                                </button>
-                              )}
-                              {hasTexts && (
-                                <button
-                                  onClick={() => setPageTab(realIdx, 'texts')}
-                                  className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
-                                    tab === 'texts' ? 'border-purple-500 text-purple-600' : 'border-transparent text-muted-foreground hover:text-foreground'
-                                  }`}
-                                >
-                                  <FileText className="w-3 h-3 inline mr-1" />Texts ({page.texts.length})
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Tab content */}
-                            <div className="max-h-[200px] overflow-y-auto space-y-1">
-                              {tab === 'inputs' && hasInputs && page.inputs.map(inp => (
-                                <div key={inp.id} className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/20 rounded px-2 py-1">
-                                  <Type className="w-3 h-3 text-blue-500 flex-shrink-0" />
-                                  <span className="truncate text-xs flex-1">{inp.label || inp.placeholder || inp.id}</span>
-                                  <span className="text-[10px] text-muted-foreground flex-shrink-0">({inp.type})</span>
-                                </div>
-                              ))}
-                              {tab === 'buttons' && hasButtons && page.buttons.map(btn => (
-                                <div key={btn.id} className="flex items-center gap-1.5 bg-green-50 dark:bg-green-950/20 rounded px-2 py-1">
-                                  <MousePointerClick className="w-3 h-3 text-green-500 flex-shrink-0" />
-                                  <span className="truncate text-xs flex-1">"{btn.text}"</span>
-                                  <span className="text-[10px] text-muted-foreground flex-shrink-0">({btn.type})</span>
-                                </div>
-                              ))}
-                              {tab === 'texts' && hasTexts && page.texts.map(txt => (
-                                <div key={txt.id} className="flex items-center gap-1.5 bg-purple-50 dark:bg-purple-950/20 rounded px-2 py-1">
-                                  <FileText className="w-3 h-3 text-purple-500 flex-shrink-0" />
-                                  <span className="truncate text-xs flex-1">"{txt.text.slice(0, 80)}"</span>
-                                  {txt.isStatic && <span className="text-[10px] text-muted-foreground flex-shrink-0">static</span>}
-                                </div>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                        {!hasInputs && !hasButtons && !hasTexts && (
-                          <p className="text-xs text-muted-foreground py-2">No elements detected on this page</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {filteredPages.length === 0 && (
-                <div className="text-center py-6 text-muted-foreground text-sm">No pages match the filter</div>
-              )}
+            {/* Navigate to this URL step button */}
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={() => addStep({ type: 'navigate', value: snapshot.url })}
+                className="text-xs text-blue-600 hover:text-blue-700 border border-blue-200 rounded px-2 py-1 hover:bg-blue-50"
+              >
+                + Navigate to this page
+              </button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Main Builder */}
+      {/* ── Loaded Pages Catalog ── */}
+      {catalog && catalog.pages.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">All Loaded Pages</CardTitle>
+              <div className="flex gap-2">
+                <Badge variant="outline">{catalog.pages.length} Pages</Badge>
+                <Badge variant="outline">{catalog.inputs.length} Inputs</Badge>
+                <Badge variant="outline">{catalog.buttons.length} Buttons</Badge>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
+              {catalog.pages.map((page, idx) => {
+                const isOpen = expandedPages.has(idx);
+                return (
+                  <div key={idx} className="rounded border bg-background">
+                    <button className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/50 text-left" onClick={() => togglePageExpanded(idx)}>
+                      {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
+                      <Globe className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="text-sm font-medium truncate flex-1">{page.name || page.url}</span>
+                      <div className="flex gap-1.5 shrink-0">
+                        {page.inputs.length > 0 && <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-blue-600 border-blue-200">{page.inputs.length} in</Badge>}
+                        {page.buttons.length > 0 && <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-green-600 border-green-200">{page.buttons.length} btn</Badge>}
+                        {page.texts.length > 0 && <Badge variant="outline" className="text-[10px] py-0 px-1.5 text-purple-600 border-purple-200">{page.texts.length} txt</Badge>}
+                      </div>
+                    </button>
+                    {isOpen && (
+                      <div className="border-t px-3 pb-2">
+                        <p className="text-[10px] text-muted-foreground truncate py-1">{page.url}</p>
+                        <div className="max-h-[160px] overflow-y-auto space-y-1">
+                          {page.inputs.map(inp => <div key={inp.id} className="flex items-center gap-1.5 bg-blue-50 rounded px-2 py-1"><Type className="w-3 h-3 text-blue-500" /><span className="text-xs truncate">{inp.label || inp.placeholder || inp.id}</span></div>)}
+                          {page.buttons.map(btn => <div key={btn.id} className="flex items-center gap-1.5 bg-green-50 rounded px-2 py-1"><MousePointerClick className="w-3 h-3 text-green-500" /><span className="text-xs truncate">"{btn.text}"</span></div>)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── 3-Column Builder ── */}
       <div className="grid grid-cols-12 gap-4">
-        {/* Left: Palette + Templates */}
+        {/* Left: Palette */}
         <div className="col-span-3">
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">Step Palette</CardTitle></CardHeader>
             <CardContent className="pt-0 space-y-4">
-              {STEP_CATEGORIES.map(cat => {
-                const Icon = cat.icon;
-                return (
-                  <div key={cat.name}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className={`w-3 h-3 rounded ${cat.color}`} />
-                      <span className="text-xs font-semibold text-muted-foreground uppercase">{cat.name}</span>
-                    </div>
-                    <div className="space-y-1">
-                      {cat.steps.map(st => (
-                        <button key={st.type} onClick={() => addStep(st.type)}
-                          className="w-full flex items-center gap-2 p-2 rounded border cursor-pointer hover:bg-muted transition-colors text-left">
-                          <div className={`w-6 h-6 rounded ${cat.color} flex items-center justify-center`}>
-                            <st.icon className="w-3 h-3 text-white" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{st.label}</div>
-                            <div className="text-[11px] text-muted-foreground truncate">{st.desc}</div>
-                          </div>
-                          <Plus className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                        </button>
-                      ))}
-                    </div>
+              {STEP_CATEGORIES.map(cat => (
+                <div key={cat.name}>
+                  <div className="flex items-center gap-2 mb-2"><div className={`w-3 h-3 rounded ${cat.color}`} /><span className="text-xs font-semibold text-muted-foreground uppercase">{cat.name}</span></div>
+                  <div className="space-y-1">
+                    {cat.steps.map(st => (
+                      <button key={st.type} onClick={() => addStep({ type: st.type })} className="w-full flex items-center gap-2 p-2 rounded border hover:bg-muted text-left">
+                        <div className={`w-6 h-6 rounded ${cat.color} flex items-center justify-center`}><st.icon className="w-3 h-3 text-white" /></div>
+                        <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{st.label}</div><div className="text-[11px] text-muted-foreground truncate">{st.desc}</div></div>
+                        <Plus className="w-3 h-3 text-muted-foreground" />
+                      </button>
+                    ))}
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </CardContent>
           </Card>
-          {catalog && (
-            <Card className="mt-4">
-              <CardHeader className="pb-2"><CardTitle className="text-base">Templates</CardTitle></CardHeader>
-              <CardContent className="pt-0 space-y-2">
-                {TEMPLATES.map(t => (
-                  <Button key={t.name} variant="outline" className="w-full justify-start" onClick={() => applyTemplate(t.build)}>
-                    <span className="mr-2">{t.icon}</span> {t.name}
-                  </Button>
-                ))}
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Center: Test Flow */}
@@ -1143,14 +856,13 @@ const WebVisualBuilder: React.FC = () => {
                 {steps.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <Plus className="w-8 h-8 mx-auto mb-3" />
-                    <p className="text-sm">Click steps from palette or use a template</p>
+                    <p className="text-sm">Load a page and click elements to add steps,</p>
+                    <p className="text-sm">or click from the palette on the left</p>
                   </div>
-                ) : (
-                  steps.map((step, index) => (
-                    <StepRow key={step.id} step={step} index={index} total={steps.length} catalog={catalog}
-                      onUpdate={updateStep} onDelete={deleteStep} onMoveUp={(i) => moveStep(i, 'up')} onMoveDown={(i) => moveStep(i, 'down')} />
-                  ))
-                )}
+                ) : steps.map((step, i) => (
+                  <StepRow key={step.id} step={step} index={i} total={steps.length} catalog={catalog}
+                    onUpdate={updateStep} onDelete={deleteStep} onMoveUp={i => moveStep(i, 'up')} onMoveDown={i => moveStep(i, 'down')} />
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -1159,146 +871,66 @@ const WebVisualBuilder: React.FC = () => {
         {/* Right: Code + Results */}
         <div className="col-span-4">
           <Card className="h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Code2 className="w-4 h-4" /> Generated Playwright Code
-              </CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Code2 className="w-4 h-4" /> Generated Code</CardTitle></CardHeader>
             <CardContent className="pt-0 space-y-3">
-              <div className="flex gap-2 items-center flex-wrap">
-                <Button onClick={handleGenerate} disabled={generating || steps.length === 0} size="sm">
+              <div className="flex gap-2 flex-wrap">
+                <Button onClick={handleGenerate} disabled={generating || !steps.length} size="sm">
                   {generating ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Code2 className="w-3 h-3 mr-1" />} Generate
                 </Button>
                 <Button onClick={handleRun} disabled={running || !generatedCode} size="sm" variant="secondary">
                   {running ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />} Run Test
                 </Button>
                 {testResult && (
-                  <Button onClick={handleSaveAsTestCase} disabled={savingTestCase || savedTestCase} size="sm" variant="outline" className="border-blue-300 text-blue-600">
+                  <Button onClick={handleSaveAsTestCase} disabled={savingTestCase || !!savedTestCase} size="sm" variant="outline" className="border-blue-300 text-blue-600">
                     {savingTestCase ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <FileText className="w-3 h-3 mr-1" />}
                     {savedTestCase ? '✓ Saved!' : 'Save as Test Case'}
                   </Button>
                 )}
               </div>
-              {generatedCode && (
-                <pre className="bg-gray-900 text-green-400 p-3 rounded text-xs font-mono max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all">{generatedCode}</pre>
-              )}
+              {generatedCode && <pre className="bg-gray-900 text-green-400 p-3 rounded text-xs font-mono max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all">{generatedCode}</pre>}
               {testResult && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    {testResult.success ? (
-                      <Badge className="bg-green-100 text-green-800"><CheckCircle2 className="w-3 h-3 mr-1" />PASSED</Badge>
-                    ) : (
-                      <Badge className="bg-red-100 text-red-800"><XCircle className="w-3 h-3 mr-1" />FAILED</Badge>
-                    )}
+                    {testResult.success
+                      ? <Badge className="bg-green-100 text-green-800"><CheckCircle2 className="w-3 h-3 mr-1" />PASSED</Badge>
+                      : <Badge className="bg-red-100 text-red-800"><XCircle className="w-3 h-3 mr-1" />FAILED</Badge>}
                     <span className="text-xs text-muted-foreground">{formatDuration(testResult.duration)}</span>
                   </div>
-                  {testResult.output && (
-                    <pre className="bg-gray-900 text-gray-100 p-3 rounded text-xs font-mono max-h-[200px] overflow-y-auto whitespace-pre-wrap break-all">{testResult.output}</pre>
-                  )}
+                  {testResult.output && <pre className="bg-gray-900 text-gray-100 p-3 rounded text-xs font-mono max-h-[200px] overflow-y-auto whitespace-pre-wrap break-all">{testResult.output}</pre>}
                   {savedTestCase && (
                     <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 p-2 rounded">
-                      <CheckCircle2 className="w-3 h-3" />
-                      Test case saved: <strong>{savedTestCase.title}</strong>
-                      <a href="/test-cases" className="underline ml-1 text-blue-700">View in Test Cases →</a>
+                      <CheckCircle2 className="w-3 h-3" /> Saved: <strong>{savedTestCase.title}</strong>
+                      <a href="/test-cases" className="underline ml-1">View →</a>
                     </div>
                   )}
                 </div>
               )}
-              {error && (
-                <div className="flex items-center gap-2 text-sm text-red-500">
-                  <AlertTriangle className="w-3 h-3" /> {error}
-                </div>
-              )}
+              {error && <div className="flex items-center gap-2 text-sm text-red-500"><AlertTriangle className="w-3 h-3" /> {error}</div>}
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* ── Save as Test Case Dialog ─────────────────────────────────────── */}
+      {/* ── Save Dialog ── */}
       {showSaveDialog && createPortal(
         <>
-          <div
-            style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.4)' }}
-            onClick={() => setShowSaveDialog(false)}
-          />
-          <div
-            className="rounded-lg border bg-popover shadow-2xl overflow-hidden"
-            style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 480, maxWidth: '94vw', zIndex: 9999 }}
-          >
-            {/* Header */}
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.4)' }} onClick={() => setShowSaveDialog(false)} />
+          <div className="rounded-lg border bg-popover shadow-2xl overflow-hidden" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 480, maxWidth: '94vw', zIndex: 9999 }}>
             <div className="flex items-center justify-between px-4 py-3 border-b">
-              <div>
-                <h3 className="text-sm font-semibold">Save as Test Case</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">Fill in test case details before saving</p>
-              </div>
-              <button className="text-muted-foreground hover:text-foreground text-lg leading-none" onClick={() => setShowSaveDialog(false)}>✕</button>
+              <div><h3 className="text-sm font-semibold">Save as Test Case</h3><p className="text-xs text-muted-foreground mt-0.5">Fill in test case details</p></div>
+              <button className="text-muted-foreground hover:text-foreground text-lg" onClick={() => setShowSaveDialog(false)}>✕</button>
             </div>
-            {/* Form */}
             <div className="px-4 py-3 space-y-3">
-              {/* Name */}
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Name <span className="text-red-500">*</span></label>
-                <input
-                  className="w-full rounded border px-2 py-1.5 text-sm bg-background outline-none focus:border-primary"
-                  placeholder="e.g. Login flow test"
-                  value={saveForm.title}
-                  onChange={e => setSaveForm(f => ({ ...f, title: e.target.value }))}
-                  autoFocus
-                />
-              </div>
-              {/* Description */}
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Description</label>
-                <textarea
-                  className="w-full rounded border px-2 py-1.5 text-sm bg-background outline-none focus:border-primary resize-none"
-                  placeholder="Optional description of what this test validates"
-                  rows={2}
-                  value={saveForm.description}
-                  onChange={e => setSaveForm(f => ({ ...f, description: e.target.value }))}
-                />
-              </div>
-              {/* Priority + Suite row */}
+              <div><label className="block text-xs font-medium mb-1">Name <span className="text-red-500">*</span></label><input className="w-full rounded border px-2 py-1.5 text-sm bg-background outline-none focus:border-primary" placeholder="e.g. Login flow test" value={saveForm.title} onChange={e => setSaveForm(f => ({ ...f, title: e.target.value }))} autoFocus /></div>
+              <div><label className="block text-xs font-medium mb-1">Description</label><textarea className="w-full rounded border px-2 py-1.5 text-sm bg-background outline-none focus:border-primary resize-none" rows={2} placeholder="Optional description" value={saveForm.description} onChange={e => setSaveForm(f => ({ ...f, description: e.target.value }))} /></div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-foreground mb-1">Priority</label>
-                  <select
-                    className="w-full rounded border px-2 py-1.5 text-sm bg-background outline-none focus:border-primary"
-                    value={saveForm.priority}
-                    onChange={e => setSaveForm(f => ({ ...f, priority: e.target.value }))}
-                  >
-                    <option value="low">🟢 Low</option>
-                    <option value="medium">🟡 Medium</option>
-                    <option value="high">🔴 High</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-foreground mb-1">Test Suite (optional)</label>
-                  <select
-                    className="w-full rounded border px-2 py-1.5 text-sm bg-background outline-none focus:border-primary"
-                    value={saveForm.suiteId}
-                    onChange={e => setSaveForm(f => ({ ...f, suiteId: e.target.value }))}
-                  >
-                    <option value="">— No suite —</option>
-                    {suites.map(s => (
-                      <option key={s.id} value={s.id}>{s.projectName ? `[${s.projectName}] ` : ''}{s.name}</option>
-                    ))}
-                  </select>
-                </div>
+                <div><label className="block text-xs font-medium mb-1">Priority</label><select className="w-full rounded border px-2 py-1.5 text-sm bg-background" value={saveForm.priority} onChange={e => setSaveForm(f => ({ ...f, priority: e.target.value }))}><option value="low">🟢 Low</option><option value="medium">🟡 Medium</option><option value="high">🔴 High</option></select></div>
+                <div><label className="block text-xs font-medium mb-1">Test Suite</label><select className="w-full rounded border px-2 py-1.5 text-sm bg-background" value={saveForm.suiteId} onChange={e => setSaveForm(f => ({ ...f, suiteId: e.target.value }))}><option value="">— No suite —</option>{suites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
               </div>
             </div>
-            {/* Footer */}
             <div className="flex items-center justify-end gap-2 px-4 py-3 border-t bg-muted/30">
-              <button
-                className="px-3 py-1.5 rounded text-sm text-muted-foreground hover:bg-muted"
-                onClick={() => setShowSaveDialog(false)}
-              >Cancel</button>
-              <button
-                className="px-4 py-1.5 rounded text-sm bg-primary text-primary-foreground hover:bg-primary/90 font-medium disabled:opacity-50"
-                disabled={!saveForm.title.trim() || savingTestCase}
-                onClick={handleSaveDialogSubmit}
-              >
-                {savingTestCase ? 'Saving...' : 'Save Test Case'}
-              </button>
+              <button className="px-3 py-1.5 rounded text-sm text-muted-foreground hover:bg-muted" onClick={() => setShowSaveDialog(false)}>Cancel</button>
+              <button className="px-4 py-1.5 rounded text-sm bg-primary text-primary-foreground hover:bg-primary/90 font-medium disabled:opacity-50" disabled={!saveForm.title.trim() || savingTestCase} onClick={handleSaveDialogSubmit}>{savingTestCase ? 'Saving...' : 'Save Test Case'}</button>
             </div>
           </div>
         </>,

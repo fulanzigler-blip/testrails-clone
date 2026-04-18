@@ -1,17 +1,32 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import path from 'path';
 import { z } from 'zod';
 import { successResponse, errorResponses } from '../utils/response';
 import logger from '../utils/logger';
 import prisma from '../config/database';
-import { scanWebProject, WebElementCatalog } from '../utils/web-element-scraper';
+import { scanWebProject, WebElementCatalog, WebAuthConfig, ScanProgressCallback } from '../utils/web-element-scraper';
 import { runWebTest, generatePlaywrightCode, WebTestStep } from '../utils/playwright-test-runner';
+import { createSession, loadPage, clickAndNavigate, destroySession, getSessionInfo, exportStorageState } from '../utils/web-session-manager';
+
+const UPLOADS_ROOT = path.join(__dirname, '../../uploads');
 
 // ─── Schemas ───────────────────────────────────────────────────────────────────
+
+const scanAuthSchema = z.object({
+  loginUrl: z.string().url().or(z.literal('')).optional().transform(v => v || undefined),
+  usernameSelector: z.string().min(1),
+  usernameValue: z.string().min(1),
+  passwordSelector: z.string().min(1),
+  passwordValue: z.string().min(1),
+  submitSelector: z.string().optional().transform(v => v || undefined),
+  waitAfterLogin: z.number().int().min(0).max(10000).optional(),
+});
 
 const scanWebSchema = z.object({
   url: z.string().url('Valid URL is required'),
   maxPages: z.number().int().min(1).max(50).default(20).optional(),
   maxDepth: z.number().int().min(0).max(5).default(3).optional(),
+  auth: scanAuthSchema.optional(),
 });
 
 const generateWebTestSchema = z.object({
@@ -38,6 +53,20 @@ const runWebTestSchema = z.object({
     text: z.string().optional(),
   })).min(1, 'At least one step is required'),
   baseUrl: z.string().url().optional(),
+  auth: scanAuthSchema.optional(),
+  sessionId: z.string().uuid().optional(),
+});
+
+const startSessionSchema = z.object({
+  auth: scanAuthSchema.optional(),
+  viewport: z.object({
+    width: z.number().int().min(320).max(2560).default(1280),
+    height: z.number().int().min(240).max(1440).default(720),
+  }).optional(),
+});
+
+const loadPageSchema = z.object({
+  url: z.string().url('Valid URL required'),
 });
 
 const saveWebTestCaseSchema = z.object({
@@ -96,22 +125,41 @@ export default async function webIntegrationRoutes(fastify: FastifyInstance) {
     });
   });
 
-  // Scan a web URL
+  // Scan a web URL — streams progress via SSE, final event is { type: 'complete', catalog }
   fastify.post('/scan', async (request: FastifyRequest, reply: FastifyReply) => {
+    // Validate before hijacking so we can still return a normal error response
+    let body: z.infer<typeof scanWebSchema>;
     try {
-      const body = scanWebSchema.parse(request.body);
-      const config = {
-        maxPages: body.maxPages,
-        maxDepth: body.maxDepth,
-      };
+      body = scanWebSchema.parse(request.body);
+    } catch (err: any) {
+      logger.error(`[WebTest] Scan validation failed: ${err.message}`);
+      return errorResponses.badRequest(reply, err.message || 'Invalid request');
+    }
 
-      logger.info(`[WebTest] Scanning URL: ${body.url}`);
-      const catalog = await scanWebProject(body.url, config);
+    const config = { maxPages: body.maxPages, maxDepth: body.maxDepth };
+    logger.info(`[WebTest] Scanning URL: ${body.url}${body.auth ? ' (with auth)' : ''}`);
 
-      return successResponse(reply, catalog);
+    // Hijack the response so Fastify doesn't interfere with our SSE stream
+    reply.hijack();
+    const res = reply.raw;
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering if behind a proxy
+
+    const send = (data: object) => {
+      try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client disconnected */ }
+    };
+
+    try {
+      const onProgress: ScanProgressCallback = (event) => send(event);
+      const catalog = await scanWebProject(body.url, config, body.auth as WebAuthConfig | undefined, onProgress);
+      send({ type: 'complete', catalog });
     } catch (err: any) {
       logger.error(`[WebTest] Scan failed: ${err.message}`);
-      return errorResponses.badRequest(reply, err.message || 'Scan failed');
+      send({ type: 'error', message: err.message || 'Scan failed' });
+    } finally {
+      res.end();
     }
   });
 
@@ -138,14 +186,29 @@ export default async function webIntegrationRoutes(fastify: FastifyInstance) {
       const steps: WebTestStep[] = body.steps as WebTestStep[];
       const device = (body as any).device;
 
-      logger.info(`[WebTest] Running test with ${steps.length} steps${device ? ` (device: ${device})` : ''}`);
-      const result = await runWebTest(steps, body.baseUrl, device);
+      // If a live exploratory session is provided, export its cookies so the test runner
+      // can reuse the authenticated state without triggering a second login.
+      let storageState: object | undefined;
+      if (body.sessionId) {
+        const exported = await exportStorageState(body.sessionId);
+        if (exported) {
+          storageState = exported;
+          logger.info(`[WebTest] Using storage state from session ${body.sessionId}`);
+        }
+      }
+
+      logger.info(`[WebTest] Running test with ${steps.length} steps${device ? ` (device: ${device})` : ''}${storageState ? ' (session cookies)' : body.auth ? ' (re-login)' : ''}`);
+      const result = await runWebTest(steps, body.baseUrl, device, body.auth as WebAuthConfig | undefined, storageState);
+
+      const relativeScreenshots = result.screenshots.map(p =>
+        path.relative(UPLOADS_ROOT, p).replace(/\\/g, '/')
+      );
 
       return successResponse(reply, {
         success: result.success,
         output: result.output,
         duration: result.duration,
-        screenshots: result.screenshots,
+        screenshots: relativeScreenshots,
       });
     } catch (err: any) {
       logger.error(`[WebTest] Run failed: ${err.message}`);
@@ -194,6 +257,68 @@ export default async function webIntegrationRoutes(fastify: FastifyInstance) {
     } catch (err: any) {
       logger.error(`[WebTest] Save failed: ${err.message}`);
       return errorResponses.internal(reply, err.message || 'Save failed');
+    }
+  });
+
+  // ─── Exploratory Session Routes ─────────────────────────────────────────────
+
+  // Start a new browser session (optional pre-login)
+  fastify.post('/session', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const body = startSessionSchema.parse(request.body);
+      const vp = body.viewport;
+      const viewport = { width: vp?.width ?? 1280, height: vp?.height ?? 720 };
+      const sessionId = await createSession(body.auth as WebAuthConfig | undefined, viewport);
+      return successResponse(reply, { sessionId });
+    } catch (err: any) {
+      logger.error(`[WebTest] Session start failed: ${err.message}`);
+      return errorResponses.badRequest(reply, err.message || 'Failed to start session');
+    }
+  });
+
+  // Load a page in an existing session — returns screenshot + elements
+  fastify.post('/session/:id/load', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const body = loadPageSchema.parse(request.body);
+      const snapshot = await loadPage(id, body.url);
+      return successResponse(reply, snapshot);
+    } catch (err: any) {
+      logger.error(`[WebTest] Page load failed: ${err.message}`);
+      return errorResponses.badRequest(reply, err.message || 'Failed to load page');
+    }
+  });
+
+  // Click an element and return new snapshot (for SPA navigation)
+  fastify.post('/session/:id/click', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const body = z.object({ selector: z.string().min(1) }).parse(request.body);
+      const snapshot = await clickAndNavigate(id, body.selector);
+      return successResponse(reply, snapshot);
+    } catch (err: any) {
+      logger.error(`[WebTest] Click-navigate failed: ${err.message}`);
+      return errorResponses.badRequest(reply, err.message || 'Failed to click element');
+    }
+  });
+
+  // Get session info (alive check)
+  fastify.get('/session/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const info = getSessionInfo(id);
+    if (!info) return errorResponses.notFound(reply, 'Session not found');
+    return successResponse(reply, info);
+  });
+
+  // End a session
+  fastify.delete('/session/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      await destroySession(id);
+      return successResponse(reply, { ok: true });
+    } catch (err: any) {
+      logger.error(`[WebTest] Session destroy failed: ${err.message}`);
+      return errorResponses.badRequest(reply, err.message || 'Failed to end session');
     }
   });
 }

@@ -64,6 +64,13 @@ export function setCached<T>(key: string, fileContent: string, data: T): void {
   }
 }
 
+export function deleteCachedKey(key: string): void {
+  try {
+    const cachePath = getCachePath(key);
+    if (fs.existsSync(cachePath)) fs.unlinkSync(cachePath);
+  } catch { /* ignore */ }
+}
+
 export function clearScanCache(): void {
   try {
     if (fs.existsSync(CACHE_DIR)) {

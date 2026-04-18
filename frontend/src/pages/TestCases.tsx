@@ -519,6 +519,7 @@ const TestCases: React.FC = () => {
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-end gap-1">
                                 {tc.customFields?.dartCode && <RunTestCaseButton testCase={tc} />}
+                                {tc.customFields?.type === 'web' && <WebRunTestCaseButton testCase={tc} />}
                                 <Button
                                   variant="ghost" size="sm"
                                   className="h-7 w-7 p-0"
@@ -743,6 +744,96 @@ function RunTestCaseButton({ testCase }: { testCase: any }) {
               {result.output.slice(-800)}
             </pre>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Web Run Test Case Button ─────────────────────────────────────────────────
+
+function WebRunTestCaseButton({ testCase }: { testCase: any }) {
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<{
+    success: boolean
+    output: string
+    duration: number
+    screenshots: string[]
+  } | null>(null)
+  const [lightbox, setLightbox] = useState<string | null>(null)
+
+  const handleRun = async () => {
+    setRunning(true); setResult(null)
+    try {
+      const resp = await api.post('/web-tests/run', {
+        steps: testCase.customFields?.steps || [],
+        baseUrl: testCase.customFields?.baseUrl,
+      })
+      const data = resp.data?.data
+      setResult({
+        success: data?.success ?? false,
+        output: data?.output || '',
+        duration: data?.duration ?? 0,
+        screenshots: data?.screenshots || [],
+      })
+    } catch (err: any) {
+      setResult({ success: false, output: err.response?.data?.error?.message || err.message || 'Run failed', duration: 0, screenshots: [] })
+    } finally { setRunning(false) }
+  }
+
+  const fmt = (ms: number) => ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+
+  return (
+    <div className="relative">
+      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700"
+        onClick={handleRun} disabled={running} title="Run web test">
+        {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+      </Button>
+
+      {result && (
+        <div className="absolute right-0 z-20 mt-1 p-3 bg-popover border rounded-lg shadow-lg text-xs w-96 max-h-[80vh] overflow-y-auto">
+          <div className="flex items-center gap-1.5 mb-2">
+            {result.success
+              ? <><CheckCircle2 className="h-4 w-4 text-green-600" /><span className="font-semibold text-green-600">PASSED</span></>
+              : <><XCircle className="h-4 w-4 text-red-600" /><span className="font-semibold text-red-600">FAILED</span></>
+            }
+            <span className="text-muted-foreground ml-auto">{fmt(result.duration)}</span>
+            <button className="ml-1 text-muted-foreground hover:text-foreground" onClick={() => setResult(null)}>✕</button>
+          </div>
+
+          {result.output && (
+            <pre className="bg-gray-900 text-gray-100 p-2 rounded font-mono max-h-[120px] overflow-y-auto whitespace-pre-wrap break-all text-[10px] mb-3">
+              {result.output.slice(-800)}
+            </pre>
+          )}
+
+          {result.screenshots.length > 0 && (
+            <div>
+              <p className="font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide text-[10px]">
+                Screenshots ({result.screenshots.length})
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {result.screenshots.map((p, i) => (
+                  <img
+                    key={i}
+                    src={`/files/${p}`}
+                    alt={`screenshot-${i + 1}`}
+                    className="w-full rounded border cursor-pointer hover:opacity-90 transition-opacity"
+                    onClick={() => setLightbox(`/files/${p}`)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 cursor-pointer"
+          onClick={() => setLightbox(null)}
+        >
+          <img src={lightbox} alt="screenshot" className="max-h-screen max-w-full object-contain p-4" />
         </div>
       )}
     </div>

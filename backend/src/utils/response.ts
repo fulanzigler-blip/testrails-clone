@@ -125,7 +125,16 @@ export const errorResponses = {
         },
       });
     }
-    if (msg.includes('SSH') || msg.includes('connect') || msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND')) {
+    if (msg.startsWith('ADB screencap returned no data') || msg.includes('ADB') && msg.includes('no data')) {
+      return reply.code(503).send({
+        success: false,
+        error: {
+          code: 'DEVICE_NOT_AVAILABLE',
+          message: msg,
+        },
+      });
+    }
+    if (msg.includes('SSH') || msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND') || /\bconnect(ion)?\b/i.test(msg)) {
       return reply.code(503).send({
         success: false,
         error: {

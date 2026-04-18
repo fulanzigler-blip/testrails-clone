@@ -157,11 +157,19 @@ function extractElements(content: string): { inputs: ScreenElement['inputs']; bu
     const fullNearby = lines.slice(i, Math.min(i + 40, lines.length)).join('\n');
 
     // ─── Input Fields ───
-    if (line.includes('TextFormField') || line.includes('TextField(')) {
+    // Match standard TextField/TextFormField AND any custom widget that has hintText/labelText
+    const isStandardInput = line.includes('TextFormField') || line.includes('TextField(');
+    const isCustomInputWithHint = !isStandardInput && (line.includes('hintText') || line.includes('labelText') ||
+      (line.match(/\w*(?:Input|Field|TextField|FormField)\w*\s*\(/) != null));
+
+    if (isStandardInput || isCustomInputWithHint) {
       const type = line.includes('TextFormField') ? 'TextFormField' : 'TextField';
       const hasOnSubmit = line.includes('onFieldSubmitted') || lines.slice(i, i + 5).some(l => l.includes('onFieldSubmitted'));
       const hintMatch = nearby.match(/hintText\s*:\s*['"]([^'"]+)['"]/) || nearby.match(/labelText\s*:\s*['"]([^'"]+)['"]/);
       const label = hintMatch?.[1] || '';
+      // Skip custom-widget lines that have no hintText — they're not input fields
+      if (isCustomInputWithHint && !label) continue;
+
       const keyMatch = nearby.match(/key:\s*(?:const\s+)?(?:ValueKey|Key)\(['"]([^'"]+)['"]\)/);
       const keyName = keyMatch?.[1];
 
@@ -175,6 +183,9 @@ function extractElements(content: string): { inputs: ScreenElement['inputs']; bu
         inputStrategy = 'label';
         inputValue = label;
       }
+
+      // Deduplicate by finderValue so the same field isn't added twice
+      if (inputs.some(inp => inp.finderValue === inputValue && inputValue !== type)) continue;
 
       inputs.push({
         id: label.toLowerCase().replace(/\s+/g, '_') || `${type.toLowerCase()}_${inputs.length}`,
@@ -339,17 +350,24 @@ export async function scanFlutterProjectSSH(config?: unknown): Promise<ElementCa
   const routeMatches = mainResult.output.match(/path:\s*['"]([^'"]+)['"]/g) || [];
   catalog.routes = routeMatches.map(r => r.match(/['"]([^'"]+)['"]/)?.[1] || '').filter(Boolean);
 
-  // 2. Find and scan ALL screen/view/page files
-  // Support multiple Flutter architecture patterns:
-  //   - *screen*.dart (common pattern)
-  //   - *_page.dart (page-based)
-  //   - *_view.dart (Stacked/MVC pattern, used by Raya-dev)
-  //   - *_widget.dart (standalone widgets with complex UI)
-  const screenResult = await execSSHWithConfig(
-    `find "${path}/lib" -type f \\( -name "*screen*.dart" -o -name "*_page.dart" -o -name "*_view.dart" \\) 2>/dev/null`,
+  // 2. Find ALL dart files containing UI widgets (not just *screen*/*.page*/*view*)
+  // Two-pass: first all screen/page/view files, then any OTHER file with TextField/hintText
+  const screenPatternResult = await execSSHWithConfig(
+    `find "${path}/lib" -type f \\( -name "*screen*.dart" -o -name "*_page.dart" -o -name "*_view.dart" -o -name "*_form.dart" -o -name "*_widget.dart" -o -name "*_dialog.dart" \\) 2>/dev/null | grep -v '.g.dart' | grep -v '.freezed.dart'`,
     config, 30000
   );
-  const screenFiles = screenResult.output.split('\n').filter(Boolean);
+  const screenPatternFiles = new Set(screenPatternResult.output.split('\n').filter(Boolean));
+
+  // Also grep ALL dart files for TextField/TextFormField/hintText to catch custom wrappers
+  const grepResult = await execSSHWithConfig(
+    `grep -rl 'TextField\\|TextFormField\\|hintText:' "${path}/lib" 2>/dev/null | grep -v '.g.dart' | grep -v '.freezed.dart' | head -100`,
+    config, 30000
+  );
+  const grepFiles = grepResult.output.split('\n').filter(Boolean);
+
+  // Merge both lists (deduped)
+  const allFiles = [...new Set([...screenPatternFiles, ...grepFiles])];
+  const screenFiles = allFiles;
 
   // Process files in parallel batches for better performance
   const BATCH_SIZE = 20;
