@@ -912,7 +912,7 @@ const LiveViewPanel: React.FC<{
                   <div className="relative w-full h-full">
                     <img ref={imgRef} src={`data:image/png;base64,${screenshot}`} alt="Device screen"
                       className={`w-full h-full object-fill select-none ${testRunning ? 'cursor-not-allowed' : (scannedElements.length > 0 || flutterWidgets.length > 0) ? 'cursor-default' : 'cursor-crosshair'}`}
-                      onClick={(scannedElements.length === 0 && flutterWidgets.length === 0) || flutterSessionId ? handleImageClick : undefined}
+                      onClick={((scannedElements.length === 0 && flutterWidgets.length === 0) || flutterSessionId) ? handleImageClick : undefined}
                       onLoad={e => { const img = e.currentTarget; setScreenW(img.clientWidth); setScreenH(img.clientHeight); }}
                       draggable={false} />
                     {testRunning && <div className="absolute inset-0 bg-blue-900/20 pointer-events-none flex items-end justify-center pb-3"><div className="flex items-center gap-1.5 bg-blue-600/80 text-white text-[10px] px-2 py-1 rounded-full"><Loader2 className="w-2.5 h-2.5 animate-spin" />Running</div></div>}
