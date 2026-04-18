@@ -1882,18 +1882,50 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
 
       logger.info(`[FlutterSession ${id}] Hit test at (${x}, ${y})`);
 
-      // Use VM Service hitTest extension to find widget at position
-      const hitTestResult = await vmServiceRpc(session, 'ext.flutter.inspector.hitTest', {
-        x: Math.floor(x),
-        y: Math.floor(y),
-      });
+      // Alternative: Get widget tree with bounds, then find widget at position
+      // ext.flutter.inspector.hitTest might not be available in all Flutter versions
+      let hitWidget = null;
 
-      if (!hitTestResult) {
+      try {
+        // Try getDetailsSubtree to get widget tree with render bounds
+        const rootTree = await vmServiceRpc(session, 'ext.flutter.inspector.getDetailsSubtree', {
+          groupName: 'explorer',
+          arg: '',  // empty = root widget
+          subtreeDepth: '30',
+        });
+
+        logger.info(`[FlutterSession ${id}] Got details subtree, searching for widget at (${x}, ${y})`);
+
+        // Search for widget containing the point
+        hitWidget = findWidgetAtPosition(rootTree, x, y);
+
+        if (hitWidget) {
+          logger.info(`[FlutterSession ${id}] Found widget: ${hitWidget.description || hitWidget.type || 'Unknown'}`);
+        } else {
+          logger.warn(`[FlutterSession ${id}] No widget found at (${x}, ${y})`);
+        }
+      } catch (err: any) {
+        logger.error(`[FlutterSession ${id}] Hit test failed: ${err.message}`);
+        // Try fallback to summary tree (no bounds, but at least get some info)
+        try {
+          const summaryTree = await vmServiceRpc(session, 'ext.flutter.inspector.getRootWidgetTree', {
+            groupName: 'explorer',
+            isSummaryTree: 'true',
+            withPreviews: 'true',
+          });
+          // Just return the root widget as fallback
+          hitWidget = summaryTree;
+          logger.info(`[FlutterSession ${id}] Fallback to summary tree (no bounds)`);
+        } catch (err2: any) {
+          logger.error(`[FlutterSession ${id}] Fallback also failed: ${err2.message}`);
+        }
+      }
+
+      if (!hitWidget) {
         return successResponse(reply, { widget: null, element: null }, undefined);
       }
 
-      // hitTest returns a widget with some properties; convert to our format
-      const hitWidget = hitTestResult.result || hitTestResult;
+      logger.info(`[FlutterSession ${id}] Hit widget: ${JSON.stringify(hitWidget).slice(0, 500)}`);
 
       // Build element from hit test result
       const description = hitWidget.description || hitWidget.type || 'Unknown Widget';
@@ -1959,6 +1991,38 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       return errorResponses.handle(reply, error, 'hit test');
     }
   });
+}
+
+// ─── Helper: Find widget at position ─────────────────────────────────────────────
+
+function findWidgetAtPosition(node: any, x: number, y: number): any | null {
+  if (!node) return null;
+
+  // Check if this node has render bounds
+  const bounds = node.renderBounds || node.renderObject?.paintBounds;
+  if (bounds && bounds.rect) {
+    const { left, top, right, bottom } = bounds.rect;
+    // Check if point is inside bounds
+    if (x >= left && x <= right && y >= top && y <= bottom) {
+      // This node contains the point - check children first (they might be more specific)
+      const children = node.children || node.child?.children || [];
+      for (const child of children) {
+        const childResult = findWidgetAtPosition(child, x, y);
+        if (childResult) return childResult;
+      }
+      // No child matched, return this node
+      return node;
+    }
+  }
+
+  // No bounds, check children anyway
+  const children = node.children || node.child?.children || [];
+  for (const child of children) {
+    const result = findWidgetAtPosition(child, x, y);
+    if (result) return result;
+  }
+
+  return null;
 }
 
 // ─── Pure Flutter VM Service Widget Tree (NO UIAutomator) ─────────────────────

@@ -193,7 +193,8 @@ setTimeout(() => process.exit(1), 10000);
   try {
     const parsed = JSON.parse(result.output.trim());
     if (parsed.error) throw new Error(parsed.error.message || JSON.stringify(parsed.error));
-    return parsed.result;
+    // For some extensions, the full response is the result (not wrapped in 'result' key)
+    return parsed.result !== undefined ? parsed.result : parsed;
   } catch {
     throw new Error(`VM Service returned invalid JSON: ${result.output.slice(0, 200)}`);
   }
