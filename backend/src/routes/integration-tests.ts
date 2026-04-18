@@ -1861,6 +1861,104 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       return errorResponses.handle(reply, error, 'stop flutter session');
     }
   });
+
+  // POST /flutter-session/:id/hit-test — find widget at click position via VM Service
+  fastify.post('/flutter-session/:id/hit-test', {
+    onRequest: [fastify.authenticate],
+  }, async (request: any, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const { x, y } = request.body as { x: number; y: number };
+
+      if (typeof x !== 'number' || typeof y !== 'number') {
+        return errorResponses.validation(reply, [{ path: ['x', 'y'], message: 'x and y must be numbers' }]);
+      }
+
+      const session = getSession(id);
+      if (!session) return errorResponses.notFound(reply, 'Flutter session');
+      if (session.status !== 'ready') {
+        return reply.code(503).send({ success: false, error: { code: 'SESSION_NOT_READY', message: `Session status: ${session.status}` } });
+      }
+
+      logger.info(`[FlutterSession ${id}] Hit test at (${x}, ${y})`);
+
+      // Use VM Service hitTest extension to find widget at position
+      const hitTestResult = await vmServiceRpc(session, 'ext.flutter.inspector.hitTest', {
+        x: Math.floor(x),
+        y: Math.floor(y),
+      });
+
+      if (!hitTestResult) {
+        return successResponse(reply, { widget: null, element: null }, undefined);
+      }
+
+      // hitTest returns a widget with some properties; convert to our format
+      const hitWidget = hitTestResult.result || hitTestResult;
+
+      // Build element from hit test result
+      const description = hitWidget.description || hitWidget.type || 'Unknown Widget';
+      const widgetType = description.split('(')[0] || description;
+
+      let finderValue = widgetType;
+      let finderStrategy = 'type';
+      let selector = `[byType('${widgetType}')]`;
+
+      // Try to extract useful finder values
+      if (hitWidget.key) {
+        const keyMatch = hitWidget.key.toString().match(/['"<]([^'"<>]+)['"<>]/);
+        if (keyMatch) {
+          finderValue = keyMatch[1];
+          finderStrategy = 'key';
+          selector = `[byKey='${finderValue}']`;
+        }
+      } else if (hitWidget.tooltip) {
+        finderValue = hitWidget.tooltip;
+        finderStrategy = 'tooltip';
+        selector = `[byTooltip='${finderValue}']`;
+      } else if (hitWidget.value || hitWidget.text) {
+        finderValue = hitWidget.value || hitWidget.text;
+        finderStrategy = 'text';
+        selector = `[text='${finderValue}']`;
+      }
+
+      // Detect element type
+      const isButton = /ElevatedButton|TextButton|OutlinedButton|IconButton|FloatingActionButton|GestureDetector|InkWell|CupertinoButton|FilledButton|DropdownButton|PopupMenuButton|ListTile/i.test(description);
+      const isInput = /TextField|TextFormField|CupertinoTextField|EditableText|Checkbox|Switch|Slider|Radio|DropdownButtonFormField/i.test(description);
+      const isCheckbox = /Checkbox|Switch|Radio/i.test(description);
+
+      const elementType: 'button' | 'input' | 'text' | 'checkbox' =
+        isInput ? (isCheckbox ? 'checkbox' : 'input') : isButton ? 'button' : 'text';
+
+      const element = {
+        text: hitWidget.value || hitWidget.text || finderValue,
+        contentDesc: hitWidget.tooltip || hitWidget.value || hitWidget.text || finderValue,
+        resourceId: hitWidget.key?.toString() || '',
+        idShort: hitWidget.key?.toString() || '',
+        className: `flutter.${widgetType}`,
+        clickable: elementType === 'button' || elementType === 'checkbox',
+        isInput: elementType === 'input',
+        isCheckable: elementType === 'checkbox',
+        bounds: '',
+        x1: 0, y1: 0, x2: 0, y2: 0,
+        elementType,
+        finderStrategy,
+        finderValue,
+        selector,
+        description,
+      };
+
+      logger.info(`[FlutterSession ${id}] Hit test found: ${widgetType} (${finderStrategy}=${finderValue})`);
+
+      return successResponse(reply, {
+        widget: hitWidget,
+        element,
+        hitPosition: { x, y },
+      }, undefined);
+    } catch (error: any) {
+      logger.error('[FlutterSession] Hit test failed:', error);
+      return errorResponses.handle(reply, error, 'hit test');
+    }
+  });
 }
 
 // ─── Pure Flutter VM Service Widget Tree (NO UIAutomator) ─────────────────────

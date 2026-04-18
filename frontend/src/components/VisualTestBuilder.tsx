@@ -597,7 +597,8 @@ const LiveViewPanel: React.FC<{
   const [sessionStarting, setSessionStarting] = useState(false);
   const [flutterWidgets, setFlutterWidgets] = useState<FlutterWidget[]>([]);
   const [scanningWidgets, setScanningWidgets] = useState(false);
-  const [pickedWidget, setPickedWidget] = useState<FlutterWidget | null>(null);
+  const [pickedWidget, setPickedWidget] = useState<any | null>(null);
+  const [pickedWidgetBounds, setPickedWidgetBounds] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
 
   const [autoScan, setAutoScan] = useState(true);
 
@@ -710,14 +711,45 @@ const LiveViewPanel: React.FC<{
     const y = Math.round((py / rect.height) * DEVICE_NATIVE_H);
     setPickPos({ px, py });
     setPickedEl(null);
+    setPickedWidget(null);
+    setPickedWidgetBounds(null);
     setEnterTextValue('');
     setManualFinderValue('');
     setIdentifying(true);
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     try {
-      const resp = await api.post('/integration-tests/element-at', { x, y, runnerId }, { timeout: 35000 });
-      const el: LiveElement | null = resp.data?.data?.element || null;
-      const freshShot: string | undefined = resp.data?.data?.screenshot;
+      let el: LiveElement | null = null;
+      let freshShot: string | undefined = undefined;
+
+      // If Flutter Session is active, use VM Service hitTest
+      if (flutterSessionId) {
+        const resp = await api.post(`/integration-tests/flutter-session/${flutterSessionId}/hit-test`, { x, y }, { timeout: 35000 });
+        el = resp.data?.data?.element || null;
+        freshShot = resp.data?.data?.screenshot;
+        // Also store widget info and bounds
+        if (resp.data?.data?.widget) {
+          setPickedWidget(resp.data.data.widget);
+          // Extract bounds from widget if available
+          const widget = resp.data.data.widget;
+          if (widget.renderBounds || widget.bounds) {
+            const bounds = widget.renderBounds || widget.bounds;
+            if (bounds.rect) {
+              setPickedWidgetBounds({
+                x1: bounds.rect.left || 0,
+                y1: bounds.rect.top || 0,
+                x2: bounds.rect.right || 0,
+                y2: bounds.rect.bottom || 0,
+              });
+            }
+          }
+        }
+      } else {
+        // Fallback to UIAutomator element-at
+        const resp = await api.post('/integration-tests/element-at', { x, y, runnerId }, { timeout: 35000 });
+        el = resp.data?.data?.element || null;
+        freshShot = resp.data?.data?.screenshot;
+      }
+
       if (freshShot) { setScreenshot(freshShot); setLastUpdated(Date.now()); }
       setPickedEl(el);
       if (!el) setError('No element found at that position');
@@ -880,6 +912,7 @@ const LiveViewPanel: React.FC<{
                   <div className="relative w-full h-full">
                     <img ref={imgRef} src={`data:image/png;base64,${screenshot}`} alt="Device screen"
                       className={`w-full h-full object-fill select-none ${testRunning ? 'cursor-not-allowed' : (scannedElements.length > 0 || flutterWidgets.length > 0) ? 'cursor-default' : 'cursor-crosshair'}`}
+                      onClick={(scannedElements.length === 0 && flutterWidgets.length === 0) || flutterSessionId ? handleImageClick : undefined}
                       onClick={(scannedElements.length === 0 && flutterWidgets.length === 0) ? handleImageClick : undefined}
                       onLoad={e => { const img = e.currentTarget; setScreenW(img.clientWidth); setScreenH(img.clientHeight); }}
                       draggable={false} />
@@ -891,15 +924,35 @@ const LiveViewPanel: React.FC<{
                       const color = el.elementType === 'input' ? 'border-blue-400 bg-blue-400' : el.elementType === 'button' ? 'border-green-400 bg-green-400' : el.elementType === 'checkbox' ? 'border-orange-400 bg-orange-400' : 'border-purple-400 bg-purple-400';
                       return <div key={i} className={`absolute border rounded cursor-pointer transition-all ${color} ${isActive ? 'opacity-50 border-2' : isHovered ? 'opacity-30 border-2' : 'opacity-0 hover:opacity-25 border'}`} style={{ left: tl.px, top: tl.py, width: br.px - tl.px, height: br.py - tl.py }} onClick={() => pickOverlayElement(el)} onMouseEnter={() => setHoveredEl(el)} onMouseLeave={() => setHoveredEl(null)} title={el.text || el.finderValue || el.elementType} />;
                     })}
-                    {/* Flutter widget list overlay — show as sidebar badges (no position data from VM Service) */}
-                    {flutterWidgets.length > 0 && !testRunning && pickedWidget && (
-                      <div className="absolute inset-0 border-4 border-violet-500 rounded pointer-events-none" />
+                    {/* Flutter widget highlight — show bounds if available from hitTest */}
+                    {!testRunning && pickedWidget && (
+                      pickedWidgetBounds ? (
+                        // Show specific widget bounds
+                        (() => {
+                          const tl = toScreen(pickedWidgetBounds.x1, pickedWidgetBounds.y1);
+                          const br = toScreen(pickedWidgetBounds.x2, pickedWidgetBounds.y2);
+                          return (
+                            <div
+                              className="absolute border-4 border-violet-500 rounded pointer-events-none bg-violet-500/10"
+                              style={{
+                                left: tl.px,
+                                top: tl.py,
+                                width: br.px - tl.px,
+                                height: br.py - tl.py,
+                              }}
+                            />
+                          );
+                        })()
+                      ) : (
+                        // Fallback to full-screen highlight (when no bounds available)
+                        <div className="absolute inset-0 border-4 border-violet-500 rounded pointer-events-none" />
+                      )
                     )}
-                    {/* Click marker (single-click mode) */}
-                    {pickPos && !testRunning && scannedElements.length === 0 && flutterWidgets.length === 0 && (
+                    {/* Click marker (single-click mode or Flutter Session click) */}
+                    {pickPos && !testRunning && (scannedElements.length === 0 || flutterSessionId) && flutterWidgets.length === 0 && (
                       <div className="absolute pointer-events-none" style={{ left: pickPos.px, top: pickPos.py, transform: 'translate(-50%, -50%)' }}>
                         {identifying ? <div className="w-7 h-7 rounded-full border-2 border-blue-400 bg-blue-400/20 flex items-center justify-center"><Loader2 className="w-3 h-3 text-blue-500 animate-spin" /></div>
-                          : pickedEl ? <div className="w-7 h-7 rounded-full border-2 border-green-400 bg-green-400/30" />
+                          : pickedEl || pickedWidget ? <div className="w-7 h-7 rounded-full border-2 border-green-400 bg-green-400/30" />
                           : <div className="w-7 h-7 rounded-full border-2 border-red-400 bg-red-400/20" />}
                       </div>
                     )}
