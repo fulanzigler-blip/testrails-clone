@@ -1,0 +1,122 @@
+- generic [ref=e22]:
+  - complementary [ref=e23]:
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - img [ref=e26]
+        - generic [ref=e28]: TestRails
+      - button "New Test Run" [ref=e30] [cursor=pointer]:
+        - img [ref=e31]
+        - text: New Test Run
+      - navigation [ref=e32]:
+        - link "Dashboard" [ref=e33] [cursor=pointer]:
+          - /url: /
+          - img [ref=e34]
+          - text: Dashboard
+        - link "Projects" [ref=e39] [cursor=pointer]:
+          - /url: /projects
+          - img [ref=e40]
+          - text: Projects
+        - link "Test Cases" [ref=e42] [cursor=pointer]:
+          - /url: /test-cases
+          - img [ref=e43]
+          - text: Test Cases
+        - link "Test Runs" [ref=e45] [cursor=pointer]:
+          - /url: /test-runs
+          - img [ref=e46]
+          - text: Test Runs
+        - link "Test Suites" [ref=e48] [cursor=pointer]:
+          - /url: /test-suites
+          - img [ref=e49]
+          - text: Test Suites
+        - link "Page Automation" [ref=e54] [cursor=pointer]:
+          - /url: /page-automation
+          - img [ref=e55]
+          - text: Page Automation
+        - link "Visual Test Builder" [ref=e57] [cursor=pointer]:
+          - /url: /visual-test-builder
+          - img [ref=e58]
+          - text: Visual Test Builder
+        - link "Web Visual Builder" [ref=e60] [cursor=pointer]:
+          - /url: /web-visual-builder
+          - img [ref=e61]
+          - text: Web Visual Builder
+        - link "Hybrid Scanner" [ref=e64] [cursor=pointer]:
+          - /url: /hybrid-scan
+          - img [ref=e65]
+          - text: Hybrid Scanner
+        - link "Users" [ref=e70] [cursor=pointer]:
+          - /url: /users
+          - img [ref=e71]
+          - text: Users
+        - link "Reports" [ref=e76] [cursor=pointer]:
+          - /url: /reports
+          - img [ref=e77]
+          - text: Reports
+      - generic [ref=e79]:
+        - generic [ref=e82]:
+          - paragraph
+          - paragraph [ref=e83]: qa-test@example.com
+        - generic [ref=e84]:
+          - button "Settings" [ref=e85] [cursor=pointer]:
+            - img [ref=e86]
+            - text: Settings
+          - button [ref=e89] [cursor=pointer]:
+            - img [ref=e90]
+  - generic [ref=e93]:
+    - banner [ref=e94]:
+      - heading "Dashboard" [level=1] [ref=e95]
+      - button [ref=e97] [cursor=pointer]:
+        - img [ref=e98]
+    - main [ref=e101]:
+      - generic [ref=e102]:
+        - generic [ref=e103]:
+          - heading "Dashboard" [level=1] [ref=e104]
+          - paragraph [ref=e105]: Test execution overview and statistics
+        - generic [ref=e106]:
+          - generic [ref=e107]:
+            - generic [ref=e108]:
+              - heading "Total Test Runs" [level=3] [ref=e109]
+              - img [ref=e110]
+            - generic [ref=e112]:
+              - generic [ref=e113]: "0"
+              - paragraph [ref=e114]: 0 currently running
+          - generic [ref=e115]:
+            - generic [ref=e116]:
+              - heading "Average Pass Rate" [level=3] [ref=e117]
+              - img [ref=e118]
+            - generic [ref=e121]:
+              - generic [ref=e122]: 0.0%
+              - paragraph [ref=e123]: +2.5% from last week
+          - generic [ref=e124]:
+            - generic [ref=e125]:
+              - heading "Total Tests" [level=3] [ref=e126]
+              - img [ref=e127]
+            - generic [ref=e130]:
+              - generic [ref=e131]: "0"
+              - paragraph [ref=e132]: 0 passed, 0 failed
+          - generic [ref=e133]:
+            - generic [ref=e134]:
+              - heading "Completed Runs" [level=3] [ref=e135]
+              - img [ref=e136]
+            - generic [ref=e139]:
+              - generic [ref=e140]: "0"
+              - paragraph [ref=e141]: Out of 0 total runs
+        - generic [ref=e142]:
+          - generic [ref=e143]:
+            - generic [ref=e144]:
+              - heading "Test Results Distribution" [level=3] [ref=e145]
+              - paragraph [ref=e146]: Overview of test execution results
+            - application [ref=e150]
+          - generic [ref=e151]:
+            - generic [ref=e152]:
+              - heading "Pass Rate Trend" [level=3] [ref=e153]
+              - paragraph [ref=e154]: Test execution trends over time
+            - generic [ref=e157]:
+              - list [ref=e159]:
+                - listitem [ref=e160]:
+                  - img "Pass Rate % legend icon" [ref=e161]
+                  - text: Pass Rate %
+              - application [ref=e163]
+        - generic [ref=e170]:
+          - heading "Recent Test Runs" [level=3] [ref=e171]
+          - paragraph [ref=e172]: Latest test executions

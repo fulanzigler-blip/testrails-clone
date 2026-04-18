@@ -1,0 +1,502 @@
+- generic [ref=e3]:
+  - link "Exclusive Limited-Time FREE – Don't Miss Out!" [ref=e6] [cursor=pointer]:
+    - /url: https://www.testsprite.com/pricing
+    - paragraph [ref=e8]: Exclusive Limited-Time FREE – Don't Miss Out!
+  - link [ref=e17] [cursor=pointer]:
+    - /url: https://www.testsprite.com/
+  - generic [ref=e25]:
+    - heading "10x your AI-native dev speed with our autonomous AI testing agent handling verification." [level=1] [ref=e30]
+    - generic [ref=e33]:
+      - generic [ref=e34]:
+        - paragraph [ref=e37]: The missing layer of the agentic workflow.
+        - paragraph [ref=e39]: Eliminate manual bottlenecks and let our autonomous AI testing agent transform your CI/CD into a high-velocity engine.
+      - generic [ref=e40]:
+        - link "Get Started Free" [ref=e43] [cursor=pointer]:
+          - /url: https://www.testsprite.com/auth/cognito/sign-up
+          - paragraph [ref=e45]: Get Started Free
+        - paragraph [ref=e50] [cursor=pointer]: Watch Video
+  - generic [ref=e120]:
+    - paragraph [ref=e123]: // Trusted by high-velocity engineering teams worldwide.
+    - group [ref=e125]:
+      - listitem [ref=e126]
+      - listitem [ref=e129]
+      - listitem [ref=e132]
+      - listitem [ref=e135]
+      - listitem [ref=e138]
+      - listitem [ref=e141]
+      - listitem [ref=e144]
+      - listitem [ref=e147]
+      - listitem [ref=e150]
+      - listitem [ref=e153]
+      - listitem [ref=e156]
+      - listitem [ref=e159]
+      - listitem [ref=e162]
+      - listitem [ref=e165]
+      - listitem [ref=e168]
+      - listitem [ref=e171]
+      - listitem [ref=e174]
+      - listitem [ref=e177]
+      - listitem [ref=e180]
+      - listitem [ref=e183]
+  - generic [ref=e190]:
+    - generic [ref=e191]:
+      - heading "Built for your" [level=3] [ref=e193]
+      - heading "AI-native development stack." [level=3] [ref=e195]
+      - generic [ref=e196]:
+        - heading "Simple" [level=3] [ref=e199]
+        - heading "to connect." [level=3] [ref=e203]
+    - generic [ref=e204]:
+      - generic [ref=e205]:
+        - link [ref=e206] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+        - link [ref=e207] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+        - link [ref=e208] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+        - link [ref=e209] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+        - link [ref=e210] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+      - generic [ref=e213]:
+        - link [ref=e214] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+        - link [ref=e215] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/getting-started/installation#trae
+        - link [ref=e217] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/getting-started/installation#claude-code
+        - link [ref=e219] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/getting-started/installation#vscode
+        - link [ref=e221] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+      - generic [ref=e224]:
+        - link [ref=e225] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+        - link [ref=e226] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/getting-started/installation#cursor
+        - link [ref=e228] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/getting-started/installation#other-ides
+        - link [ref=e230] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+      - generic [ref=e233]:
+        - link [ref=e234] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+        - link [ref=e235] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/getting-started/installation#antigravity
+        - link "And More" [ref=e237] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#other-ides
+          - paragraph [ref=e239]: And More
+        - link [ref=e240] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+      - generic [ref=e243]:
+        - link [ref=e244] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+        - link [ref=e245] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+        - link [ref=e246] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+        - link [ref=e247] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+        - link [ref=e248] [cursor=pointer]:
+          - /url: https://docs.testsprite.com/mcp/installation#trae
+  - generic [ref=e255]:
+    - generic [ref=e259]:
+      - generic [ref=e264]:
+        - generic [ref=e268]:
+          - heading "Andrew Ng" [level=6] [ref=e270]
+          - paragraph [ref=e272]: DeepLearning.AI
+        - heading "Agentic coding systems accelerate development but are also unreliable. Agentic testing — where you ask AI to write tests and check your code against them — is helping." [level=6] [ref=e276]
+      - generic [ref=e280]:
+        - generic [ref=e283]:
+          - generic [ref=e287]:
+            - heading "Andrej Karpathy" [level=6] [ref=e289]
+            - paragraph [ref=e291]: AI Researcher
+          - heading "Don't tell it (LLMs) what to do, give it success criteria and watch it go. Get it to write tests first and then pass them. Put it in the loop with a browser MCP." [level=6] [ref=e295]
+        - generic [ref=e301]:
+          - generic [ref=e305]:
+            - heading "Boris Cherny" [level=6] [ref=e307]
+            - paragraph [ref=e309]: Claude Code
+          - heading "Probably the most important thing to get great results out of Claude Code -- give Claude a way to verify its work. If Claude has that feedback loop, it will 2-3x the quality of the final result." [level=6] [ref=e313]
+    - heading "TestSprite is the autonomous verification layer the industry needs." [level=4] [ref=e321]
+  - generic [ref=e325]:
+    - generic [ref=e326]:
+      - heading "The Autonomous" [level=2] [ref=e328]
+      - generic [ref=e329]:
+        - heading "Feedback" [level=2] [ref=e331]
+        - heading "Loop" [level=2] [ref=e334]
+    - paragraph [ref=e338]: TestSprite turns AI-generated code into production-ready software through continuous, agentic verification.
+  - generic [ref=e340]:
+    - generic [ref=e348]:
+      - heading "01 // Understand Intent" [level=6] [ref=e351]
+      - paragraph [ref=e353]: Instantly parse PRDs or infer requirements directly from the codebase via MCP server. TestSprite ensures your testing logic is always aligned with your true product goals.
+    - generic [ref=e371]:
+      - heading "02 // Verify Functionality & Usability" [level=6] [ref=e374]
+      - paragraph [ref=e376]: Deploy ephemeral cloud sandboxes to rigorously validate UI flows, API logic, and complex edge cases. Ensure your code performs exactly as intended before it ever reaches a human reviewer.
+    - generic [ref=e394]:
+      - heading "03 // Autonomous Patching" [level=6] [ref=e397]
+      - paragraph [ref=e399]: Deliver pinpoint feedback and fix recommendations directly to your coding agent (Cursor, Claude Code, etc.). Close the loop with code that repairs its own functional bugs without manual intervention.
+  - generic [ref=e424]:
+    - generic [ref=e426]:
+      - heading "Ensure Engineering Certainty for Production" [level=2] [ref=e430]
+      - link "Get Started Free" [ref=e434] [cursor=pointer]:
+        - /url: https://www.testsprite.com/auth/cognito/sign-up
+        - paragraph [ref=e436]: Get Started Free
+    - generic [ref=e464]:
+      - generic [ref=e465]:
+        - generic [ref=e467]:
+          - heading "No-Code Test Refinement" [level=6] [ref=e469]
+          - paragraph [ref=e471]: Streamline test maintenance with intuitive management tools. Quickly edit interactions through a visual interface and prioritize key user journeys to keep pace with your evolving app.
+        - generic [ref=e480]:
+          - heading "Zero-Overhead Automation" [level=6] [ref=e482]
+          - paragraph [ref=e484]: Automate your testing culture with zero friction. Get instant, actionable feedback delivered directly to your PR to ensure every deployment is production-ready.
+      - generic [ref=e489]:
+        - generic [ref=e491]:
+          - heading "Unified Batch Generation" [level=6] [ref=e493]
+          - paragraph [ref=e495]: One-click generation for total stack coverage. Simultaneously create frontend, backend to validate your entire ecosystem with unprecedented speed and accuracy.
+        - generic [ref=e498]:
+          - generic [ref=e499]:
+            - heading "Open Community Access" [level=6] [ref=e501]
+            - paragraph [ref=e503]: Join 100k+ developers building the future of AI-native software with our accessible Community Edition.
+          - generic [ref=e507]:
+            - group [ref=e509]:
+              - listitem [ref=e510]:
+                - paragraph [ref=e513]: AI-generated tests
+              - listitem [ref=e514]:
+                - paragraph [ref=e517]: Backend API testing
+              - listitem [ref=e518]:
+                - paragraph [ref=e521]: Frontend UI testing
+            - group [ref=e523]:
+              - listitem [ref=e524]:
+                - paragraph [ref=e527]: AI-generated tests
+              - listitem [ref=e528]:
+                - paragraph [ref=e531]: Backend API testing
+              - listitem [ref=e532]:
+                - paragraph [ref=e535]: Frontend UI testing
+        - generic [ref=e540]:
+          - heading "Continuous Regression Guardrails" [level=6] [ref=e542]
+          - paragraph [ref=e544]: Automatically re-verify your system on a schedule to detect regressions early and maintain 24/7 reliability.
+  - generic [ref=e547]:
+    - generic [ref=e548]:
+      - generic [ref=e549]:
+        - paragraph [ref=e553]: Boost Accuracy
+        - paragraph [ref=e556]: 121%
+      - generic [ref=e557]:
+        - heading "Scale Quality with" [level=2] [ref=e559]
+        - heading "Agentic Precision" [level=2] [ref=e561]
+        - paragraph [ref=e563]: Close the gap between code generation and production. Move from meeting 42% of requirements to 93% autonomous feature delivery through continuous verification.
+    - generic [ref=e565]:
+      - generic [ref=e566]:
+        - paragraph [ref=e569]: With Coding Agent Only
+        - group [ref=e574]:
+          - listitem [ref=e575]
+          - listitem [ref=e579]
+          - listitem [ref=e583]
+          - listitem [ref=e587]
+          - listitem [ref=e591]
+          - listitem [ref=e595]
+      - generic [ref=e599]:
+        - paragraph [ref=e603]: With TestSprite
+        - group [ref=e611]:
+          - listitem [ref=e612]
+          - listitem [ref=e616]
+          - listitem [ref=e620]
+          - listitem [ref=e624]
+          - listitem [ref=e628]
+          - listitem [ref=e632]
+      - generic [ref=e637]:
+        - generic [ref=e638]:
+          - paragraph [ref=e640]: 42%
+          - paragraph [ref=e642]: 93%
+        - paragraph [ref=e644]: Features Delivered
+  - generic [ref=e658]:
+    - generic [ref=e660]:
+      - generic [ref=e662]:
+        - heading "Discover Projects" [level=2] [ref=e665]
+        - paragraph [ref=e667]: Explore what others are building with TestSprite (Open Source)
+      - link "View All" [ref=e671] [cursor=pointer]:
+        - /url: https://www.testsprite.com/discover
+        - paragraph [ref=e673]: View All
+    - generic [ref=e674]:
+      - link "Creator Skill Generator Creator Skill Generator turns creator content into reusable AI skills. @YASH" [ref=e676] [cursor=pointer]:
+        - /url: https://github.com/yashwanth-3000/creator-skill-generator
+        - generic [ref=e681]:
+          - heading "Creator Skill Generator" [level=6] [ref=e683]
+          - paragraph [ref=e685]: Creator Skill Generator turns creator content into reusable AI skills.
+        - generic [ref=e686]:
+          - heading "@YASH" [level=6] [ref=e692]
+          - link [ref=e695]:
+            - /url: https://github.com/yashwanth-3000/creator-skill-generator
+      - link "Sharetopus Post once, share everywhere @INTERFERON" [ref=e697] [cursor=pointer]:
+        - /url: https://github.com/Andy00L/sharetopus
+        - generic [ref=e702]:
+          - heading "Sharetopus" [level=6] [ref=e704]
+          - paragraph [ref=e706]: Post once, share everywhere
+        - generic [ref=e707]:
+          - heading "@INTERFERON" [level=6] [ref=e713]
+          - link [ref=e716]:
+            - /url: https://github.com/Andy00L/sharetopus
+      - link "Text2Form AI Build beautiful forms and quizzes in seconds using natural language. @ayush17_08" [ref=e718] [cursor=pointer]:
+        - /url: https://github.com/ayush002jha/Text2Form
+        - generic [ref=e723]:
+          - heading "Text2Form AI" [level=6] [ref=e725]
+          - paragraph [ref=e727]: Build beautiful forms and quizzes in seconds using natural language.
+        - generic [ref=e728]:
+          - heading "@ayush17_08" [level=6] [ref=e734]
+          - link [ref=e737]:
+            - /url: https://github.com/ayush002jha/Text2Form
+      - link "MeetOps MeetOps is a modern, production-grade workplace operations SaaS platform designed to help organizations manage meeting rooms, prevent scheduling conflicts, and streamline meeting workflows through a centralized booking system. Built with scalability and user experience in mind, it provides a seamless interface for teams to collaborate without the friction of double-bookings or lost schedules. @JitPlaiez" [ref=e739] [cursor=pointer]:
+        - /url: https://github.com/Debjitds/MeetOps.git
+        - generic [ref=e744]:
+          - heading "MeetOps" [level=6] [ref=e746]
+          - paragraph [ref=e748]: MeetOps is a modern, production-grade workplace operations SaaS platform designed to help organizations manage meeting rooms, prevent scheduling conflicts, and streamline meeting workflows through a centralized booking system. Built with scalability and user experience in mind, it provides a seamless interface for teams to collaborate without the friction of double-bookings or lost schedules.
+        - generic [ref=e749]:
+          - heading "@JitPlaiez" [level=6] [ref=e755]
+          - link [ref=e758]:
+            - /url: https://github.com/Debjitds/MeetOps.git
+      - link "war room WAR ROOM is an immersive, multi-agent AI crisis simulation platform. Users take on the role of the \"Chairman\" or \"Director,\" navigating high-stakes, dynamically generated scenarios by orchestrating a team of specialized AI advisors. @Okey" [ref=e760] [cursor=pointer]:
+        - /url: https://github.com/OkeyAmy/war-room-aws
+        - generic [ref=e765]:
+          - heading "war room" [level=6] [ref=e767]
+          - paragraph [ref=e769]: WAR ROOM is an immersive, multi-agent AI crisis simulation platform. Users take on the role of the "Chairman" or "Director," navigating high-stakes, dynamically generated scenarios by orchestrating a team of specialized AI advisors.
+        - generic [ref=e770]:
+          - heading "@Okey" [level=6] [ref=e776]
+          - link [ref=e779]:
+            - /url: https://github.com/OkeyAmy/war-room-aws
+      - link "ReelMatrix AI Video Content Strategist for DevTools @harryzhang2595" [ref=e781] [cursor=pointer]:
+        - /url: https://github.com/HarryZ66/TS-Hackathon-HZ-DL/
+        - generic [ref=e786]:
+          - heading "ReelMatrix" [level=6] [ref=e788]
+          - paragraph [ref=e790]: AI Video Content Strategist for DevTools
+        - generic [ref=e791]:
+          - heading "@harryzhang2595" [level=6] [ref=e797]
+          - link [ref=e800]:
+            - /url: https://github.com/HarryZ66/TS-Hackathon-HZ-DL/
+      - link "SAIZU Analyze and compare npm packages and GitHub repositories — blazingly fast, built with Bun & Hono. @Logan" [ref=e802] [cursor=pointer]:
+        - /url: https://github.com/Kode-Kult/saizu
+        - generic [ref=e807]:
+          - heading "SAIZU" [level=6] [ref=e809]
+          - paragraph [ref=e811]: Analyze and compare npm packages and GitHub repositories — blazingly fast, built with Bun & Hono.
+        - generic [ref=e812]:
+          - heading "@Logan" [level=6] [ref=e818]
+          - link [ref=e821]:
+            - /url: https://github.com/Kode-Kult/saizu
+      - link "DeepVizify Transform Your Data Into Actionable Insights Upload CSV, Excel, JSON or connect Google Sheets. Get AI-powered insights, beautiful visualizations, and accurate forecasts in minutes — no coding required. @deepvizify" [ref=e823] [cursor=pointer]:
+        - /url: https://github.com/deepvizify/deepvizify/tree/main
+        - generic [ref=e828]:
+          - heading "DeepVizify" [level=6] [ref=e830]
+          - paragraph [ref=e832]: Transform Your Data Into Actionable Insights Upload CSV, Excel, JSON or connect Google Sheets. Get AI-powered insights, beautiful visualizations, and accurate forecasts in minutes — no coding required.
+        - generic [ref=e833]:
+          - heading "@deepvizify" [level=6] [ref=e839]
+          - link [ref=e842]:
+            - /url: https://github.com/deepvizify/deepvizify/tree/main
+  - generic [ref=e847]:
+    - generic [ref=e848]:
+      - generic [ref=e849]:
+        - heading "Take Flight with TestSprite." [level=2] [ref=e851]:
+          - text: Take Flight
+          - text: with TestSprite.
+        - paragraph [ref=e853]: "Organizations and developers worldwide use TestSprite's AI to save effort, launch faster, and focus on what matters most: building high-quality software."
+      - generic [ref=e854]:
+        - generic [ref=e855]:
+          - paragraph [ref=e857]: 100,000+
+          - paragraph [ref=e859]: community members
+        - generic [ref=e860]:
+          - paragraph [ref=e862]: 50,000+
+          - paragraph [ref=e864]: developers & teams onboarded
+    - generic [ref=e865]:
+      - link "Get Started Today Get started today—sign up and explore what we have to offer." [ref=e868]:
+        - /url: https://www.testsprite.com/auth/cognito/sign-up
+        - generic [ref=e873]:
+          - heading "Get Started Today" [level=6] [ref=e875]
+          - paragraph [ref=e877]: Get started today—sign up and explore what we have to offer.
+      - link "Join Discord Join our Discord community to connect, chat, and stay updated." [ref=e881]:
+        - /url: https://discord.com/invite/GXWFjCe4an
+        - generic [ref=e886]:
+          - heading "Join Discord" [level=6] [ref=e888]
+          - paragraph [ref=e890]: Join our Discord community to connect, chat, and stay updated.
+      - link "Enterprise Needs Book a call with us to discuss your needs and ask questions." [ref=e894]:
+        - /url: https://calendly.com/contact-hmul/schedule
+        - generic [ref=e899]:
+          - heading "Enterprise Needs" [level=6] [ref=e901]
+          - paragraph [ref=e903]: Book a call with us to discuss your needs and ask questions.
+  - generic [ref=e931]:
+    - heading "The New Way to Validate Software." [level=2] [ref=e937]:
+      - text: The New Way
+      - text: to Validate Software.
+    - group [ref=e940]:
+      - listitem [ref=e941]:
+        - generic [ref=e943]:
+          - paragraph [ref=e947]: Good job! Pretty cool MCP from TestSprite team! AI coding + AI testing helps you build better software easily!
+          - generic [ref=e948]:
+            - img "John Fisher - Unsplash" [ref=e951]
+            - generic [ref=e952]:
+              - paragraph [ref=e954]: Trae Team
+              - paragraph [ref=e956]: ByteDance - Trae AI
+      - listitem [ref=e960]:
+        - generic [ref=e962]:
+          - paragraph [ref=e966]: TestSprite’s automation has been invaluable in detecting hard-to-find issues. API testing is crucial to our product. Its comprehensive coverage gives us confidence to release updates without concerns of breaking the backend.
+          - generic [ref=e967]:
+            - img "John Fisher - Unsplash" [ref=e970]
+            - generic [ref=e971]:
+              - paragraph [ref=e973]: Malcolm Y.
+              - paragraph [ref=e975]: Co-founder - Genrex
+      - listitem [ref=e979]:
+        - generic [ref=e981]:
+          - paragraph [ref=e985]: TestSprite's user-friendly interface made it easy to set everything up. The simplicity of the onboarding process really sets TestSprite apart from other tools we’ve used in the past.
+          - generic [ref=e986]:
+            - img "John Fisher - Unsplash" [ref=e989]
+            - generic [ref=e990]:
+              - paragraph [ref=e992]: Jeffery Z.
+              - paragraph [ref=e994]: Managing Partner - Princeton Pharmatech
+      - listitem [ref=e998]:
+        - generic [ref=e1000]:
+          - paragraph [ref=e1004]: TestSprite saves us time and money. Our engineering team can now automate Q/A and get real-time results, enabling our team to ship faster.
+          - generic [ref=e1005]:
+            - img "John Fisher - Unsplash" [ref=e1008]
+            - generic [ref=e1009]:
+              - paragraph [ref=e1011]: Michel F.
+              - paragraph [ref=e1013]: Founder - Astronuts
+      - listitem [ref=e1017]:
+        - generic [ref=e1019]:
+          - paragraph [ref=e1023]: TestSprite’s automation capabilities save us hours of manual work. The detailed reports help us catch and resolve issues earlier in the development process.
+          - generic [ref=e1024]:
+            - img "John Fisher - Unsplash" [ref=e1027]
+            - generic [ref=e1028]:
+              - paragraph [ref=e1030]: Jakub K.
+              - paragraph [ref=e1032]: Founder - Parcel AI
+      - listitem [ref=e1036]:
+        - generic [ref=e1038]:
+          - paragraph [ref=e1042]: TestSprite offers rich test case generation, clear structure, and easy-to-read code. It also supports simple online debugging with the ability to quickly expand by generating new test cases.
+          - generic [ref=e1043]:
+            - img "John Fisher - Unsplash" [ref=e1046]
+            - generic [ref=e1047]:
+              - paragraph [ref=e1049]: Bo L.
+              - paragraph [ref=e1051]: QA Engineer - Luckin Coffee
+  - generic [ref=e1056]:
+    - heading "Recent News" [level=2] [ref=e1059]
+    - generic [ref=e1061]:
+      - link "TestSprite Co-Hosted Hackathon... We just wrapped an incredible, high-intensity session at the AWS Build..." [ref=e1063] [cursor=pointer]:
+        - /url: https://www.linkedin.com/posts/testsprite_we-just-wrapped-an-incredible-high-intensity-activity-7432197677167067136-AZ47?utm_source=share&utm_medium=member_desktop&rcm=ACoAACk_f6IBjR_UsxVrbEGVYZ7NwsesOR7XRUE
+        - generic [ref=e1067]:
+          - heading "TestSprite Co-Hosted Hackathon..." [level=6] [ref=e1069]
+          - paragraph [ref=e1071]: We just wrapped an incredible, high-intensity session at the AWS Build...
+      - link "Seattle startup TestSprite rais... The Seattle startup announced $6.7 million in seed funding to expa..." [ref=e1073] [cursor=pointer]:
+        - /url: https://www.geekwire.com/2025/seattle-startup-testsprite-raises-6-7m-to-become-testing-backbone-for-ai-generated-code/
+        - generic [ref=e1077]:
+          - heading "Seattle startup TestSprite rais..." [level=6] [ref=e1079]
+          - paragraph [ref=e1081]: The Seattle startup announced $6.7 million in seed funding to expa...
+      - 'link "TestSprite Ranks #1 on Product Hunt Thanks to our incredible community, TestSprite is now the No.1 Product..." [ref=e1083] [cursor=pointer]':
+        - /url: https://www.linkedin.com/posts/testsprite_ai-devtools-startups-activity-7292779961843691520-F9iQ?utm_source=share&utm_medium=member_desktop&rcm=ACoAACk_f6IBjR_UsxVrbEGVYZ7NwsesOR7XRUE
+        - generic [ref=e1087]:
+          - 'heading "TestSprite Ranks #1 on Product Hunt" [level=6] [ref=e1089]'
+          - paragraph [ref=e1091]: Thanks to our incredible community, TestSprite is now the No.1 Product...
+    - link "More" [ref=e1092] [cursor=pointer]:
+      - /url: https://www.testsprite.com/blog
+      - paragraph [ref=e1094]: More
+  - generic [ref=e1098]:
+    - heading "Frequently Asked Questions" [level=2] [ref=e1102]
+    - generic [ref=e1105]:
+      - generic [ref=e1107]:
+        - heading "What’s AI Testing?" [level=6] [ref=e1110] [cursor=pointer]
+        - paragraph [ref=e1116]: AI software testing uses artificial intelligence to automate the entire QA process — generating, executing, and maintaining test cases across your application. Instead of writing manual scripts, AI testing tools like TestSprite learn your system, simulate real user behavior, and automatically surface bugs that traditional testing might overlook.
+      - heading "What’s the most powerful AI testing tool?" [level=6] [ref=e1121] [cursor=pointer]
+      - heading "Who is TestSprite designed for?" [level=6] [ref=e1129] [cursor=pointer]
+      - heading "Will TestSprite integrate with existing test tools and CI/CD processes?" [level=6] [ref=e1137] [cursor=pointer]
+      - heading "How broad are testing capabilities?" [level=6] [ref=e1145] [cursor=pointer]
+      - heading "What Dev environments do you support?" [level=6] [ref=e1153] [cursor=pointer]
+      - heading "What test/QA support is available?" [level=6] [ref=e1161] [cursor=pointer]
+      - heading "How does TestSprite ensure data security?" [level=6] [ref=e1169] [cursor=pointer]
+      - heading "Can I trust the platform?" [level=6] [ref=e1177] [cursor=pointer]
+      - heading "How many projects can I build with TestSprite?" [level=6] [ref=e1185] [cursor=pointer]
+  - generic [ref=e1195]:
+    - heading "Ship With Confidence. Automate Your Testing With AI." [level=3] [ref=e1197]:
+      - text: Ship With Confidence.
+      - text: Automate Your Testing With AI.
+    - generic [ref=e1198]:
+      - link "Get Started Free" [ref=e1201] [cursor=pointer]:
+        - /url: https://www.testsprite.com/auth/cognito/sign-up
+        - paragraph [ref=e1203]: Get Started Free
+      - link "Schedule a Call" [ref=e1206] [cursor=pointer]:
+        - /url: https://calendly.com/contact-hmul/schedule
+        - paragraph [ref=e1208]: Schedule a Call
+  - generic [ref=e1212]:
+    - generic [ref=e1216]:
+      - generic [ref=e1218]:
+        - heading "Stay Updated" [level=5] [ref=e1220]
+        - link "Join Discord" [ref=e1222] [cursor=pointer]:
+          - /url: https://discord.com/invite/GXWFjCe4an
+          - paragraph [ref=e1224]: Join Discord
+      - generic [ref=e1228]:
+        - generic [ref=e1229]:
+          - paragraph [ref=e1231]: Solutions
+          - generic [ref=e1232]:
+            - link "MCP Server" [ref=e1234] [cursor=pointer]:
+              - /url: https://www.testsprite.com/solutions/mcp
+              - heading "MCP Server" [level=6] [ref=e1236]
+            - link "Backend Testing" [ref=e1238] [cursor=pointer]:
+              - /url: https://www.testsprite.com/solutions/backend
+              - heading "Backend Testing" [level=6] [ref=e1240]
+            - link "Frontend Testing" [ref=e1242] [cursor=pointer]:
+              - /url: https://www.testsprite.com/solutions/frontend
+              - heading "Frontend Testing" [level=6] [ref=e1244]
+            - link "Data Testing" [ref=e1246] [cursor=pointer]:
+              - /url: https://calendly.com/contact-hmul/schedule
+              - heading "Data Testing" [level=6] [ref=e1248]
+            - link "AI Agent/Model Testing" [ref=e1250] [cursor=pointer]:
+              - /url: https://calendly.com/contact-hmul/schedule
+              - heading "AI Agent/Model Testing" [level=6] [ref=e1252]
+        - generic [ref=e1253]:
+          - paragraph [ref=e1255]: Resources
+          - generic [ref=e1256]:
+            - link "Docs" [ref=e1258] [cursor=pointer]:
+              - /url: https://docs.testsprite.com/
+              - heading "Docs" [level=6] [ref=e1260]
+            - link "Changlog" [ref=e1262] [cursor=pointer]:
+              - /url: https://www.testsprite.com/changelog
+              - heading "Changlog" [level=6] [ref=e1264]
+            - link "Hackathon" [ref=e1266] [cursor=pointer]:
+              - /url: https://www.testsprite.com/hackathon
+              - heading "Hackathon" [level=6] [ref=e1268]
+            - link "Discover" [ref=e1270] [cursor=pointer]:
+              - /url: https://www.testsprite.com/discover
+              - heading "Discover" [level=6] [ref=e1272]
+        - generic [ref=e1273]:
+          - paragraph [ref=e1275]: Company
+          - generic [ref=e1276]:
+            - link "About" [ref=e1278] [cursor=pointer]:
+              - /url: https://www.testsprite.com/about
+              - heading "About" [level=6] [ref=e1280]
+            - link "Blog" [ref=e1282] [cursor=pointer]:
+              - /url: https://www.testsprite.com/blog
+              - heading "Blog" [level=6] [ref=e1284]
+            - link "Use Cases" [ref=e1286] [cursor=pointer]:
+              - /url: https://www.testsprite.com/use-cases
+              - heading "Use Cases" [level=6] [ref=e1288]
+        - generic [ref=e1289]:
+          - paragraph [ref=e1291]: Legal
+          - generic [ref=e1292]:
+            - link "Terms & Conditions" [ref=e1294] [cursor=pointer]:
+              - /url: https://www.testsprite.com/terms
+              - heading "Terms & Conditions" [level=6] [ref=e1296]
+            - link "Privacy Policy" [ref=e1298] [cursor=pointer]:
+              - /url: https://www.testsprite.com/privacy
+              - heading "Privacy Policy" [level=6] [ref=e1300]
+    - generic [ref=e1316]:
+      - generic [ref=e1317]: Select Language
+      - combobox "Select Language" [ref=e1318]:
+        - option "English" [selected]
+      - generic:
+        - generic:
+          - img
+        - generic: English
+        - generic:
+          - img
+    - paragraph [ref=e1324]: Copyright © 2026 TestSprite
+    - generic [ref=e1327]:
+      - link [ref=e1329] [cursor=pointer]:
+        - /url: https://www.youtube.com/@TestSprite
+      - link [ref=e1331] [cursor=pointer]:
+        - /url: https://x.com/test_sprite?s=21
+      - link [ref=e1333] [cursor=pointer]:
+        - /url: https://discord.com/invite/GXWFjCe4an
+      - link [ref=e1335] [cursor=pointer]:
+        - /url: https://www.linkedin.com/company/testsprite

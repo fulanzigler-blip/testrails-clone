@@ -1,0 +1,18 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - img "Pinang Maksima Logo" [ref=e4]
+      - heading "WEB APPS" [level=1] [ref=e5]
+    - generic [ref=e6]:
+      - heading "Selamat Datang!" [level=1] [ref=e7]
+      - heading "Web Apps ini digunakan untuk OPK, Reviewer dan Pemutus Kredit. Masukkan PN dan Password Anda" [level=4] [ref=e8]
+    - generic [ref=e9]:
+      - paragraph [ref=e10]: Personal Number
+      - spinbutton [ref=e12]
+      - paragraph [ref=e14]: Password
+      - textbox "Masukkan Password" [ref=e16]
+      - button "MASUK" [ref=e19] [cursor=pointer]
+      - generic [ref=e20]:
+        - text: Versi 1.9.1
+        - strong [ref=e21]: STAGING
+  - img "Login Illustration" [ref=e23]

@@ -1,0 +1,204 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "Bank Raya" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img "Bank Raya" [ref=e5]
+      - button [ref=e6] [cursor=pointer]
+  - generic [ref=e18]:
+    - heading "PRODUK RAYA" [level=5] [ref=e19]
+    - heading "Beragam kebutuhan dalam genggaman" [level=2] [ref=e20]
+  - generic [ref=e22]:
+    - generic [ref=e25]:
+      - generic [ref=e26] [cursor=pointer]: Semua
+      - generic [ref=e27] [cursor=pointer]: Simpanan
+      - generic [ref=e28] [cursor=pointer]: Pinjaman Bisnis
+      - generic [ref=e29] [cursor=pointer]: Pinjaman Personal
+      - generic [ref=e30] [cursor=pointer]: Lainnya
+    - generic [ref=e34]:
+      - generic [ref=e36]:
+        - img "Saku Raya" [ref=e37]
+        - generic [ref=e38]:
+          - generic [ref=e39]:
+            - heading "Saku Raya" [level=5] [ref=e40]
+            - paragraph [ref=e41]: Praktis kelola keuangan secara digital dengan berbagai Saku yang diinginkan
+          - link "Lihat Detail" [ref=e42] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/saku-raya
+      - generic [ref=e44]:
+        - img "Saku Bujet" [ref=e45]
+        - generic [ref=e46]:
+          - generic [ref=e47]:
+            - heading "Saku Bujet" [level=5] [ref=e48]
+            - paragraph [ref=e49]: Bujetin pengeluaran jadi gampang buat penuhi berbagai kebutuhan
+          - link "Lihat Detail" [ref=e50] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/saku-bujet
+      - generic [ref=e52]:
+        - img "Saku Pintar" [ref=e53]
+        - generic [ref=e54]:
+          - generic [ref=e55]:
+            - heading "Saku Pintar" [level=5] [ref=e56]
+            - paragraph [ref=e57]: Nabung otomatis untuk wujudkan impian jadi kenyataan
+          - link "Lihat Detail" [ref=e58] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/saku-pintar
+      - generic [ref=e60]:
+        - img "Saku Jaga" [ref=e61]
+        - generic [ref=e62]:
+          - generic [ref=e63]:
+            - heading "Saku Jaga" [level=5] [ref=e64]
+            - paragraph [ref=e65]: Persiapan biar tetap siaga dari hal-hal tak terduga
+          - link "Lihat Detail" [ref=e66] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/saku-jaga
+      - generic [ref=e68]:
+        - img "Saku Bareng" [ref=e69]
+        - generic [ref=e70]:
+          - generic [ref=e71]:
+            - heading "Saku Bareng" [level=5] [ref=e72]
+            - paragraph [ref=e73]: Nabung Bareng hingga 300 orang tak perlu khawatir! Gunakan Saku Bareng dari Bank Raya untuk solusi keuangan komunitas & perkumpulan Anda. Download sekarang!
+          - link "Lihat Detail" [ref=e74] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/saku-bareng
+      - generic [ref=e76]:
+        - img "Saku Bisnis" [ref=e77]
+        - generic [ref=e78]:
+          - generic [ref=e79]:
+            - heading "Saku Bisnis" [level=5] [ref=e80]
+            - paragraph [ref=e81]: Kelola keuangan bisnis jadi lebih mudah dengan Saku Bisnis. Download Bank Raya sekarang dan gunakan saku bisnis untuk solusi keuangan yang cepat dan aman
+          - link "Lihat Detail" [ref=e82] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/saku-bisnis
+      - generic [ref=e84]:
+        - img "Pinang Flexi" [ref=e85]
+        - generic [ref=e86]:
+          - generic [ref=e87]:
+            - heading "Pinang Flexi" [level=5] [ref=e88]
+            - paragraph [ref=e89]: Pinjaman multiguna cepat & tanpa agunan untuk kamu Kawan Raya!
+          - link "Lihat Detail" [ref=e90] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/pinang-flexi
+      - generic [ref=e92]:
+        - img "Pinang Flexi Extra" [ref=e93]
+        - generic [ref=e94]:
+          - generic [ref=e95]:
+            - heading "Pinang Flexi Extra" [level=5] [ref=e96]
+            - paragraph [ref=e97]: Pinjaman untuk karyawan tetap dengan bunga kompetitif!
+          - link "Lihat Detail" [ref=e98] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/pinang-flexi-extra
+      - generic [ref=e100]:
+        - img "Pinang Maksima" [ref=e101]
+        - generic [ref=e102]:
+          - generic [ref=e103]:
+            - heading "Pinang Maksima" [level=5] [ref=e104]
+            - paragraph [ref=e105]: Maksimalkan potensi usahamu dengan bantuan Pinang Maksima!
+          - link "Lihat Detail" [ref=e106] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/pinang-maksima
+      - generic [ref=e108]:
+        - img "Pinang Performa" [ref=e109]
+        - generic [ref=e110]:
+          - generic [ref=e111]:
+            - heading "Pinang Performa" [level=5] [ref=e112]
+            - paragraph [ref=e113]: Tingkatkan skala bisnis kamu dengan Pinang Performa!
+          - link "Lihat Detail" [ref=e114] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/pinang-performa
+      - generic [ref=e116]:
+        - img "Pinang Dana Talangan" [ref=e117]
+        - generic [ref=e118]:
+          - generic [ref=e119]:
+            - heading "Pinang Dana Talangan" [level=5] [ref=e120]
+            - paragraph [ref=e121]: Pinjaman produktif untuk kembangkan usaha keagenan
+          - link "Lihat Detail" [ref=e122] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/pinang-dana-talangan
+      - generic [ref=e124]:
+        - img "QRIS Bisnis" [ref=e125]
+        - generic [ref=e126]:
+          - generic [ref=e127]:
+            - heading "QRIS Bisnis" [level=5] [ref=e128]
+            - paragraph [ref=e129]: Kembangkan bisnis makin maksimal bersama QRIS Bisnis Bank Raya
+          - link "Lihat Detail" [ref=e130] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/qris-bisnis
+      - generic [ref=e132]:
+        - img "Raya Paylater" [ref=e133]
+        - generic [ref=e134]:
+          - generic [ref=e135]:
+            - heading "Raya Paylater" [level=5] [ref=e136]
+            - paragraph [ref=e137]: Bayar QRIS lebih praktis dengan Raya PayLater
+          - link "Lihat Detail" [ref=e138] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/raya-paylater
+      - generic [ref=e140]:
+        - img "Uang Saku" [ref=e141]
+        - generic [ref=e142]:
+          - generic [ref=e143]:
+            - heading "Uang Saku" [level=5] [ref=e144]
+            - paragraph [ref=e145]: Atur Keuangan Anak Sejak Dini dengan Uang Saku
+          - link "Lihat Detail" [ref=e146] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/detail/uang-saku
+  - generic [ref=e155]:
+    - heading "Riplay Umum" [level=5] [ref=e156]
+    - heading "Ringkasan Informasi Produk dan Layanan Bank Raya Versi Umum" [level=5] [ref=e157]
+    - link "Selengkapnya" [ref=e158] [cursor=pointer]:
+      - /url: https://bankraya.co.id/riplay/semua
+  - navigation [ref=e159]:
+    - generic [ref=e162]:
+      - generic [ref=e163]:
+        - link "Bank Raya" [ref=e164] [cursor=pointer]:
+          - /url: /
+          - img "Bank Raya" [ref=e165]
+        - paragraph [ref=e166]: PT Bank Raya Indonesia Tbk berizin dan diawasi Otoritas Jasa Keuangan dan Bank Indonesia Serta merupakan peserta penjaminan LPS
+        - generic [ref=e168]:
+          - generic [ref=e169]: Download Aplikasi Bank Raya
+          - list [ref=e170]:
+            - listitem [ref=e171]:
+              - link "Google Play" [ref=e172] [cursor=pointer]:
+                - /url: https://play.google.com/store/apps/details?id=id.co.bankraya.apps
+                - img "Google Play" [ref=e173]
+            - listitem [ref=e174]:
+              - link "App Store" [ref=e175] [cursor=pointer]:
+                - /url: https://apps.apple.com/id/app/raya-digital-bank/id1627393834
+                - img "App Store" [ref=e176]
+      - generic [ref=e177]:
+        - paragraph [ref=e178]:
+          - strong [ref=e179]: Akses Cepat
+        - paragraph [ref=e180]:
+          - link "Produk" [ref=e181] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure
+        - paragraph [ref=e182]:
+          - link "Promo" [ref=e183] [cursor=pointer]:
+            - /url: https://bankraya.co.id/promo
+        - paragraph [ref=e184]:
+          - link "FAQ" [ref=e185] [cursor=pointer]:
+            - /url: https://bankraya.co.id/help/faq
+      - generic [ref=e186]:
+        - paragraph [ref=e187]:
+          - strong [ref=e188]: Perusahaan
+        - paragraph [ref=e189]:
+          - link "Laporan Keuangan" [ref=e190] [cursor=pointer]:
+            - /url: https://bankraya.co.id/corporate/reports
+        - paragraph [ref=e191]:
+          - link "Hubungan Investor" [ref=e192] [cursor=pointer]:
+            - /url: https://bankraya.co.id/corporate/investor-relations
+      - generic [ref=e193]:
+        - paragraph [ref=e194]:
+          - strong [ref=e195]: Bantuan
+        - paragraph [ref=e196]:
+          - link "Kontak Kami" [ref=e197] [cursor=pointer]:
+            - /url: https://bankraya.co.id/help/contact-us
+        - paragraph [ref=e198]:
+          - img "Sapa Raya" [ref=e199]
+        - paragraph [ref=e200]:
+          - strong [ref=e201]: Sosial Media Kami
+        - paragraph [ref=e202]:
+          - link "Instagram" [ref=e203] [cursor=pointer]:
+            - /url: https://www.instagram.com/bankraya/
+            - img "Instagram" [ref=e204]
+          - link "Tiktok" [ref=e205] [cursor=pointer]:
+            - /url: https://www.tiktok.com/@bankraya.id
+            - img "Tiktok" [ref=e206]
+          - link "Facebook" [ref=e207] [cursor=pointer]:
+            - /url: https://www.facebook.com/people/Bank-Raya/100073463563889/
+            - img "Facebook" [ref=e208]
+          - link "Linkedin" [ref=e209] [cursor=pointer]:
+            - /url: https://id.linkedin.com/company/pt-bank-raya-indonesia-tbk
+            - img "Linkedin" [ref=e210]
+          - link "Youtube" [ref=e211] [cursor=pointer]:
+            - /url: https://www.youtube.com/channel/UCnpbUrNPUQOHleOIIvhCG_g/featured
+            - img "Youtube" [ref=e212]
+    - generic [ref=e214]:
+      - generic [ref=e216]: © 2026 PT Bank Raya Indonesia Tbk. | All Rights Reserved.
+      - link "Pemberitahuan Privasi" [ref=e218] [cursor=pointer]:
+        - /url: https://bankraya.co.id/privacy-notice

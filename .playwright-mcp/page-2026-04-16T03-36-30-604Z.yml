@@ -1,0 +1,728 @@
+- generic [ref=e5]:
+  - complementary [ref=e6]:
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - img [ref=e9]
+        - generic [ref=e11]: TestRails
+      - button "New Test Run" [ref=e13] [cursor=pointer]:
+        - img [ref=e14]
+        - text: New Test Run
+      - navigation [ref=e15]:
+        - link "Dashboard" [ref=e16] [cursor=pointer]:
+          - /url: /
+          - img [ref=e17]
+          - text: Dashboard
+        - link "Projects" [ref=e22] [cursor=pointer]:
+          - /url: /projects
+          - img [ref=e23]
+          - text: Projects
+        - link "Test Cases" [ref=e25] [cursor=pointer]:
+          - /url: /test-cases
+          - img [ref=e26]
+          - text: Test Cases
+        - link "Test Runs" [ref=e28] [cursor=pointer]:
+          - /url: /test-runs
+          - img [ref=e29]
+          - text: Test Runs
+        - link "Test Suites" [ref=e31] [cursor=pointer]:
+          - /url: /test-suites
+          - img [ref=e32]
+          - text: Test Suites
+        - link "Page Automation" [ref=e37] [cursor=pointer]:
+          - /url: /page-automation
+          - img [ref=e38]
+          - text: Page Automation
+        - link "Visual Test Builder" [ref=e40] [cursor=pointer]:
+          - /url: /visual-test-builder
+          - img [ref=e41]
+          - text: Visual Test Builder
+        - link "Web Visual Builder" [ref=e43] [cursor=pointer]:
+          - /url: /web-visual-builder
+          - img [ref=e44]
+          - text: Web Visual Builder
+        - link "Hybrid Scanner" [ref=e47] [cursor=pointer]:
+          - /url: /hybrid-scan
+          - img [ref=e48]
+          - text: Hybrid Scanner
+        - link "Users" [ref=e53] [cursor=pointer]:
+          - /url: /users
+          - img [ref=e54]
+          - text: Users
+        - link "Reports" [ref=e59] [cursor=pointer]:
+          - /url: /reports
+          - img [ref=e60]
+          - text: Reports
+      - generic [ref=e62]:
+        - generic [ref=e65]:
+          - paragraph
+          - paragraph [ref=e66]: qa-test@example.com
+        - generic [ref=e67]:
+          - button "Settings" [ref=e68] [cursor=pointer]:
+            - img [ref=e69]
+            - text: Settings
+          - button [ref=e72] [cursor=pointer]:
+            - img [ref=e73]
+  - generic [ref=e76]:
+    - banner [ref=e77]:
+      - heading "Web Visual Builder" [level=1] [ref=e78]
+      - button [ref=e80] [cursor=pointer]:
+        - img [ref=e81]
+    - main [ref=e84]:
+      - generic [ref=e85]:
+        - generic [ref=e86]:
+          - generic [ref=e87]:
+            - heading "Web Visual Builder" [level=1] [ref=e88]
+            - paragraph [ref=e89]: Scan a website, pick elements, compose Playwright test scenarios
+          - generic [ref=e90]:
+            - button "🖥️ Desktop ▼" [ref=e92] [cursor=pointer]:
+              - generic [ref=e93]: 🖥️
+              - generic [ref=e94]: Desktop
+              - generic [ref=e95]: ▼
+            - generic [ref=e96]:
+              - generic [ref=e97]: "Target URL:"
+              - generic [ref=e98]:
+                - textbox "https://example.com" [ref=e99]: https://bankraya.co.id/product-brochure/semua?tabs=semua
+                - button "Scan" [ref=e100] [cursor=pointer]:
+                  - img [ref=e237]
+                  - text: Scan
+        - generic [ref=e240]:
+          - generic [ref=e242]:
+            - heading "Element Catalog" [level=3] [ref=e243]
+            - generic [ref=e244]:
+              - generic [ref=e245]: 1 Pages
+              - generic [ref=e246]: 0 Inputs
+              - generic [ref=e247]: 46 Buttons
+              - generic [ref=e248]: 50 Texts
+          - generic [ref=e249]:
+            - generic [ref=e250]:
+              - textbox "Search pages or elements..." [ref=e251]
+              - generic [ref=e252]:
+                - button "All" [ref=e253] [cursor=pointer]
+                - button "⌨ Inputs" [ref=e254] [cursor=pointer]
+                - button "🖱 Buttons" [ref=e255] [cursor=pointer]
+                - button "📝 Texts" [ref=e256] [cursor=pointer]
+            - button "Bank Raya — Bank Raya 46 btn 50 txt" [ref=e259] [cursor=pointer]:
+              - img [ref=e260]
+              - img [ref=e262]
+              - generic [ref=e265]: Bank Raya — Bank Raya
+              - generic [ref=e266]:
+                - generic [ref=e267]: 46 btn
+                - generic [ref=e268]: 50 txt
+        - generic [ref=e104]:
+          - generic [ref=e105]:
+            - generic [ref=e106]:
+              - heading "Step Palette" [level=3] [ref=e108]
+              - generic [ref=e109]:
+                - generic [ref=e110]:
+                  - generic [ref=e112]: Interactions
+                  - generic [ref=e113]:
+                    - button "Click Click a button or element" [ref=e114] [cursor=pointer]:
+                      - img [ref=e116]
+                      - generic:
+                        - generic: Click
+                        - generic: Click a button or element
+                      - img [ref=e122]
+                    - button "Enter Text Fill an input field" [ref=e123] [cursor=pointer]:
+                      - img [ref=e125]
+                      - generic:
+                        - generic: Enter Text
+                        - generic: Fill an input field
+                      - img [ref=e127]
+                    - button "Hover Hover over an element" [ref=e128] [cursor=pointer]:
+                      - img [ref=e130]
+                      - generic:
+                        - generic: Hover
+                        - generic: Hover over an element
+                      - img [ref=e136]
+                    - button "Select Select from dropdown" [ref=e137] [cursor=pointer]:
+                      - img [ref=e139]
+                      - generic:
+                        - generic: Select
+                        - generic: Select from dropdown
+                      - img [ref=e141]
+                    - button "Check Check a checkbox" [ref=e142] [cursor=pointer]:
+                      - img [ref=e144]
+                      - generic:
+                        - generic: Check
+                        - generic: Check a checkbox
+                      - img [ref=e150]
+                    - button "Uncheck Uncheck a checkbox" [ref=e151] [cursor=pointer]:
+                      - img [ref=e153]
+                      - generic:
+                        - generic: Uncheck
+                        - generic: Uncheck a checkbox
+                      - img [ref=e159]
+                - generic [ref=e160]:
+                  - generic [ref=e162]: Navigation
+                  - generic [ref=e163]:
+                    - button "Navigate Go to a URL" [ref=e164] [cursor=pointer]:
+                      - img [ref=e166]
+                      - generic:
+                        - generic: Navigate
+                        - generic: Go to a URL
+                      - img [ref=e169]
+                    - button "Press Key Press a keyboard key" [ref=e170] [cursor=pointer]:
+                      - img [ref=e172]
+                      - generic:
+                        - generic: Press Key
+                        - generic: Press a keyboard key
+                      - img [ref=e174]
+                - generic [ref=e175]:
+                  - generic [ref=e177]: Assertions
+                  - generic [ref=e178]:
+                    - button "Assert Visible Verify element is visible" [ref=e179] [cursor=pointer]:
+                      - img [ref=e181]
+                      - generic:
+                        - generic: Assert Visible
+                        - generic: Verify element is visible
+                      - img [ref=e184]
+                    - button "Assert Not Visible Verify element is hidden" [ref=e185] [cursor=pointer]:
+                      - img [ref=e187]
+                      - generic:
+                        - generic: Assert Not Visible
+                        - generic: Verify element is hidden
+                      - img [ref=e192]
+                    - button "Assert Text Verify text content" [ref=e193] [cursor=pointer]:
+                      - img [ref=e195]
+                      - generic:
+                        - generic: Assert Text
+                        - generic: Verify text content
+                      - img [ref=e197]
+                - generic [ref=e198]:
+                  - generic [ref=e200]: Utilities
+                  - generic [ref=e201]:
+                    - button "Wait Wait for N ms" [ref=e202] [cursor=pointer]:
+                      - img [ref=e204]
+                      - generic:
+                        - generic: Wait
+                        - generic: Wait for N ms
+                      - img [ref=e207]
+                    - button "Screenshot Take a screenshot" [ref=e208] [cursor=pointer]:
+                      - img [ref=e210]
+                      - generic:
+                        - generic: Screenshot
+                        - generic: Take a screenshot
+                      - img [ref=e213]
+                    - button "Set Viewport Set browser viewport size" [ref=e214] [cursor=pointer]:
+                      - img [ref=e216]
+                      - generic:
+                        - generic: Set Viewport
+                        - generic: Set browser viewport size
+                      - img [ref=e218]
+            - generic [ref=e269]:
+              - heading "Templates" [level=3] [ref=e271]
+              - generic [ref=e272]:
+                - button "🔐 Login Flow" [ref=e273] [cursor=pointer]:
+                  - generic [ref=e274]: 🔐
+                  - text: Login Flow
+                - button "🌐 Navigate + Assert" [ref=e275] [cursor=pointer]:
+                  - generic [ref=e276]: 🌐
+                  - text: Navigate + Assert
+          - generic [ref=e220]:
+            - heading "Test Flow (1 steps)" [level=3] [ref=e277]
+            - generic [ref=e278]:
+              - generic [ref=e279]:
+                - img [ref=e280]
+                - img [ref=e282]
+                - img [ref=e289]
+              - img [ref=e292]
+              - generic [ref=e298]:
+                - generic [ref=e299]:
+                  - generic [ref=e300]: Click
+                  - button [ref=e301] [cursor=pointer]:
+                    - img [ref=e302]
+                - generic [ref=e306]:
+                  - generic [ref=e307]:
+                    - textbox "Search element..." [active] [ref=e317]
+                    - img [ref=e309]
+                  - generic [ref=e320]:
+                    - generic [ref=e321] [cursor=pointer]:
+                      - generic [ref=e322]: 🔘
+                      - generic [ref=e323]:
+                        - generic [ref=e324]: "\"Nav Icon Button 1\""
+                        - generic [ref=e325]: button · button.navbar-toggler.x
+                    - generic [ref=e326] [cursor=pointer]:
+                      - generic [ref=e327]: 🔘
+                      - generic [ref=e328]:
+                        - generic [ref=e329]: "\"Buka Rekening Raya\""
+                        - generic [ref=e330]: "button · #submitButton"
+                    - generic [ref=e331] [cursor=pointer]:
+                      - generic [ref=e332]: 🔘
+                      - generic [ref=e333]:
+                        - generic [ref=e334]: "\"Nav Icon Button 3\""
+                        - generic [ref=e335]: button · button.click-dropdown.btn.dropdown-toggle-split
+                    - generic [ref=e336] [cursor=pointer]:
+                      - generic [ref=e337]: 🔘
+                      - generic [ref=e338]:
+                        - generic [ref=e339]: "\"Semua\""
+                        - generic [ref=e340]: button · [data-tab="semua"]
+                    - generic [ref=e341] [cursor=pointer]:
+                      - generic [ref=e342]: 🔘
+                      - generic [ref=e343]:
+                        - generic [ref=e344]: "\"Simpanan\""
+                        - generic [ref=e345]: button · [data-tab="1"]
+                    - generic [ref=e346] [cursor=pointer]:
+                      - generic [ref=e347]: 🔘
+                      - generic [ref=e348]:
+                        - generic [ref=e349]: "\"Pinjaman Bisnis\""
+                        - generic [ref=e350]: button · [data-tab="2"]
+                    - generic [ref=e351] [cursor=pointer]:
+                      - generic [ref=e352]: 🔘
+                      - generic [ref=e353]:
+                        - generic [ref=e354]: "\"Pinjaman Personal\""
+                        - generic [ref=e355]: button · [data-tab="3"]
+                    - generic [ref=e356] [cursor=pointer]:
+                      - generic [ref=e357]: 🔘
+                      - generic [ref=e358]:
+                        - generic [ref=e359]: "\"Lainnya\""
+                        - generic [ref=e360]: button · [data-tab="4"]
+                    - generic [ref=e361] [cursor=pointer]:
+                      - generic [ref=e362]: 🔗
+                      - generic [ref=e363]:
+                        - generic [ref=e364]: "\"Produk\""
+                        - generic [ref=e365]: link · a[href="https://bankraya.co.id/product-brochure/semua"]
+                    - generic [ref=e366] [cursor=pointer]:
+                      - generic [ref=e367]: 🔗
+                      - generic [ref=e368]:
+                        - generic [ref=e369]: "\"Promo\""
+                        - generic [ref=e370]: link · a[href="https://bankraya.co.id/promo"]
+                    - generic [ref=e371] [cursor=pointer]:
+                      - generic [ref=e372]: 🔗
+                      - generic [ref=e373]:
+                        - generic [ref=e374]: "\"Berita\""
+                        - generic [ref=e375]: link · a[href="https://bankraya.co.id/articles/news"]
+                    - generic [ref=e376] [cursor=pointer]:
+                      - generic [ref=e377]: 🔗
+                      - generic [ref=e378]:
+                        - generic [ref=e379]: "\"Insights\""
+                        - generic [ref=e380]: link · a[href="https://bankraya.co.id/articles/insights"]
+                    - generic [ref=e381] [cursor=pointer]:
+                      - generic [ref=e382]: 🔗
+                      - generic [ref=e383]:
+                        - generic [ref=e384]: "\"Pengumuman\""
+                        - generic [ref=e385]: link · a[href="https://bankraya.co.id/articles/announcement"]
+                    - generic [ref=e386] [cursor=pointer]:
+                      - generic [ref=e387]: 🔗
+                      - generic [ref=e388]:
+                        - generic [ref=e389]: "\"Tentang Kami\""
+                        - generic [ref=e390]: link · a[href="https://bankraya.co.id/corporate/about-us"]
+                    - generic [ref=e391] [cursor=pointer]:
+                      - generic [ref=e392]: 🔗
+                      - generic [ref=e393]:
+                        - generic [ref=e394]: "\"Struktur Perusahaan\""
+                        - generic [ref=e395]: link · a[href="https://bankraya.co.id/corporate/company-structure"]
+                    - generic [ref=e396] [cursor=pointer]:
+                      - generic [ref=e397]: 🔗
+                      - generic [ref=e398]:
+                        - generic [ref=e399]: "\"Hubungan Investor\""
+                        - generic [ref=e400]: link · a[href="https://bankraya.co.id/corporate/investor-relations"]
+                    - generic [ref=e401] [cursor=pointer]:
+                      - generic [ref=e402]: 🔗
+                      - generic [ref=e403]:
+                        - generic [ref=e404]: "\"Tata Kelola\""
+                        - generic [ref=e405]: link · a[href="https://bankraya.co.id/corporate/gcg"]
+                    - generic [ref=e406] [cursor=pointer]:
+                      - generic [ref=e407]: 🔗
+                      - generic [ref=e408]:
+                        - generic [ref=e409]: "\"Whistleblowing System\""
+                        - generic [ref=e410]: link · a[href="https://whistleblowing.bankraya.co.id/"]
+                    - generic [ref=e411] [cursor=pointer]:
+                      - generic [ref=e412]: 🔗
+                      - generic [ref=e413]:
+                        - generic [ref=e414]: "\"Karir\""
+                        - generic [ref=e415]: link · a[href="https://bankraya.co.id/corporate/career"]
+                    - generic [ref=e416] [cursor=pointer]:
+                      - generic [ref=e417]: 🔗
+                      - generic [ref=e418]:
+                        - generic [ref=e419]: "\"Aset Media\""
+                        - generic [ref=e420]: link · a[href="https://bankraya.co.id/corporate/media-assets"]
+                    - generic [ref=e421] [cursor=pointer]:
+                      - generic [ref=e422]: 🔗
+                      - generic [ref=e423]:
+                        - generic [ref=e424]: "\"TJSL\""
+                        - generic [ref=e425]: link · a[href="https://bankraya.co.id/corporate/csr"]
+                    - generic [ref=e426] [cursor=pointer]:
+                      - generic [ref=e427]: 🔗
+                      - generic [ref=e428]:
+                        - generic [ref=e429]: "\"FAQ\""
+                        - generic [ref=e430]: link · a[href="https://bankraya.co.id/help/faq"]
+                    - generic [ref=e431] [cursor=pointer]:
+                      - generic [ref=e432]: 🔗
+                      - generic [ref=e433]:
+                        - generic [ref=e434]: "\"Kontak Kami\""
+                        - generic [ref=e435]: link · a[href="https://bankraya.co.id/help/contact-us"]
+                    - generic [ref=e436] [cursor=pointer]:
+                      - generic [ref=e437]: 🔗
+                      - generic [ref=e438]:
+                        - generic [ref=e439]: "\"Lokasi Community Branch\""
+                        - generic [ref=e440]: link · a[href="https://bankraya.co.id/help/branch-locations"]
+                    - generic [ref=e441] [cursor=pointer]:
+                      - generic [ref=e442]: 🔗
+                      - generic [ref=e443]:
+                        - generic [ref=e444]: "\"Partnership\""
+                        - generic [ref=e445]: link · a[href="https://bankraya.co.id/partner"]
+                    - generic [ref=e446] [cursor=pointer]:
+                      - generic [ref=e447]: 🔗
+                      - generic [ref=e448]:
+                        - generic [ref=e449]: "\"ID\""
+                        - generic [ref=e450]: link · a[href="https://bankraya.co.id/lang/en"]
+                    - generic [ref=e451] [cursor=pointer]:
+                      - generic [ref=e452]: 🔗
+                      - generic [ref=e453]:
+                        - generic [ref=e454]: "\"EN\""
+                        - generic [ref=e455]: link · a[href="https://bankraya.co.id/lang/id"]
+                    - generic [ref=e456] [cursor=pointer]:
+                      - generic [ref=e457]: 🔗
+                      - generic [ref=e458]:
+                        - generic [ref=e459]: "\"Buka Rekening melalui Website\""
+                        - generic [ref=e460]: link · a[href="https://bukatabungan.bankraya.co.id/#/"]
+                    - generic [ref=e461] [cursor=pointer]:
+                      - generic [ref=e462]: 🔗
+                      - generic [ref=e463]:
+                        - generic [ref=e464]: "\"Lihat Detail\""
+                        - generic [ref=e465]: link · a[href="https://bankraya.co.id/product-brochure/detail/saku-raya"]
+                    - generic [ref=e466] [cursor=pointer]:
+                      - generic [ref=e467]: 🔗
+                      - generic [ref=e468]:
+                        - generic [ref=e469]: "\"Lihat Detail\""
+                        - generic [ref=e470]: link · a[href="https://bankraya.co.id/product-brochure/detail/saku-bujet"]
+                    - generic [ref=e471] [cursor=pointer]:
+                      - generic [ref=e472]: 🔗
+                      - generic [ref=e473]:
+                        - generic [ref=e474]: "\"Lihat Detail\""
+                        - generic [ref=e475]: link · a[href="https://bankraya.co.id/product-brochure/detail/saku-pintar"]
+                    - generic [ref=e476] [cursor=pointer]:
+                      - generic [ref=e477]: 🔗
+                      - generic [ref=e478]:
+                        - generic [ref=e479]: "\"Lihat Detail\""
+                        - generic [ref=e480]: link · a[href="https://bankraya.co.id/product-brochure/detail/saku-jaga"]
+                    - generic [ref=e481] [cursor=pointer]:
+                      - generic [ref=e482]: 🔗
+                      - generic [ref=e483]:
+                        - generic [ref=e484]: "\"Lihat Detail\""
+                        - generic [ref=e485]: link · a[href="https://bankraya.co.id/product-brochure/detail/saku-bareng"]
+                    - generic [ref=e486] [cursor=pointer]:
+                      - generic [ref=e487]: 🔗
+                      - generic [ref=e488]:
+                        - generic [ref=e489]: "\"Lihat Detail\""
+                        - generic [ref=e490]: link · a[href="https://bankraya.co.id/product-brochure/detail/saku-bisnis"]
+                    - generic [ref=e491] [cursor=pointer]:
+                      - generic [ref=e492]: 🔗
+                      - generic [ref=e493]:
+                        - generic [ref=e494]: "\"Lihat Detail\""
+                        - generic [ref=e495]: link · a[href="https://bankraya.co.id/product-brochure/detail/pinang-flexi"]
+                    - generic [ref=e496] [cursor=pointer]:
+                      - generic [ref=e497]: 🔗
+                      - generic [ref=e498]:
+                        - generic [ref=e499]: "\"Lihat Detail\""
+                        - generic [ref=e500]: link · a[href="https://bankraya.co.id/product-brochure/detail/pinang-flexi-extra"]
+                    - generic [ref=e501] [cursor=pointer]:
+                      - generic [ref=e502]: 🔗
+                      - generic [ref=e503]:
+                        - generic [ref=e504]: "\"Lihat Detail\""
+                        - generic [ref=e505]: link · a[href="https://bankraya.co.id/product-brochure/detail/pinang-maksima"]
+                    - generic [ref=e506] [cursor=pointer]:
+                      - generic [ref=e507]: 🔗
+                      - generic [ref=e508]:
+                        - generic [ref=e509]: "\"Lihat Detail\""
+                        - generic [ref=e510]: link · a[href="https://bankraya.co.id/product-brochure/detail/pinang-performa"]
+                    - generic [ref=e511] [cursor=pointer]:
+                      - generic [ref=e512]: 🔗
+                      - generic [ref=e513]:
+                        - generic [ref=e514]: "\"Lihat Detail\""
+                        - generic [ref=e515]: link · a[href="https://bankraya.co.id/product-brochure/detail/pinang-dana-talangan"]
+                    - generic [ref=e516] [cursor=pointer]:
+                      - generic [ref=e517]: 🔗
+                      - generic [ref=e518]:
+                        - generic [ref=e519]: "\"Lihat Detail\""
+                        - generic [ref=e520]: link · a[href="https://bankraya.co.id/product-brochure/detail/qris-bisnis"]
+                    - generic [ref=e521] [cursor=pointer]:
+                      - generic [ref=e522]: 🔗
+                      - generic [ref=e523]:
+                        - generic [ref=e524]: "\"Lihat Detail\""
+                        - generic [ref=e525]: link · a[href="https://bankraya.co.id/product-brochure/detail/raya-paylater"]
+                    - generic [ref=e526] [cursor=pointer]:
+                      - generic [ref=e527]: 🔗
+                      - generic [ref=e528]:
+                        - generic [ref=e529]: "\"Lihat Detail\""
+                        - generic [ref=e530]: link · a[href="https://bankraya.co.id/product-brochure/detail/uang-saku"]
+                    - generic [ref=e531] [cursor=pointer]:
+                      - generic [ref=e532]: 🔗
+                      - generic [ref=e533]:
+                        - generic [ref=e534]: "\"Selengkapnya\""
+                        - generic [ref=e535]: link · a[href="https://bankraya.co.id/riplay/semua"]
+                    - generic [ref=e536] [cursor=pointer]:
+                      - generic [ref=e537]: 🔗
+                      - generic [ref=e538]:
+                        - generic [ref=e539]: "\"Produk\""
+                        - generic [ref=e540]: link · a[href="https://bankraya.co.id/product-brochure"]
+                    - generic [ref=e541] [cursor=pointer]:
+                      - generic [ref=e542]: 🔗
+                      - generic [ref=e543]:
+                        - generic [ref=e544]: "\"Laporan Keuangan\""
+                        - generic [ref=e545]: link · a[href="https://bankraya.co.id/corporate/reports"]
+                    - generic [ref=e546] [cursor=pointer]:
+                      - generic [ref=e547]: 🔗
+                      - generic [ref=e548]:
+                        - generic [ref=e549]: "\"Pemberitahuan Privasi\""
+                        - generic [ref=e550]: link · a[href="https://bankraya.co.id/privacy-notice"]
+                    - generic [ref=e551] [cursor=pointer]:
+                      - generic [ref=e552]: 📝
+                      - generic [ref=e553]:
+                        - generic [ref=e554]: "\"Berita \""
+                        - generic [ref=e555]: text · div:has-text("Berita ")
+                    - generic [ref=e556] [cursor=pointer]:
+                      - generic [ref=e557]: 📝
+                      - generic [ref=e558]:
+                        - generic [ref=e559]: "\"FAQ \""
+                        - generic [ref=e560]: text · div:has-text("FAQ ")
+                    - generic [ref=e561] [cursor=pointer]:
+                      - generic [ref=e562]: 📝
+                      - generic [ref=e563]:
+                        - generic [ref=e564]: "\"Buka Rekening melalui Website \""
+                        - generic [ref=e565]: text · div:has-text("Buka Rekening melalui Website ")
+                    - generic [ref=e566] [cursor=pointer]:
+                      - generic [ref=e567]: 📝
+                      - generic [ref=e568]:
+                        - generic [ref=e569]: "\"atau\""
+                        - generic [ref=e570]: text · span:has-text("atau")
+                    - generic [ref=e571] [cursor=pointer]:
+                      - generic [ref=e572]: 📝
+                      - generic [ref=e573]:
+                        - generic [ref=e574]: "\"Buka Rekening melalui Website \""
+                        - generic [ref=e575]: text · div:has-text("Buka Rekening melalui Website ")
+                    - generic [ref=e576] [cursor=pointer]:
+                      - generic [ref=e577]: 📝
+                      - generic [ref=e578]:
+                        - generic [ref=e579]: "\"atau\""
+                        - generic [ref=e580]: text · span:has-text("atau")
+                    - generic [ref=e581] [cursor=pointer]:
+                      - generic [ref=e582]: 📝
+                      - generic [ref=e583]:
+                        - generic [ref=e584]: "\"PRODUK RAYA\""
+                        - generic [ref=e585]: text · h5:has-text("PRODUK RAYA")
+                    - generic [ref=e586] [cursor=pointer]:
+                      - generic [ref=e587]: 📝
+                      - generic [ref=e588]:
+                        - generic [ref=e589]: "\"Beragam kebutuhan dalam genggaman\""
+                        - generic [ref=e590]: text · h2:has-text("Beragam kebutuhan dalam genggaman")
+                    - generic [ref=e591] [cursor=pointer]:
+                      - generic [ref=e592]: 📝
+                      - generic [ref=e593]:
+                        - generic [ref=e594]: "\"Semua\""
+                        - generic [ref=e595]: text · div:has-text("Semua")
+                    - generic [ref=e596] [cursor=pointer]:
+                      - generic [ref=e597]: 📝
+                      - generic [ref=e598]:
+                        - generic [ref=e599]: "\"Simpanan\""
+                        - generic [ref=e600]: text · div:has-text("Simpanan")
+                    - generic [ref=e601] [cursor=pointer]:
+                      - generic [ref=e602]: 📝
+                      - generic [ref=e603]:
+                        - generic [ref=e604]: "\"Pinjaman Bisnis\""
+                        - generic [ref=e605]: text · div:has-text("Pinjaman Bisnis")
+                    - generic [ref=e606] [cursor=pointer]:
+                      - generic [ref=e607]: 📝
+                      - generic [ref=e608]:
+                        - generic [ref=e609]: "\"Pinjaman Personal\""
+                        - generic [ref=e610]: text · div:has-text("Pinjaman Personal")
+                    - generic [ref=e611] [cursor=pointer]:
+                      - generic [ref=e612]: 📝
+                      - generic [ref=e613]:
+                        - generic [ref=e614]: "\"Lainnya\""
+                        - generic [ref=e615]: text · div:has-text("Lainnya")
+                    - generic [ref=e616] [cursor=pointer]:
+                      - generic [ref=e617]: 📝
+                      - generic [ref=e618]:
+                        - generic [ref=e619]: "\"Saku Raya \""
+                        - generic [ref=e620]: text · div:has-text("Saku Raya ")
+                    - generic [ref=e621] [cursor=pointer]:
+                      - generic [ref=e622]: 📝
+                      - generic [ref=e623]:
+                        - generic [ref=e624]: "\"Saku Raya\""
+                        - generic [ref=e625]: text · h5:has-text("Saku Raya")
+                    - generic [ref=e626] [cursor=pointer]:
+                      - generic [ref=e627]: 📝
+                      - generic [ref=e628]:
+                        - generic [ref=e629]: "\"Praktis kelola keuangan secara digital dengan berbagai Saku \""
+                        - generic [ref=e630]: text · p:has-text("Praktis kelola keuangan secara digital dengan berb")
+                    - generic [ref=e631] [cursor=pointer]:
+                      - generic [ref=e632]: 📝
+                      - generic [ref=e633]:
+                        - generic [ref=e634]: "\"Saku Bujet \""
+                        - generic [ref=e635]: text · div:has-text("Saku Bujet ")
+                    - generic [ref=e636] [cursor=pointer]:
+                      - generic [ref=e637]: 📝
+                      - generic [ref=e638]:
+                        - generic [ref=e639]: "\"Saku Bujet\""
+                        - generic [ref=e640]: text · h5:has-text("Saku Bujet")
+                    - generic [ref=e641] [cursor=pointer]:
+                      - generic [ref=e642]: 📝
+                      - generic [ref=e643]:
+                        - generic [ref=e644]: "\"Bujetin pengeluaran jadi gampang buat penuhi berbagai kebutu\""
+                        - generic [ref=e645]: text · p:has-text("Bujetin pengeluaran jadi gampang buat penuhi berba")
+                    - generic [ref=e646] [cursor=pointer]:
+                      - generic [ref=e647]: 📝
+                      - generic [ref=e648]:
+                        - generic [ref=e649]: "\"Saku Pintar \""
+                        - generic [ref=e650]: text · div:has-text("Saku Pintar ")
+                    - generic [ref=e651] [cursor=pointer]:
+                      - generic [ref=e652]: 📝
+                      - generic [ref=e653]:
+                        - generic [ref=e654]: "\"Saku Pintar\""
+                        - generic [ref=e655]: text · h5:has-text("Saku Pintar")
+                    - generic [ref=e656] [cursor=pointer]:
+                      - generic [ref=e657]: 📝
+                      - generic [ref=e658]:
+                        - generic [ref=e659]: "\"Nabung otomatis untuk wujudkan impian jadi kenyataan\""
+                        - generic [ref=e660]: text · p:has-text("Nabung otomatis untuk wujudkan impian jadi kenyata")
+                    - generic [ref=e661] [cursor=pointer]:
+                      - generic [ref=e662]: 📝
+                      - generic [ref=e663]:
+                        - generic [ref=e664]: "\"Saku Jaga \""
+                        - generic [ref=e665]: text · div:has-text("Saku Jaga ")
+                    - generic [ref=e666] [cursor=pointer]:
+                      - generic [ref=e667]: 📝
+                      - generic [ref=e668]:
+                        - generic [ref=e669]: "\"Saku Jaga\""
+                        - generic [ref=e670]: text · h5:has-text("Saku Jaga")
+                    - generic [ref=e671] [cursor=pointer]:
+                      - generic [ref=e672]: 📝
+                      - generic [ref=e673]:
+                        - generic [ref=e674]: "\"Persiapan biar tetap siaga dari hal-hal tak terduga\""
+                        - generic [ref=e675]: text · p:has-text("Persiapan biar tetap siaga dari hal-hal tak terdug")
+                    - generic [ref=e676] [cursor=pointer]:
+                      - generic [ref=e677]: 📝
+                      - generic [ref=e678]:
+                        - generic [ref=e679]: "\"Saku Bareng\""
+                        - generic [ref=e680]: text · h5:has-text("Saku Bareng")
+                    - generic [ref=e681] [cursor=pointer]:
+                      - generic [ref=e682]: 📝
+                      - generic [ref=e683]:
+                        - generic [ref=e684]: "\"Nabung Bareng hingga 300 orang tak perlu khawatir! Gunakan S\""
+                        - generic [ref=e685]: text · p:has-text("Nabung Bareng hingga 300 orang tak perlu khawatir!")
+                    - generic [ref=e686] [cursor=pointer]:
+                      - generic [ref=e687]: 📝
+                      - generic [ref=e688]:
+                        - generic [ref=e689]: "\"Saku Bisnis\""
+                        - generic [ref=e690]: text · h5:has-text("Saku Bisnis")
+                    - generic [ref=e691] [cursor=pointer]:
+                      - generic [ref=e692]: 📝
+                      - generic [ref=e693]:
+                        - generic [ref=e694]: "\"Kelola keuangan bisnis jadi lebih mudah dengan Saku Bisnis. \""
+                        - generic [ref=e695]: text · p:has-text("Kelola keuangan bisnis jadi lebih mudah dengan Sak")
+                    - generic [ref=e696] [cursor=pointer]:
+                      - generic [ref=e697]: 📝
+                      - generic [ref=e698]:
+                        - generic [ref=e699]: "\"Pinang Flexi \""
+                        - generic [ref=e700]: text · div:has-text("Pinang Flexi ")
+                    - generic [ref=e701] [cursor=pointer]:
+                      - generic [ref=e702]: 📝
+                      - generic [ref=e703]:
+                        - generic [ref=e704]: "\"Pinang Flexi\""
+                        - generic [ref=e705]: text · h5:has-text("Pinang Flexi")
+                    - generic [ref=e706] [cursor=pointer]:
+                      - generic [ref=e707]: 📝
+                      - generic [ref=e708]:
+                        - generic [ref=e709]: "\"Pinjaman multiguna cepat & tanpa agunan untuk kamu Kawan Ray\""
+                        - generic [ref=e710]: text · p:has-text("Pinjaman multiguna cepat & tanpa agunan untuk kamu")
+                    - generic [ref=e711] [cursor=pointer]:
+                      - generic [ref=e712]: 📝
+                      - generic [ref=e713]:
+                        - generic [ref=e714]: "\"Pinang Flexi Extra \""
+                        - generic [ref=e715]: text · div:has-text("Pinang Flexi Extra ")
+                    - generic [ref=e716] [cursor=pointer]:
+                      - generic [ref=e717]: 📝
+                      - generic [ref=e718]:
+                        - generic [ref=e719]: "\"Pinang Flexi Extra\""
+                        - generic [ref=e720]: text · h5:has-text("Pinang Flexi Extra")
+                    - generic [ref=e721] [cursor=pointer]:
+                      - generic [ref=e722]: 📝
+                      - generic [ref=e723]:
+                        - generic [ref=e724]: "\"Pinjaman untuk karyawan tetap dengan bunga kompetitif!\""
+                        - generic [ref=e725]: text · p:has-text("Pinjaman untuk karyawan tetap dengan bunga kompeti")
+                    - generic [ref=e726] [cursor=pointer]:
+                      - generic [ref=e727]: 📝
+                      - generic [ref=e728]:
+                        - generic [ref=e729]: "\"Pinang Maksima \""
+                        - generic [ref=e730]: text · div:has-text("Pinang Maksima ")
+                    - generic [ref=e731] [cursor=pointer]:
+                      - generic [ref=e732]: 📝
+                      - generic [ref=e733]:
+                        - generic [ref=e734]: "\"Pinang Maksima\""
+                        - generic [ref=e735]: text · h5:has-text("Pinang Maksima")
+                    - generic [ref=e736] [cursor=pointer]:
+                      - generic [ref=e737]: 📝
+                      - generic [ref=e738]:
+                        - generic [ref=e739]: "\"Maksimalkan potensi usahamu dengan bantuan Pinang Maksima!\""
+                        - generic [ref=e740]: text · p:has-text("Maksimalkan potensi usahamu dengan bantuan Pinang ")
+                    - generic [ref=e741] [cursor=pointer]:
+                      - generic [ref=e742]: 📝
+                      - generic [ref=e743]:
+                        - generic [ref=e744]: "\"Pinang Performa \""
+                        - generic [ref=e745]: text · div:has-text("Pinang Performa ")
+                    - generic [ref=e746] [cursor=pointer]:
+                      - generic [ref=e747]: 📝
+                      - generic [ref=e748]:
+                        - generic [ref=e749]: "\"Pinang Performa\""
+                        - generic [ref=e750]: text · h5:has-text("Pinang Performa")
+                    - generic [ref=e751] [cursor=pointer]:
+                      - generic [ref=e752]: 📝
+                      - generic [ref=e753]:
+                        - generic [ref=e754]: "\"Tingkatkan skala bisnis kamu dengan Pinang Performa!\""
+                        - generic [ref=e755]: text · p:has-text("Tingkatkan skala bisnis kamu dengan Pinang Perform")
+                    - generic [ref=e756] [cursor=pointer]:
+                      - generic [ref=e757]: 📝
+                      - generic [ref=e758]:
+                        - generic [ref=e759]: "\"Pinang Dana Talangan \""
+                        - generic [ref=e760]: text · div:has-text("Pinang Dana Talangan ")
+                    - generic [ref=e761] [cursor=pointer]:
+                      - generic [ref=e762]: 📝
+                      - generic [ref=e763]:
+                        - generic [ref=e764]: "\"Pinang Dana Talangan\""
+                        - generic [ref=e765]: text · h5:has-text("Pinang Dana Talangan")
+                    - generic [ref=e766] [cursor=pointer]:
+                      - generic [ref=e767]: 📝
+                      - generic [ref=e768]:
+                        - generic [ref=e769]: "\"Pinjaman produktif untuk kembangkan usaha keagenan\""
+                        - generic [ref=e770]: text · p:has-text("Pinjaman produktif untuk kembangkan usaha keagenan")
+                    - generic [ref=e771] [cursor=pointer]:
+                      - generic [ref=e772]: 📝
+                      - generic [ref=e773]:
+                        - generic [ref=e774]: "\"QRIS Bisnis \""
+                        - generic [ref=e775]: text · div:has-text("QRIS Bisnis ")
+                    - generic [ref=e776] [cursor=pointer]:
+                      - generic [ref=e777]: 📝
+                      - generic [ref=e778]:
+                        - generic [ref=e779]: "\"QRIS Bisnis\""
+                        - generic [ref=e780]: text · h5:has-text("QRIS Bisnis")
+                    - generic [ref=e781] [cursor=pointer]:
+                      - generic [ref=e782]: 📝
+                      - generic [ref=e783]:
+                        - generic [ref=e784]: "\"Kembangkan bisnis makin maksimal bersama QRIS Bisnis Bank Ra\""
+                        - generic [ref=e785]: text · p:has-text("Kembangkan bisnis makin maksimal bersama QRIS Bisn")
+                    - generic [ref=e786] [cursor=pointer]:
+                      - generic [ref=e787]: 📝
+                      - generic [ref=e788]:
+                        - generic [ref=e789]: "\"Raya Paylater \""
+                        - generic [ref=e790]: text · div:has-text("Raya Paylater ")
+                    - generic [ref=e791] [cursor=pointer]:
+                      - generic [ref=e792]: 📝
+                      - generic [ref=e793]:
+                        - generic [ref=e794]: "\"Raya Paylater\""
+                        - generic [ref=e795]: text · h5:has-text("Raya Paylater")
+                    - generic [ref=e796] [cursor=pointer]:
+                      - generic [ref=e797]: 📝
+                      - generic [ref=e798]:
+                        - generic [ref=e799]: "\"Bayar QRIS lebih praktis dengan Raya PayLater\""
+                        - generic [ref=e800]: text · p:has-text("Bayar QRIS lebih praktis dengan Raya PayLater")
+              - generic [ref=e311]: "#1"
+          - generic [ref=e229]:
+            - heading "Generated Playwright Code" [level=3] [ref=e231]: Generated Playwright Code
+            - generic [ref=e236]:
+              - button "Generate" [ref=e312] [cursor=pointer]:
+                - img [ref=e313]
+                - text: Generate
+              - button "Run Test" [disabled]:
+                - img
+                - text: Run Test

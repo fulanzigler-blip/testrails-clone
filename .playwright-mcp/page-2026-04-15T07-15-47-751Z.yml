@@ -1,0 +1,457 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e4]:
+    - generic [ref=e5]:
+      - link "Bank Raya" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - img "Bank Raya" [ref=e7]
+      - button [ref=e8] [cursor=pointer]
+  - generic [ref=e12]:
+    - generic [ref=e14]:
+      - group "1 / 10" [ref=e15]:
+        - generic [ref=e22]:
+          - heading [level=3]
+          - paragraph
+      - group "2 / 10":
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - heading [level=3]
+                      - paragraph
+      - group "3 / 10":
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - heading [level=3]
+                      - paragraph
+      - group "4 / 10":
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - heading [level=3]
+                      - paragraph
+      - group "5 / 10":
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - heading [level=3]
+                      - paragraph
+      - group "6 / 10":
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - heading [level=3]
+                      - paragraph
+      - group "7 / 10":
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - heading [level=3]
+                      - paragraph
+      - group "8 / 10":
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - heading [level=3]
+                      - paragraph
+      - group "9 / 10":
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - heading [level=3]
+                      - paragraph
+      - group "10 / 10":
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - heading [level=3]
+                      - paragraph
+      - text:  
+      - generic [ref=e23]:
+        - button "Go to slide 1" [ref=e24] [cursor=pointer]
+        - button "Go to slide 2" [ref=e25] [cursor=pointer]
+        - button "Go to slide 3" [ref=e26] [cursor=pointer]
+        - button "Go to slide 4" [ref=e27] [cursor=pointer]
+        - button "Go to slide 5" [ref=e28] [cursor=pointer]
+        - button "Go to slide 6" [ref=e29] [cursor=pointer]
+        - button "Go to slide 7" [ref=e30] [cursor=pointer]
+        - button "Go to slide 8" [ref=e31] [cursor=pointer]
+        - button "Go to slide 9" [ref=e32] [cursor=pointer]
+        - button "Go to slide 10" [ref=e33] [cursor=pointer]
+    - generic [ref=e34] [cursor=pointer]:
+      - img "chevrons down"
+      - generic: Scroll untuk lihat konten lain
+      - img "chevrons down"
+  - generic [ref=e37]:
+    - generic [ref=e38]:
+      - img "Bank Raya" [ref=e39]
+      - heading "Yuk, kenalan sama Raya" [level=2] [ref=e40]
+      - paragraph [ref=e41]: Bank Raya adalah bank digital bagian dari BRI Group yang memberikan solusi keuangan digital dengan akses terluas bagi masyarakat Indonesia.
+    - generic [ref=e43]:
+      - generic [ref=e45]:
+        - heading "Top 3 Bank Digital" [level=3] [ref=e46]
+        - paragraph [ref=e47]: Bank Raya meraihTop 3 sebagai Bank Digital dengan Layanan Prima di Indonesia tahun 2025 versi Majalah Infobank.
+      - generic [ref=e49]:
+        - heading "Rp7,72 triliun" [level=3] [ref=e50]
+        - paragraph [ref=e51]: Kredit yang diberikan untuk mendorong segmen mikro & kecil serta pelaku usaha tumbuh dan berkembang
+      - generic [ref=e53]:
+        - heading "Rp2,20 triliun" [level=3] [ref=e54]
+        - paragraph [ref=e55]: Bank Raya mencatatkan pertumbuhan digital saving tumbuh 66,7% (yoy) selama 2025
+      - paragraph [ref=e58]: "*Sumber Data internal Q4 2025"
+  - generic [ref=e60]:
+    - heading "Promo hanya untukmu" [level=3] [ref=e62]
+    - generic [ref=e63]:
+      - generic [ref=e64]:
+        - group "1 / 6" [ref=e65]:
+          - generic [ref=e67]:
+            - link [ref=e69] [cursor=pointer]:
+              - /url: https://bankraya.co.id/promo/gajiid-championship
+            - generic [ref=e71]:
+              - paragraph [ref=e72]: "Promo Berakhir : 01 Sep 2026"
+              - link "Gaji.id Flexi Championship" [ref=e74] [cursor=pointer]:
+                - /url: https://bankraya.co.id/promo/gajiid-championship
+              - paragraph [ref=e75]:
+                - text: Pinang Flexi cair, hadiah sampai Rp3 juta siap kamu dapatkan!.
+                - link "Baca selengkapnya" [ref=e76] [cursor=pointer]:
+                  - /url: https://bankraya.co.id/promo/gajiid-championship
+        - group "2 / 6" [ref=e77]:
+          - generic [ref=e79]:
+            - link [ref=e81] [cursor=pointer]:
+              - /url: https://bankraya.co.id/promo/flash-sale-pinang-dana-talangan
+            - generic [ref=e83]:
+              - paragraph [ref=e84]: "Promo Berakhir : 01 Jun 2026"
+              - link "Flash Sale Pinang Dana Talangan" [ref=e86] [cursor=pointer]:
+                - /url: https://bankraya.co.id/promo/flash-sale-pinang-dana-talangan
+              - paragraph [ref=e87]:
+                - text: Nikmati Cashback Biaya Layanan hingga 50% untuk pencairan Pinang Dana Talangan Agen Pegadaian.
+                - link "Baca selengkapnya" [ref=e88] [cursor=pointer]:
+                  - /url: https://bankraya.co.id/promo/flash-sale-pinang-dana-talangan
+        - group "3 / 6" [ref=e89]:
+          - generic [ref=e91]:
+            - link [ref=e93] [cursor=pointer]:
+              - /url: https://bankraya.co.id/promo/rayakan-sau-2026
+            - generic [ref=e95]:
+              - paragraph [ref=e96]: "Promo Berakhir : 01 May 2026"
+              - link "RAYAKAN SAU 2026" [ref=e98] [cursor=pointer]:
+                - /url: https://bankraya.co.id/promo/rayakan-sau-2026
+              - paragraph [ref=e99]:
+                - text: Buka Rekening Raya dapat cashback hingga Rp15rb minimal menabung Rp50.000.
+                - link "Baca selengkapnya" [ref=e100] [cursor=pointer]:
+                  - /url: https://bankraya.co.id/promo/rayakan-sau-2026
+        - group "4 / 6" [ref=e101]:
+          - generic [ref=e103]:
+            - link [ref=e105] [cursor=pointer]:
+              - /url: https://bankraya.co.id/promo/cashback-bunga-pinang-flexi
+            - generic [ref=e107]:
+              - paragraph [ref=e108]: "Promo Berakhir : 11 Jun 2026"
+              - link "Cashback Bunga Pinang Flexi" [ref=e110] [cursor=pointer]:
+                - /url: https://bankraya.co.id/promo/cashback-bunga-pinang-flexi
+              - paragraph [ref=e111]:
+                - text: Ajukan Pinang Flexi sekarang, dapatkan cashback bunga 1 bulan!.
+                - link "Baca selengkapnya" [ref=e112] [cursor=pointer]:
+                  - /url: https://bankraya.co.id/promo/cashback-bunga-pinang-flexi
+        - group "5 / 6" [ref=e113]:
+          - generic [ref=e115]:
+            - link [ref=e117] [cursor=pointer]:
+              - /url: https://bankraya.co.id/promo/top-up-pulsa-im3
+            - generic [ref=e119]:
+              - paragraph [ref=e120]: "Promo Berakhir : 19 Apr 2026"
+              - link "Top Up Pulsa IM3" [ref=e122] [cursor=pointer]:
+                - /url: https://bankraya.co.id/promo/top-up-pulsa-im3
+              - paragraph [ref=e123]:
+                - text: Beli Pulsa IM3 minimal 100.000 di Bank Raya, dapat Ekstra Voucher Token PLN Senilai 20ribu.
+                - link "Baca selengkapnya" [ref=e124] [cursor=pointer]:
+                  - /url: https://bankraya.co.id/promo/top-up-pulsa-im3
+        - group "6 / 6" [ref=e125]:
+          - generic [ref=e127]:
+            - link [ref=e129] [cursor=pointer]:
+              - /url: https://bankraya.co.id/promo/buka-rekening-raya-via-gajiid
+            - generic [ref=e131]:
+              - paragraph [ref=e132]: "Promo Berakhir : 30 Apr 2026"
+              - link "Buka Rekening Raya Via Gaji.id" [ref=e134] [cursor=pointer]:
+                - /url: https://bankraya.co.id/promo/buka-rekening-raya-via-gajiid
+              - paragraph [ref=e135]:
+                - text: Buka Rekening Raya via Aplikasi Gaji.id dan dapatkan cashback Rp.15.000 . Yuk Buka sekarang!.
+                - link "Baca selengkapnya" [ref=e136] [cursor=pointer]:
+                  - /url: https://bankraya.co.id/promo/buka-rekening-raya-via-gajiid
+      - text:  
+      - generic [ref=e137]:
+        - button "Go to slide 1" [ref=e138] [cursor=pointer]
+        - button "Go to slide 2" [ref=e139] [cursor=pointer]
+        - button "Go to slide 3" [ref=e140] [cursor=pointer]
+        - button "Go to slide 4" [ref=e141] [cursor=pointer]
+        - button "Go to slide 5" [ref=e142] [cursor=pointer]
+        - button "Go to slide 6" [ref=e143] [cursor=pointer]
+    - link "Lihat Promo Lainnya" [ref=e146] [cursor=pointer]:
+      - /url: https://bankraya.co.id/promo
+  - generic [ref=e149]:
+    - generic [ref=e151]:
+      - generic [ref=e152]:
+        - heading "Kelola keuangan pribadi dan usaha di satu aplikasi" [level=3] [ref=e153]
+        - paragraph [ref=e154]: Banyak pilihan Saku untukmu, beragam transaksi sesuai kebutuhanmu.
+        - link "Lihat Tabungan Raya " [ref=e155] [cursor=pointer]:
+          - /url: https://bankraya.co.id/product-brochure/semua?tabs=1
+          - generic [ref=e156]: Lihat Tabungan Raya
+          - emphasis [ref=e157]: 
+      - img "deskripsi img 1" [ref=e158]
+    - generic [ref=e160]:
+      - generic [ref=e162]:
+        - generic [ref=e163]:
+          - generic [ref=e164]: Pinjaman untuk kebutuhan pribadi
+          - paragraph [ref=e165]: Penuhi kebutuhan sehari-hari hingga keperluan darurat dengan mudah, cepat, dan aman.
+          - link "Lihat Pinjaman Personal " [ref=e166] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/semua?tabs=3
+            - generic [ref=e167]: Lihat Pinjaman Personal
+            - emphasis [ref=e168]: 
+        - img "deskripsi img 2" [ref=e170]
+      - generic [ref=e172]:
+        - generic [ref=e173]:
+          - generic [ref=e174]: Pinjaman untuk berbagai kebutuhan usaha
+          - paragraph [ref=e175]: Berbagai produk pinjaman dengan limit dan jangka waktu fleksibel buat kembangkan bisnis-mu.
+          - link "Lihat Pinjaman Bisnis " [ref=e176] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure/semua?tabs=2
+            - generic [ref=e177]: Lihat Pinjaman Bisnis
+            - emphasis [ref=e178]: 
+        - img "deskripsi img 3" [ref=e180]
+  - generic [ref=e183]:
+    - heading "Kenapa pilih nabung di Raya?" [level=3] [ref=e185]
+    - generic [ref=e186]:
+      - generic [ref=e189]:
+        - img "Illustration" [ref=e191]
+        - paragraph [ref=e192]: Buka rekening lewat HP
+      - generic [ref=e195]:
+        - img "Illustration" [ref=e197]
+        - paragraph [ref=e198]: Bebas setoran awal
+      - generic [ref=e201]:
+        - img "Illustration" [ref=e203]
+        - paragraph [ref=e204]: Tanpa minimum saldo
+      - generic [ref=e207]:
+        - img "Illustration" [ref=e209]
+        - paragraph [ref=e210]: Gratis admin bulanan
+  - generic [ref=e211]:
+    - img "ornamen-section" [ref=e212]
+    - generic [ref=e213]:
+      - generic [ref=e214]:
+        - img "apps-image" [ref=e216]
+        - generic [ref=e217]:
+          - heading "Mulai atur keuanganmu dalam setiap momen" [level=2] [ref=e218]
+          - paragraph [ref=e219]: "Jadi #KawanFinansialmu dalam memenuhi berbagai transaksi setiap harinya."
+          - generic [ref=e220]:
+            - button "Buka Rekening Raya" [ref=e221] [cursor=pointer]
+            - button "arrow down" [ref=e222] [cursor=pointer]:
+              - img "arrow down" [ref=e223]
+      - generic [ref=e224]:
+        - generic [ref=e226]:
+          - generic [ref=e227]:
+            - heading "Berbagai macam Saku untuk kebutuhanmu" [level=3] [ref=e228]
+            - paragraph [ref=e229]: Dalam satu aplikasi bisa atur bujet bulanan, siapin dana darurat, capai target impian, sampai arisan bareng Kawan.
+          - img "deskripsi img 1" [ref=e230]
+        - generic [ref=e232]:
+          - generic [ref=e233]:
+            - heading "Berbagai transaksi dalam satu aplikasi" [level=3] [ref=e234]
+            - paragraph [ref=e235]: Transfer, tarik tunai, topup e-Wallet, sampai bayar berbagai tagihan langsung di aplikasi.
+          - img "deskripsi img 2" [ref=e236]
+        - generic [ref=e238]:
+          - generic [ref=e239]:
+            - heading "Transaksi aman, makin nyaman" [level=3] [ref=e240]
+            - paragraph [ref=e241]: Paket lengkap untuk melindungi akun Raya kamu dengan verifikasi ekstra lewat PIN dan Face Recognition.
+          - img "deskripsi img 3" [ref=e242]
+        - generic [ref=e244]:
+          - generic [ref=e245]:
+            - heading "Jalani misi seru, ada reward menantimu" [level=3] [ref=e246]
+            - paragraph [ref=e247]: Dapatkan voucher, cashback, dan ikuti beragam misi seru hanya untukmu!
+          - img "deskripsi img 4" [ref=e248]
+  - generic [ref=e250]:
+    - img "Bank Raya" [ref=e252]
+    - heading "Tunggu apalagi, yuk gunakan aplikasi Raya sekarang juga!" [level=2] [ref=e254]
+    - list [ref=e255]:
+      - listitem [ref=e256]:
+        - link "Google Play" [ref=e257] [cursor=pointer]:
+          - /url: https://play.google.com/store/apps/details?id=id.co.bankraya.apps
+          - img "Google Play" [ref=e258]
+      - listitem [ref=e259]:
+        - link "Apps Store" [ref=e260] [cursor=pointer]:
+          - /url: https://apps.apple.com/id/app/raya-digital-bank/id1627393834
+          - img "Apps Store" [ref=e261]
+  - generic [ref=e263]:
+    - heading "Penghargaan yang dicapai Bank Raya" [level=2] [ref=e264]
+    - generic [ref=e265]:
+      - generic [ref=e266]:
+        - group "1 / 6" [ref=e267]:
+          - generic [ref=e270]:
+            - heading "IDIA (Indonesia Digital Innovation Awards) 2026" [level=5] [ref=e271]
+            - paragraph [ref=e272]: as The Most Innovative Digitalization of Digital Bank 2026 for Encouraging Financial Awareness throught Digital Banking Product Innovation category Digital Bank
+        - group "2 / 6" [ref=e273]:
+          - generic [ref=e276]:
+            - heading "Most Trusted Financial Brands Awards 2026" [level=5] [ref=e277]
+            - paragraph [ref=e278]: Kategori Mobile Banking App
+        - group "3 / 6" [ref=e279]:
+          - generic [ref=e282]:
+            - heading "Popular Digital Product Awards 2026" [level=5] [ref=e283]
+            - paragraph [ref=e284]: Kategori 7th Indonesia Popular Digital Awards 2026
+        - group "4 / 6" [ref=e285]:
+          - generic [ref=e288]:
+            - heading "Disway Awards 2025" [level=5] [ref=e289]
+            - paragraph [ref=e290]: Anugerah Brand Populer Indonesia Kategori Jasa Keuangan Perbankan Digital
+        - group "5 / 6" [ref=e291]:
+          - generic [ref=e294]:
+            - heading "Grab Trailblazer Awards" [level=5] [ref=e295]
+            - paragraph [ref=e296]: Ecosystem Collaboration Trailblazer
+        - group "6 / 6" [ref=e297]:
+          - generic [ref=e300]:
+            - heading "Good Corporate Governance Award 2025" [level=5] [ref=e301]
+            - paragraph [ref=e302]: kategori Most Trusted Company Based on Corporate Governance Perception Index (CGPI)
+      - text:  
+      - generic [ref=e303]:
+        - button "Go to slide 1" [ref=e304] [cursor=pointer]
+        - button "Go to slide 2" [ref=e305] [cursor=pointer]
+        - button "Go to slide 3" [ref=e306] [cursor=pointer]
+        - button "Go to slide 4" [ref=e307] [cursor=pointer]
+        - button "Go to slide 5" [ref=e308] [cursor=pointer]
+  - generic [ref=e310]:
+    - heading "Informasi seputar Bank Raya" [level=3] [ref=e312]
+    - generic [ref=e314]:
+      - group "1 / 4" [ref=e315] [cursor=pointer]:
+        - generic [ref=e316]:
+          - link [ref=e317]:
+            - /url: https://bankraya.co.id/articles/news/bank-raya-dan-gajiid-hadirkan-solusi-embedded-finance-untuk-perluas-akses-layanan-keuangan-digital
+          - generic [ref=e318]:
+            - paragraph [ref=e319]: 30 Jan 2026
+            - link "Bank Raya dan Gaji.id Hadirkan Solusi Embedded Finance untuk Perluas Akses Layanan Keuangan Digital" [ref=e321]:
+              - /url: https://bankraya.co.id/articles/news/bank-raya-dan-gajiid-hadirkan-solusi-embedded-finance-untuk-perluas-akses-layanan-keuangan-digital
+            - paragraph [ref=e322]: Jakarta, 30 Januari 2026 - Sebagai bank digital bagian dari BRI Group, PT Bank Raya Indonesia Tbk (Bank Raya) terus menunjukkan komitmennya untuk memp
+      - group "2 / 4" [ref=e323] [cursor=pointer]:
+        - generic [ref=e324]:
+          - link [ref=e325]:
+            - /url: https://bankraya.co.id/articles/news/pusat-kuliner-pasar-kranggan-yogyakarta
+          - generic [ref=e326]:
+            - paragraph [ref=e327]: 15 Dec 2025
+            - link "Pusat kuliner Pasar Kranggan Yogyakarta" [ref=e329]:
+              - /url: https://bankraya.co.id/articles/news/pusat-kuliner-pasar-kranggan-yogyakarta
+            - paragraph [ref=e330]: Program TJSL untuk cluster unggulan pusat kuliner Pasar Kranggan, Yogyakarta, telah dilaksanakan pada tanggal 9 Agustus 2024. Bantuan yang diberikan b
+      - group "3 / 4" [ref=e331] [cursor=pointer]:
+        - generic [ref=e332]:
+          - link [ref=e333]:
+            - /url: https://bankraya.co.id/articles/news/ribuan-pelari-memeriahkan-raya-run-surabaya
+          - generic [ref=e334]:
+            - paragraph [ref=e335]: 27 Oct 2025
+            - link "Ribuan Pelari Memeriahkan Raya Run Surabaya" [ref=e337]:
+              - /url: https://bankraya.co.id/articles/news/ribuan-pelari-memeriahkan-raya-run-surabaya
+            - paragraph [ref=e338]: Jakarta, 26 Oktober 2025 - Di Puncak gelaran lari Raya Run, sejumlah 2077 ribu pelari memeriahkan acara ini. Para pelari berasal dari seluruh Indonesi
+      - group "4 / 4" [ref=e339] [cursor=pointer]:
+        - generic [ref=e340]:
+          - link [ref=e341]:
+            - /url: https://bankraya.co.id/articles/news/bank-raya-dukung-pertumbuhan-mitra-src-melalui-pinjaman-produktif
+          - generic [ref=e342]:
+            - paragraph [ref=e343]: 29 Aug 2025
+            - link "Bank Raya Dukung Pertumbuhan Mitra SRC Melalui Pinjaman Produktif" [ref=e345]:
+              - /url: https://bankraya.co.id/articles/news/bank-raya-dukung-pertumbuhan-mitra-src-melalui-pinjaman-produktif
+            - paragraph [ref=e346]: "Jakarta, 28 Agustus 2025 - Sebagai bank digital bagian dari BRI Group, Bank Raya (kode saham: AGRO) terus menunjukkan komitmennya dalam mendorong pemb"
+    - link "Lihat semua " [ref=e348] [cursor=pointer]:
+      - /url: https://bankraya.co.id/articles/news
+      - text: Lihat semua
+      - emphasis [ref=e349]: 
+  - navigation [ref=e350]:
+    - generic [ref=e353]:
+      - generic [ref=e354]:
+        - link "Bank Raya" [ref=e355] [cursor=pointer]:
+          - /url: /
+          - img "Bank Raya" [ref=e356]
+        - paragraph [ref=e357]: PT Bank Raya Indonesia Tbk berizin dan diawasi Otoritas Jasa Keuangan dan Bank Indonesia Serta merupakan peserta penjaminan LPS
+        - generic [ref=e359]:
+          - generic [ref=e360]: Download Aplikasi Bank Raya
+          - list [ref=e361]:
+            - listitem [ref=e362]:
+              - link "Google Play" [ref=e363] [cursor=pointer]:
+                - /url: https://play.google.com/store/apps/details?id=id.co.bankraya.apps
+                - img "Google Play" [ref=e364]
+            - listitem [ref=e365]:
+              - link "App Store" [ref=e366] [cursor=pointer]:
+                - /url: https://apps.apple.com/id/app/raya-digital-bank/id1627393834
+                - img "App Store" [ref=e367]
+      - generic [ref=e368]:
+        - paragraph [ref=e369]:
+          - strong [ref=e370]: Akses Cepat
+        - paragraph [ref=e371]:
+          - link "Produk" [ref=e372] [cursor=pointer]:
+            - /url: https://bankraya.co.id/product-brochure
+        - paragraph [ref=e373]:
+          - link "Promo" [ref=e374] [cursor=pointer]:
+            - /url: https://bankraya.co.id/promo
+        - paragraph [ref=e375]:
+          - link "FAQ" [ref=e376] [cursor=pointer]:
+            - /url: https://bankraya.co.id/help/faq
+      - generic [ref=e377]:
+        - paragraph [ref=e378]:
+          - strong [ref=e379]: Perusahaan
+        - paragraph [ref=e380]:
+          - link "Laporan Keuangan" [ref=e381] [cursor=pointer]:
+            - /url: https://bankraya.co.id/corporate/reports
+        - paragraph [ref=e382]:
+          - link "Hubungan Investor" [ref=e383] [cursor=pointer]:
+            - /url: https://bankraya.co.id/corporate/investor-relations
+      - generic [ref=e384]:
+        - paragraph [ref=e385]:
+          - strong [ref=e386]: Bantuan
+        - paragraph [ref=e387]:
+          - link "Kontak Kami" [ref=e388] [cursor=pointer]:
+            - /url: https://bankraya.co.id/help/contact-us
+        - paragraph [ref=e389]:
+          - img "Sapa Raya" [ref=e390]
+        - paragraph [ref=e391]:
+          - strong [ref=e392]: Sosial Media Kami
+        - paragraph [ref=e393]:
+          - link "Instagram" [ref=e394] [cursor=pointer]:
+            - /url: https://www.instagram.com/bankraya/
+            - img "Instagram" [ref=e395]
+          - link "Tiktok" [ref=e396] [cursor=pointer]:
+            - /url: https://www.tiktok.com/@bankraya.id
+            - img "Tiktok" [ref=e397]
+          - link "Facebook" [ref=e398] [cursor=pointer]:
+            - /url: https://www.facebook.com/people/Bank-Raya/100073463563889/
+            - img "Facebook" [ref=e399]
+          - link "Linkedin" [ref=e400] [cursor=pointer]:
+            - /url: https://id.linkedin.com/company/pt-bank-raya-indonesia-tbk
+            - img "Linkedin" [ref=e401]
+          - link "Youtube" [ref=e402] [cursor=pointer]:
+            - /url: https://www.youtube.com/channel/UCnpbUrNPUQOHleOIIvhCG_g/featured
+            - img "Youtube" [ref=e403]
+    - generic [ref=e405]:
+      - generic [ref=e407]: © 2026 PT Bank Raya Indonesia Tbk. | All Rights Reserved.
+      - link "Pemberitahuan Privasi" [ref=e409] [cursor=pointer]:
+        - /url: https://bankraya.co.id/privacy-notice

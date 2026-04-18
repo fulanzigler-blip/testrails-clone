@@ -1,0 +1,203 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e7]
+        - generic [ref=e9]: TestRails
+      - button "New Test Run" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+        - text: New Test Run
+      - navigation [ref=e13]:
+        - link "Dashboard" [ref=e14] [cursor=pointer]:
+          - /url: /
+          - img [ref=e15]
+          - text: Dashboard
+        - link "Projects" [ref=e20] [cursor=pointer]:
+          - /url: /projects
+          - img [ref=e21]
+          - text: Projects
+        - link "Test Cases" [ref=e23] [cursor=pointer]:
+          - /url: /test-cases
+          - img [ref=e24]
+          - text: Test Cases
+        - link "Test Runs" [ref=e26] [cursor=pointer]:
+          - /url: /test-runs
+          - img [ref=e27]
+          - text: Test Runs
+        - link "Test Suites" [ref=e29] [cursor=pointer]:
+          - /url: /test-suites
+          - img [ref=e30]
+          - text: Test Suites
+        - link "Page Automation" [ref=e35] [cursor=pointer]:
+          - /url: /page-automation
+          - img [ref=e36]
+          - text: Page Automation
+        - link "Visual Test Builder" [ref=e38] [cursor=pointer]:
+          - /url: /visual-test-builder
+          - img [ref=e39]
+          - text: Visual Test Builder
+        - link "Web Visual Builder" [ref=e41] [cursor=pointer]:
+          - /url: /web-visual-builder
+          - img [ref=e42]
+          - text: Web Visual Builder
+        - link "Hybrid Scanner" [ref=e45] [cursor=pointer]:
+          - /url: /hybrid-scan
+          - img [ref=e46]
+          - text: Hybrid Scanner
+        - link "Users" [ref=e51] [cursor=pointer]:
+          - /url: /users
+          - img [ref=e52]
+          - text: Users
+        - link "Reports" [ref=e57] [cursor=pointer]:
+          - /url: /reports
+          - img [ref=e58]
+          - text: Reports
+      - generic [ref=e60]:
+        - generic [ref=e63]:
+          - paragraph
+          - paragraph [ref=e64]: qa-test@example.com
+        - generic [ref=e65]:
+          - button "Settings" [ref=e66] [cursor=pointer]:
+            - img [ref=e67]
+            - text: Settings
+          - button [ref=e70] [cursor=pointer]:
+            - img [ref=e71]
+  - generic [ref=e74]:
+    - banner [ref=e75]:
+      - heading "Web Visual Builder" [level=1] [ref=e76]
+      - button [ref=e78] [cursor=pointer]:
+        - img [ref=e79]
+    - main [ref=e82]:
+      - generic [ref=e83]:
+        - generic [ref=e84]:
+          - generic [ref=e85]:
+            - heading "Web Visual Builder" [level=1] [ref=e86]
+            - paragraph [ref=e87]: Scan a website, pick elements, compose Playwright test scenarios
+          - generic [ref=e88]:
+            - button "🖥️ Desktop ▼" [ref=e90] [cursor=pointer]:
+              - generic [ref=e91]: 🖥️
+              - generic [ref=e92]: Desktop
+              - generic [ref=e93]: ▼
+            - generic [ref=e94]:
+              - generic [ref=e95]: "Target URL:"
+              - generic [ref=e96]:
+                - textbox "https://example.com" [ref=e97]
+                - button "Scan" [ref=e98] [cursor=pointer]:
+                  - img [ref=e99]
+                  - text: Scan
+        - generic [ref=e102]:
+          - generic [ref=e104]:
+            - heading "Step Palette" [level=3] [ref=e106]
+            - generic [ref=e107]:
+              - generic [ref=e108]:
+                - generic [ref=e111]: Interactions
+                - generic [ref=e112]:
+                  - button "Click Click a button or element" [ref=e113] [cursor=pointer]:
+                    - img [ref=e115]
+                    - generic [ref=e121]:
+                      - generic [ref=e122]: Click
+                      - generic [ref=e123]: Click a button or element
+                    - img [ref=e124]
+                  - button "Enter Text Fill an input field" [ref=e125] [cursor=pointer]:
+                    - img [ref=e127]
+                    - generic [ref=e129]:
+                      - generic [ref=e130]: Enter Text
+                      - generic [ref=e131]: Fill an input field
+                    - img [ref=e132]
+                  - button "Hover Hover over an element" [ref=e133] [cursor=pointer]:
+                    - img [ref=e135]
+                    - generic [ref=e141]:
+                      - generic [ref=e142]: Hover
+                      - generic [ref=e143]: Hover over an element
+                    - img [ref=e144]
+                  - button "Select Select from dropdown" [ref=e145] [cursor=pointer]:
+                    - img [ref=e147]
+                    - generic [ref=e149]:
+                      - generic [ref=e150]: Select
+                      - generic [ref=e151]: Select from dropdown
+                    - img [ref=e152]
+                  - button "Check Check a checkbox" [ref=e153] [cursor=pointer]:
+                    - img [ref=e155]
+                    - generic [ref=e161]:
+                      - generic [ref=e162]: Check
+                      - generic [ref=e163]: Check a checkbox
+                    - img [ref=e164]
+                  - button "Uncheck Uncheck a checkbox" [ref=e165] [cursor=pointer]:
+                    - img [ref=e167]
+                    - generic [ref=e173]:
+                      - generic [ref=e174]: Uncheck
+                      - generic [ref=e175]: Uncheck a checkbox
+                    - img [ref=e176]
+              - generic [ref=e177]:
+                - generic [ref=e180]: Navigation
+                - generic [ref=e181]:
+                  - button "Navigate Go to a URL" [ref=e182] [cursor=pointer]:
+                    - img [ref=e184]
+                    - generic [ref=e187]:
+                      - generic [ref=e188]: Navigate
+                      - generic [ref=e189]: Go to a URL
+                    - img [ref=e190]
+                  - button "Press Key Press a keyboard key" [ref=e191] [cursor=pointer]:
+                    - img [ref=e193]
+                    - generic [ref=e195]:
+                      - generic [ref=e196]: Press Key
+                      - generic [ref=e197]: Press a keyboard key
+                    - img [ref=e198]
+              - generic [ref=e199]:
+                - generic [ref=e202]: Assertions
+                - generic [ref=e203]:
+                  - button "Assert Visible Verify element is visible" [ref=e204] [cursor=pointer]:
+                    - img [ref=e206]
+                    - generic [ref=e209]:
+                      - generic [ref=e210]: Assert Visible
+                      - generic [ref=e211]: Verify element is visible
+                    - img [ref=e212]
+                  - button "Assert Not Visible Verify element is hidden" [ref=e213] [cursor=pointer]:
+                    - img [ref=e215]
+                    - generic [ref=e220]:
+                      - generic [ref=e221]: Assert Not Visible
+                      - generic [ref=e222]: Verify element is hidden
+                    - img [ref=e223]
+                  - button "Assert Text Verify text content" [ref=e224] [cursor=pointer]:
+                    - img [ref=e226]
+                    - generic [ref=e228]:
+                      - generic [ref=e229]: Assert Text
+                      - generic [ref=e230]: Verify text content
+                    - img [ref=e231]
+              - generic [ref=e232]:
+                - generic [ref=e235]: Utilities
+                - generic [ref=e236]:
+                  - button "Wait Wait for N ms" [ref=e237] [cursor=pointer]:
+                    - img [ref=e239]
+                    - generic [ref=e242]:
+                      - generic [ref=e243]: Wait
+                      - generic [ref=e244]: Wait for N ms
+                    - img [ref=e245]
+                  - button "Screenshot Take a screenshot" [ref=e246] [cursor=pointer]:
+                    - img [ref=e248]
+                    - generic [ref=e251]:
+                      - generic [ref=e252]: Screenshot
+                      - generic [ref=e253]: Take a screenshot
+                    - img [ref=e254]
+                  - button "Set Viewport Set browser viewport size" [ref=e255] [cursor=pointer]:
+                    - img [ref=e257]
+                    - generic [ref=e259]:
+                      - generic [ref=e260]: Set Viewport
+                      - generic [ref=e261]: Set browser viewport size
+                    - img [ref=e262]
+          - generic [ref=e264]:
+            - heading "Test Flow (0 steps)" [level=3] [ref=e266]
+            - generic [ref=e269]:
+              - img [ref=e270]
+              - paragraph [ref=e271]: Click steps from palette or use a template
+          - generic [ref=e273]:
+            - heading "Generated Playwright Code" [level=3] [ref=e275]:
+              - img [ref=e276]
+              - text: Generated Playwright Code
+            - generic [ref=e281]:
+              - button "Generate" [disabled]:
+                - img
+                - text: Generate
+              - button "Run Test" [disabled]:
+                - img
+                - text: Run Test

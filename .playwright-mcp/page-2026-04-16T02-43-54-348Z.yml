@@ -1,0 +1,225 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e7]
+        - generic [ref=e9]: TestRails
+      - button "New Test Run" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+        - text: New Test Run
+      - navigation [ref=e13]:
+        - link "Dashboard" [ref=e14] [cursor=pointer]:
+          - /url: /
+          - img [ref=e15]
+          - text: Dashboard
+        - link "Projects" [ref=e20] [cursor=pointer]:
+          - /url: /projects
+          - img [ref=e21]
+          - text: Projects
+        - link "Test Cases" [ref=e23] [cursor=pointer]:
+          - /url: /test-cases
+          - img [ref=e24]
+          - text: Test Cases
+        - link "Test Runs" [ref=e26] [cursor=pointer]:
+          - /url: /test-runs
+          - img [ref=e27]
+          - text: Test Runs
+        - link "Test Suites" [ref=e29] [cursor=pointer]:
+          - /url: /test-suites
+          - img [ref=e30]
+          - text: Test Suites
+        - link "Page Automation" [ref=e35] [cursor=pointer]:
+          - /url: /page-automation
+          - img [ref=e36]
+          - text: Page Automation
+        - link "Visual Test Builder" [ref=e38] [cursor=pointer]:
+          - /url: /visual-test-builder
+          - img [ref=e39]
+          - text: Visual Test Builder
+        - link "Web Visual Builder" [ref=e41] [cursor=pointer]:
+          - /url: /web-visual-builder
+          - img [ref=e42]
+          - text: Web Visual Builder
+        - link "Hybrid Scanner" [ref=e45] [cursor=pointer]:
+          - /url: /hybrid-scan
+          - img [ref=e46]
+          - text: Hybrid Scanner
+        - link "Users" [ref=e51] [cursor=pointer]:
+          - /url: /users
+          - img [ref=e52]
+          - text: Users
+        - link "Reports" [ref=e57] [cursor=pointer]:
+          - /url: /reports
+          - img [ref=e58]
+          - text: Reports
+      - generic [ref=e60]:
+        - generic [ref=e63]:
+          - paragraph
+          - paragraph [ref=e64]: qa-test@example.com
+        - generic [ref=e65]:
+          - button "Settings" [ref=e66] [cursor=pointer]:
+            - img [ref=e67]
+            - text: Settings
+          - button [ref=e70] [cursor=pointer]:
+            - img [ref=e71]
+  - generic [ref=e74]:
+    - banner [ref=e75]:
+      - heading "Visual Test Builder" [level=1] [ref=e76]
+      - button [ref=e78] [cursor=pointer]:
+        - img [ref=e79]
+    - main [ref=e82]:
+      - generic [ref=e83]:
+        - generic [ref=e84]:
+          - heading "Visual Test Builder" [level=1] [ref=e85]
+          - paragraph [ref=e86]: Scan your Flutter app, pick elements, compose test scenarios
+        - generic [ref=e87]:
+          - generic [ref=e88]:
+            - generic [ref=e89]: Codebase
+            - generic [ref=e90]:
+              - combobox [ref=e91]:
+                - option "Discipline Tracker"
+                - option "Raya Dev (Bank Raya)" [selected]
+                - option "Custom Path..."
+              - textbox "/path/to/flutter/project" [ref=e92]: /Users/bankraya/Development/Raya-dev
+          - generic [ref=e93]:
+            - generic [ref=e94]: Runner
+            - combobox [ref=e95]:
+              - option "Mac 2015 (Mac Mini) (SDE0219926003245)"
+              - option "Mac Air (Apple Silicon) (emulator-5554) ★" [selected]
+          - generic [ref=e96]:
+            - generic [ref=e97]: Scan Mode
+            - generic [ref=e98]:
+              - button "Static" [ref=e99] [cursor=pointer]:
+                - img [ref=e100]
+                - text: Static
+              - button "Hybrid" [ref=e105] [cursor=pointer]:
+                - img [ref=e106]
+                - text: Hybrid
+          - generic [ref=e110]:
+            - generic [ref=e111]: Device
+            - button "📱 Default (375×812) ▼" [ref=e113] [cursor=pointer]:
+              - generic [ref=e114]: 📱
+              - generic [ref=e115]: Default (375×812)
+              - generic [ref=e116]: ▼
+          - button "Scanning..." [disabled]:
+            - img
+            - text: Scanning...
+        - generic [ref=e123]:
+          - generic [ref=e125]:
+            - heading "Step Palette" [level=3] [ref=e127]
+            - generic [ref=e128]:
+              - generic [ref=e129]:
+                - generic [ref=e131]: Interactions
+                - generic [ref=e132]:
+                  - button "Enter Text Enter text into a field" [ref=e133] [cursor=pointer]:
+                    - img [ref=e135]
+                    - generic:
+                      - generic: Enter Text
+                      - generic: Enter text into a field
+                    - img [ref=e137]
+                  - button "Tap Tap a button or element" [ref=e138] [cursor=pointer]:
+                    - img [ref=e140]
+                    - generic:
+                      - generic: Tap
+                      - generic: Tap a button or element
+                    - img [ref=e146]
+                  - button "Double Tap Double-tap an element" [ref=e147] [cursor=pointer]:
+                    - img [ref=e149]
+                    - generic:
+                      - generic: Double Tap
+                      - generic: Double-tap an element
+                    - img [ref=e155]
+                  - button "Long Press Long-press an element" [ref=e156] [cursor=pointer]:
+                    - img [ref=e158]
+                    - generic:
+                      - generic: Long Press
+                      - generic: Long-press an element
+                    - img [ref=e161]
+              - generic [ref=e162]:
+                - generic [ref=e164]: Navigation
+                - generic [ref=e165]:
+                  - button "Scroll Scroll by offset (dx, dy)" [ref=e166] [cursor=pointer]:
+                    - img [ref=e168]
+                    - generic:
+                      - generic: Scroll
+                      - generic: Scroll by offset (dx, dy)
+                    - img [ref=e170]
+                  - button "Scroll Until Visible Scroll until element is visible" [ref=e171] [cursor=pointer]:
+                    - img [ref=e173]
+                    - generic:
+                      - generic: Scroll Until Visible
+                      - generic: Scroll until element is visible
+                    - img [ref=e176]
+                  - button "Send Key Send key event (Back, Enter, etc)" [ref=e177] [cursor=pointer]:
+                    - img [ref=e179]
+                    - generic:
+                      - generic: Send Key
+                      - generic: Send key event (Back, Enter, etc)
+                    - img [ref=e181]
+                  - button "Hide Keyboard Dismiss the on-screen keyboard" [ref=e182] [cursor=pointer]:
+                    - img [ref=e184]
+                    - generic:
+                      - generic: Hide Keyboard
+                      - generic: Dismiss the on-screen keyboard
+                    - img [ref=e189]
+              - generic [ref=e190]:
+                - generic [ref=e192]: Assertions
+                - generic [ref=e193]:
+                  - button "Assert Visible Verify element is visible" [ref=e194] [cursor=pointer]:
+                    - img [ref=e196]
+                    - generic:
+                      - generic: Assert Visible
+                      - generic: Verify element is visible
+                    - img [ref=e199]
+                  - button "Assert Not Visible Verify element is hidden" [ref=e200] [cursor=pointer]:
+                    - img [ref=e202]
+                    - generic:
+                      - generic: Assert Not Visible
+                      - generic: Verify element is hidden
+                    - img [ref=e207]
+                  - button "Assert Text Contains Verify text contains a string" [ref=e208] [cursor=pointer]:
+                    - img [ref=e210]
+                    - generic:
+                      - generic: Assert Text Contains
+                      - generic: Verify text contains a string
+                    - img [ref=e212]
+              - generic [ref=e213]:
+                - generic [ref=e215]: Utilities
+                - generic [ref=e216]:
+                  - button "Wait Wait for N seconds" [ref=e217] [cursor=pointer]:
+                    - img [ref=e219]
+                    - generic:
+                      - generic: Wait
+                      - generic: Wait for N seconds
+                    - img [ref=e222]
+                  - button "Take Screenshot Capture screenshot at this step" [ref=e223] [cursor=pointer]:
+                    - img [ref=e225]
+                    - generic:
+                      - generic: Take Screenshot
+                      - generic: Capture screenshot at this step
+                    - img [ref=e228]
+                  - button "Set Surface Size Set device viewport size" [ref=e229] [cursor=pointer]:
+                    - img [ref=e231]
+                    - generic:
+                      - generic: Set Surface Size
+                      - generic: Set device viewport size
+                    - img [ref=e233]
+          - generic [ref=e235]:
+            - heading "Test Flow (0 steps)" [level=3] [ref=e237]
+            - generic [ref=e240]:
+              - img [ref=e241]
+              - paragraph [ref=e242]: Click steps from palette or use a template
+          - generic [ref=e244]:
+            - heading "Generated Code" [level=3] [ref=e247]:
+              - img [ref=e248]
+              - text: Generated Code
+            - generic [ref=e253]:
+              - button "Generate" [disabled]:
+                - img
+                - text: Generate
+              - button "Run Test" [disabled]:
+                - img
+                - text: Run Test
+              - generic [ref=e254] [cursor=pointer]:
+                - checkbox "Skip APK build (--no-build)" [ref=e255]
+                - text: Skip APK build (--no-build)
