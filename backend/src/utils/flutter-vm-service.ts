@@ -136,7 +136,7 @@ export class FlutterVMService {
  * Flatten the VM Service widget tree into a list of actionable elements
  * with Flutter finder strategies.
  */
-export function parseWidgetTree(node: any, depth = 0, typeCount: Map<string, number> = new Map()): FlutterWidget[] {
+export function parseWidgetTree(node: any, depth = 0, typeCount: Map<string, number> = new Map(), inheritedLabel = ''): FlutterWidget[] {
   if (!node || depth > 80) return [];
   const results: FlutterWidget[] = [];
 
@@ -144,15 +144,23 @@ export function parseWidgetTree(node: any, depth = 0, typeCount: Map<string, num
   // children + properties both may hold nested widgets
   const children: any[] = [...(node.children || []), ...(node.properties || [])];
 
+  // Semantics nodes carry a label that applies to their child — extract and propagate
+  const isSemanticsNode = desc === 'Semantics' || desc === 'MergeSemantics';
+  const semanticsLabel = isSemanticsNode ? extractLabelFromProps(node.properties) : '';
+  const labelToPropagate = semanticsLabel || inheritedLabel;
+
   const isTextWidget = desc.startsWith('Text(') || desc === 'Text' || desc === 'RichText';
   const isButton = isButtonWidget(desc);
   const isInput = isInputWidget(desc);
 
-  const text = extractText(desc) || node.valueAsString || '';
+  // textPreview is added by getRootWidgetSummaryTreeWithPreviews for text-bearing widgets
+  // Fall back to inherited Semantics label so injected wrappers propagate their label
+  const text = extractText(desc) || node.textPreview || extractTextFromProps(node.properties) || node.valueAsString || labelToPropagate;
   const key = extractKey(node);
-  const tooltip = node.tooltip || node.tooltipMessage || '';
+  const tooltip = node.tooltip || node.tooltipMessage || extractTooltipFromProps(node.properties);
 
-  const shouldCapture = isButton || isInput || isTextWidget || !!key || !!tooltip;
+  // Skip Semantics nodes themselves — they're wrappers, not actionable elements
+  const shouldCapture = !isSemanticsNode && (isButton || isInput || isTextWidget || !!key || !!tooltip);
 
   if (shouldCapture) {
     const elementType: FlutterWidget['elementType'] =
@@ -167,9 +175,15 @@ export function parseWidgetTree(node: any, depth = 0, typeCount: Map<string, num
     let finderStrategy: FlutterWidget['finderStrategy'] = 'type';
     let finderValue = widgetTypeName;
 
+    // For buttons without text yet, scan immediate children for a Text child label
+    const childText = (!text && isButton)
+      ? extractChildText(node.children)
+      : '';
+    const resolvedText = text || childText;
+
     if (key) { finderStrategy = 'key'; finderValue = key; }
     else if (tooltip) { finderStrategy = 'tooltip'; finderValue = tooltip; }
-    else if (text) { finderStrategy = 'text'; finderValue = text; }
+    else if (resolvedText) { finderStrategy = 'text'; finderValue = resolvedText; }
     // For type-only finders on duplicates, append index so UI can show "TextField #1", "TextField #2"
     else if (count > 1) { finderStrategy = 'type'; finderValue = `${widgetTypeName} #${count}`; }
 
@@ -177,20 +191,90 @@ export function parseWidgetTree(node: any, depth = 0, typeCount: Map<string, num
       results.push({
         description: desc,
         widgetId: node.objectId || node.valueId,
-        text, key, tooltip,
+        text: text || childText, key, tooltip,
         elementType, finderStrategy, finderValue,
       });
     }
   }
 
   for (const child of children) {
-    results.push(...parseWidgetTree(child, depth + 1, typeCount));
+    results.push(...parseWidgetTree(child, depth + 1, typeCount, labelToPropagate));
   }
 
   return results;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+// Extract text from the node's properties array (Flutter summary tree stores
+// text content in properties, not in description when it's just the widget type name)
+function extractTextFromProps(properties: any[] | undefined): string {
+  if (!properties?.length) return '';
+  for (const p of properties) {
+    const name: string = p.name || '';
+    const d: string = p.description || p.valueAsString || '';
+    // Text widget: name="data", description='"Masuk"' or 'Masuk'
+    if (name === 'data' || name === 'text') {
+      const v = d.replace(/^"|"$/g, '').replace(/^'|'$/g, '').trim();
+      if (v && v.length > 0 && v !== 'null') return v;
+    }
+    // Input decorations
+    if (name === 'hintText' || name === 'labelText' || name === 'label' || name === 'placeholder') {
+      const v = d.replace(/^"|"$/g, '').replace(/^'|'$/g, '').trim();
+      if (v && v !== 'null') return v;
+    }
+    // RichText TextSpan children
+    if (name === 'textSpan' || name === 'text') {
+      const m = d.match(/"([^"]{1,80})"/);
+      if (m) return m[1];
+    }
+  }
+  // Also check children for immediate Text node (e.g. ElevatedButton > Text("Masuk"))
+  return '';
+}
+
+// Find text label from direct children (e.g. ElevatedButton > Text("Masuk"))
+function extractChildText(children: any[] | undefined): string {
+  if (!children?.length) return '';
+  for (const c of children) {
+    const d: string = c.description || '';
+    if (d === 'Text' || d.startsWith('Text(') || d === 'RichText') {
+      const t = extractText(d) || c.textPreview || extractTextFromProps(c.properties) || c.valueAsString || '';
+      if (t) return t;
+    }
+  }
+  return '';
+}
+
+function extractLabelFromProps(properties: any[] | undefined): string {
+  if (!properties?.length) return '';
+  for (const p of properties) {
+    if (p.name === 'label' || p.name === 'semanticsLabel') {
+      return (p.description || p.valueAsString || '').replace(/^"|"$/g, '').replace(/^'|'$/g, '').trim();
+    }
+  }
+  return '';
+}
+
+function extractLabelFromProps(properties: any[] | undefined): string {
+  if (!properties?.length) return '';
+  for (const p of properties) {
+    if (p.name === 'label' || p.name === 'semanticsLabel') {
+      return (p.description || p.valueAsString || '').replace(/^"|"$/g, '').replace(/^'|'$/g, '').trim();
+    }
+  }
+  return '';
+}
+
+function extractTooltipFromProps(properties: any[] | undefined): string {
+  if (!properties?.length) return '';
+  for (const p of properties) {
+    if ((p.name === 'tooltip' || p.name === 'message') && p.description) {
+      return p.description.replace(/^"|"$/g, '').trim();
+    }
+  }
+  return '';
+}
 
 function extractText(desc: string): string {
   return (
@@ -217,5 +301,4 @@ function isButtonWidget(desc: string): boolean {
 }
 
 function isInputWidget(desc: string): boolean {
-  return /TextField|TextFormField|CupertinoTextField|EditableText|Checkbox|Switch|Slider|Radio\b|DropdownButtonFormField|DatePicker|TimePicker/i.test(desc);
-}
+  return /TextField|TextFormField|CupertinoTextField|EditableText|Checkbox|Switch|Sli

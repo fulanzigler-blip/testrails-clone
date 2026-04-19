@@ -225,7 +225,35 @@ export function scanAndInjectContent(content: string, _fileName: string): {
     });
   }
 
-  // ── Rule 3: IconButton without tooltip ────────────────────────────────────
+  // ── Rule 3: ElevatedButton / TextButton / OutlinedButton / FilledButton ────
+  const btnRe = /\b(ElevatedButton|TextButton|OutlinedButton|FilledButton)(?:\.icon)?\s*\(/g;
+  while ((m = btnRe.exec(content)) !== null) {
+    const widgetStart = m.index;
+    const openParen = m.index + m[0].lastIndexOf('(');
+    const closeParen = findMatchingParen(content, openParen);
+    if (closeParen < 0) continue;
+
+    const inner = content.slice(openParen, closeParen + 1);
+    const textMatch = inner.match(/(?:child|label)\s*:\s*(?:const\s+)?Text\(\s*['"]([^'"]{1,60})['"]/);
+    if (!textMatch) continue;
+    const label = textMatch[1];
+
+    if (alreadyHasSemantics(content, widgetStart)) continue;
+    if (isAlreadyWrapped(widgetStart, closeParen)) continue;
+
+    pending.push({
+      startPos: widgetStart,
+      endPos: closeParen,
+      insertBefore: `Semantics(label: '${escapeLabel(label)}', button: true, child: `,
+      insertAfter: ')',
+      widgetType: m[1],
+      label,
+      injectionType: 'semantics_wrapper',
+    });
+    injections.push({ line: getLineNumber(content, widgetStart), widgetType: m[1], label, injectionType: 'semantics_wrapper' });
+  }
+
+  // ── Rule 5: IconButton without tooltip ────────────────────────────────────
   const iconBtnRe = /\bIconButton\s*\(/g;
   while ((m = iconBtnRe.exec(content)) !== null) {
     const openParen = m.index + m[0].lastIndexOf('(');
@@ -337,7 +365,7 @@ export async function injectSemanticIdentifiers(
 
   // Find all dart files that contain target widgets (excludes generated files)
   const findResult = await execSSHWithConfig(
-    `grep -rl 'TextFormField\\|TextField(\\|InkWell\\|GestureDetector\\|IconButton\\|FloatingActionButton' '${projectPath}/lib' 2>/dev/null` +
+    `grep -rl 'TextFormField\\|TextField(\\|InkWell\\|GestureDetector\\|IconButton\\|FloatingActionButton\\|ElevatedButton\\|TextButton\\|OutlinedButton\\|FilledButton' '${projectPath}/lib' 2>/dev/null` +
     ` | grep '\\.dart$' | grep -v '\\.g\\.dart' | grep -v '\\.freezed\\.dart' | grep -v '\\.gr\\.dart'` +
     ` | head -300`,
     runner,
