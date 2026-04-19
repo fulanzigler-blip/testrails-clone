@@ -876,7 +876,7 @@ const LiveViewPanel: React.FC<{
   const injectSemantics = async (dryRun = false) => {
     setInjecting(true); setInjectResult(null); setError('');
     try {
-      const resp = await api.post('/integration-tests/semantic-inject', { runnerId, dryRun }, { timeout: 120000 });
+      const resp = await api.post('/integration-tests/semantic-inject', { runnerId, dryRun, profileId: selectedProfile || undefined }, { timeout: 120000 });
       const report = resp.data?.data?.report;
       setInjectResult({ filesModified: report?.filesModified ?? 0, totalInjected: report?.totalInjected ?? 0 });
       if (!dryRun && (report?.filesModified ?? 0) > 0) {
@@ -1110,8 +1110,10 @@ const VisualTestBuilder: React.FC = () => {
   const [scanError, setScanError] = useState('');
   const [scanMode, setScanMode] = useState<'regular' | 'hybrid'>('regular');
   const [codebasePath, setCodebasePath] = useState<string>('');
-  const [runners, setRunners] = useState<Array<{id: string; name: string; host: string; deviceId?: string; isDefault: boolean; projectPath?: string}>>([]);
+  const [runners, setRunners] = useState<Array<{id: string; name: string; host: string; deviceId?: string; isDefault: boolean; projectPath?: string; defaultProfileId?: string}>>([]);
   const [selectedRunner, setSelectedRunner] = useState<string>('');
+  const [profiles, setProfiles] = useState<Array<{id: string; name: string; isDefault: boolean}>>([]);
+  const [selectedProfile, setSelectedProfile] = useState<string>('');
   const [steps, setSteps] = useState<TestStep[]>([]);
   const [credentials, setCredentials] = useState({ email: '', password: '' });
   const [generatedCode, setGeneratedCode] = useState('');
@@ -1189,17 +1191,25 @@ const VisualTestBuilder: React.FC = () => {
     }
   };
 
-  // Load runners on mount (no auto-scan)
+  // Load runners + profiles on mount
   useEffect(() => {
     const load = async () => {
       try {
-        const resp = await api.get('/integration-tests/runners');
-        const list = resp.data?.data || resp.data || [];
+        const [rResp, pResp] = await Promise.all([
+          api.get('/integration-tests/runners'),
+          api.get('/app-profiles'),
+        ]);
+        const list = rResp.data?.data || rResp.data || [];
+        const plist = pResp.data?.data || pResp.data || [];
         setRunners(list);
+        setProfiles(plist);
         const def = list.find((r: any) => r.isDefault) || list[0];
         if (def) {
           setSelectedRunner(def.id);
           setCodebasePath(def.projectPath || '');
+          // Auto-select runner's default profile
+          const runnerProfile = def.defaultProfileId || plist.find((p: any) => p.isDefault)?.id || '';
+          setSelectedProfile(runnerProfile);
         }
       } catch {}
     };
@@ -1393,12 +1403,32 @@ const VisualTestBuilder: React.FC = () => {
                 setSelectedRunner(e.target.value);
                 const runner = runners.find(r => r.id === e.target.value);
                 if (runner?.projectPath) setCodebasePath(runner.projectPath);
+                // Auto-switch to runner's default profile
+                if (runner?.defaultProfileId) setSelectedProfile(runner.defaultProfileId);
               }}
               className="rounded border px-2 py-1.5 text-xs bg-background min-w-[130px]"
             >
               {runners.map(r => (
                 <option key={r.id} value={r.id}>
                   {r.name} {r.deviceId ? `(${r.deviceId})` : ''} {r.isDefault ? '★' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* App Profile */}
+        {profiles.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">App Profile</Label>
+            <select
+              value={selectedProfile}
+              onChange={(e) => setSelectedProfile(e.target.value)}
+              className="rounded border px-2 py-1.5 text-xs bg-background min-w-[140px]"
+            >
+              {profiles.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name}{p.isDefault ? ' ★' : ''}
                 </option>
               ))}
             </select>

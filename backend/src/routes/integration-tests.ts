@@ -1913,15 +1913,28 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
     onRequest: [fastify.authenticate],
   }, async (request: any, reply) => {
     try {
-      const { runnerId, dryRun = false } = request.body as { runnerId?: string; dryRun?: boolean };
+      const { runnerId, dryRun = false, profileId } = request.body as { runnerId?: string; dryRun?: boolean; profileId?: string };
       const runner = await resolveRunnerSSH(runnerId);
 
       if (!runner.projectPath) {
         return errorResponses.badRequest(reply, 'Runner has no projectPath configured. Set the Flutter project path in Runner settings.');
       }
 
+      // Load app profile (profileId → runner default → system default)
+      let profile: any = null;
+      if (profileId) {
+        profile = await prisma.appProfile.findUnique({ where: { id: profileId } });
+      }
+      if (!profile && runnerId) {
+        const runnerRec = await prisma.runner.findUnique({ where: { id: runnerId }, include: { defaultProfile: true } });
+        profile = runnerRec?.defaultProfile;
+      }
+      if (!profile) {
+        profile = await prisma.appProfile.findFirst({ where: { isDefault: true } });
+      }
+
       const { injectSemanticIdentifiers } = await import('../utils/semantic-injector');
-      const report = await injectSemanticIdentifiers(runner as any, runner.projectPath, { dryRun });
+      const report = await injectSemanticIdentifiers(runner as any, runner.projectPath, { dryRun, profile });
 
       return successResponse(reply, { report }, undefined);
     } catch (error: any) {

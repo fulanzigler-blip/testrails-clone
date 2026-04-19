@@ -439,17 +439,42 @@ model IntegrationTest {
 }
 
 model Runner {
-  id          String   @id @default(uuid())
-  name        String
-  host        String
-  username    String   @default("clawbot")
-  projectPath String   @map("project_path")
-  deviceId    String?  @map("device_id")
-  isActive    Boolean  @default(true) @map("is_active")
-  isDefault   Boolean  @default(false) @map("is_default")
-  sshKeyPath  String   @default("/home/nodejs/.ssh/id_ed25519") @map("ssh_key_path")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id              String      @id @default(uuid())
+  name            String
+  host            String
+  username        String      @default("clawbot")
+  projectPath     String      @map("project_path")
+  deviceId        String?     @map("device_id")
+  isActive        Boolean     @default(true) @map("is_active")
+  isDefault       Boolean     @default(false) @map("is_default")
+  sshKeyPath      String      @default("/home/nodejs/.ssh/id_ed25519") @map("ssh_key_path")
+  defaultProfileId String?    @map("default_profile_id")
+  defaultProfile  AppProfile? @relation(fields: [defaultProfileId], references: [id])
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
 
   @@map("runners")
+}
+
+model AppProfile {
+  id              String   @id @default(uuid())
+  name            String   // e.g. "Raya", "Discipline Tracker", "Standard Flutter"
+  description     String?
+  // Custom button widget rules: [{widget, labelProp, triggerProp}]
+  buttonRules     Json     @default("[]") @map("button_rules")
+  // Custom input widget rules: [{widget, labelProp}]
+  inputRules      Json     @default("[]") @map("input_rules")
+  // Which injection rules are enabled
+  injectorRules   Json     @default("{}") @map("injector_rules")
+  // Picker detection patterns
+  pickerPatterns  Json     @default("[]") @map("picker_patterns")
+  // Flutter test finder overrides per widget
+  finderOverrides Json     @default("[]") @map("finder_overrides")
+  isDefault       Boolean  @default(false) @map("is_default")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  runners         Runner[]
+
+  @@map("app_profiles")
 }
