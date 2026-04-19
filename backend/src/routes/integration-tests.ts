@@ -706,6 +706,41 @@ void main() {
         code += `    expect(${finder}, findsNothing);\n`;
         break;
       }
+      case 'set_date': {
+        // Open date picker, switch to text input mode, enter date, confirm
+        const finder = buildFinder(step);
+        const dateVal = step.value || ''; // ISO: 2026-04-19
+        // Convert YYYY-MM-DD to MM/DD/YYYY (Material DatePicker text input format)
+        const parts = dateVal.split('-');
+        const formatted = parts.length === 3 ? `${parts[1]}/${parts[2]}/${parts[0]}` : dateVal;
+        code += `    await tester.tap(${finder});\n`;
+        code += `    await tester.pumpAndSettle();\n`;
+        code += `    // Switch date picker to text input mode\n`;
+        code += `    final editIcon = find.byIcon(Icons.edit);\n`;
+        code += `    if (tester.any(editIcon)) { await tester.tap(editIcon); await tester.pumpAndSettle(); }\n`;
+        code += `    await tester.enterText(find.byType(TextField).first, '${formatted}');\n`;
+        code += `    await tester.pumpAndSettle();\n`;
+        code += `    await tester.tap(find.text('OK'));\n`;
+        code += `    await tester.pumpAndSettle();\n`;
+        break;
+      }
+      case 'set_time': {
+        // Open time picker, switch to keyboard input mode, enter time, confirm
+        const finder = buildFinder(step);
+        const timeVal = step.value || '00:00'; // HH:MM
+        code += `    await tester.tap(${finder});\n`;
+        code += `    await tester.pumpAndSettle();\n`;
+        code += `    // Switch time picker to keyboard input mode\n`;
+        code += `    final kbIcon = find.byIcon(Icons.keyboard);\n`;
+        code += `    if (tester.any(kbIcon)) { await tester.tap(kbIcon); await tester.pumpAndSettle(); }\n`;
+        const [hh, mm] = timeVal.split(':');
+        code += `    await tester.enterText(find.byType(TextField).first, '${hh || '00'}');\n`;
+        code += `    await tester.enterText(find.byType(TextField).last, '${mm || '00'}');\n`;
+        code += `    await tester.pumpAndSettle();\n`;
+        code += `    await tester.tap(find.text('OK'));\n`;
+        code += `    await tester.pumpAndSettle();\n`;
+        break;
+      }
       case 'wait': {
         const duration = step.value || '2';
         code += `    await tester.pump(const Duration(seconds: ${duration}));\n`;

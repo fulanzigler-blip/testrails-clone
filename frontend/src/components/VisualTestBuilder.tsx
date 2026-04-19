@@ -44,7 +44,7 @@ interface ElementCatalog {
 
 interface TestStep {
   id: string;
-  type: 'enter_text' | 'tap' | 'double_tap' | 'long_press' | 'scroll' | 'scroll_until_visible' | 'send_key' | 'hide_keyboard' | 'assert_visible' | 'assert_not_visible' | 'assert_text' | 'wait' | 'screenshot' | 'set_surface_size';
+  type: 'enter_text' | 'tap' | 'double_tap' | 'long_press' | 'scroll' | 'scroll_until_visible' | 'send_key' | 'hide_keyboard' | 'assert_visible' | 'assert_not_visible' | 'assert_text' | 'wait' | 'screenshot' | 'set_surface_size' | 'set_date' | 'set_time';
   elementId?: string;
   value?: string;
   text?: string;
@@ -92,6 +92,8 @@ const STEP_CATEGORIES = [
       { type: 'tap' as const, label: 'Tap', icon: MousePointerClick, desc: 'Tap a button or element' },
       { type: 'double_tap' as const, label: 'Double Tap', icon: MousePointerClick, desc: 'Double-tap an element' },
       { type: 'long_press' as const, label: 'Long Press', icon: Clock, desc: 'Long-press an element' },
+      { type: 'set_date' as const, label: 'Set Date', icon: Type, desc: 'Set a date picker value (bypasses calendar UI)' },
+      { type: 'set_time' as const, label: 'Set Time', icon: Clock, desc: 'Set a time picker value (bypasses clock UI)' },
     ],
   },
   {
@@ -394,6 +396,30 @@ const StepRow: React.FC<{
             <Input type="number" value={step.value2 || '812'} onChange={(e) => onUpdate(step.id, { value2: e.target.value })} className="w-20 text-sm" />
           </div>
         );
+      case 'set_date':
+        return (
+          <div className="flex gap-2 mt-2 items-center">
+            <input
+              type="date"
+              className="flex-1 rounded border px-3 py-2 text-sm bg-background"
+              value={step.value || ''}
+              onChange={(e) => onUpdate(step.id, { value: e.target.value })}
+            />
+            <span className="text-xs text-muted-foreground whitespace-nowrap">→ uses text input mode</span>
+          </div>
+        );
+      case 'set_time':
+        return (
+          <div className="flex gap-2 mt-2 items-center">
+            <input
+              type="time"
+              className="flex-1 rounded border px-3 py-2 text-sm bg-background"
+              value={step.value || ''}
+              onChange={(e) => onUpdate(step.id, { value: e.target.value })}
+            />
+            <span className="text-xs text-muted-foreground whitespace-nowrap">→ uses keyboard input mode</span>
+          </div>
+        );
       case 'assert_visible':
       case 'assert_not_visible': {
         const hasLiveAssert = !!(step.finderValue && step.elementId && !catalog?.screens.some(s => [...(s.buttons || []), ...(s.texts || [])].some(e => e.id === step.elementId)));
@@ -463,7 +489,7 @@ const ElementList: React.FC<{
   elements: LiveElement[];
   isFlutterSession: boolean;
   onClear: () => void;
-  onAddStep: (type: 'tap' | 'enter_text' | 'assert_visible' | 'assert_text', el: LiveElement, value?: string) => void;
+  onAddStep: (type: 'tap' | 'enter_text' | 'assert_visible' | 'assert_text' | 'set_date' | 'set_time', el: LiveElement, value?: string) => void;
 }> = ({ elements, isFlutterSession, onClear, onAddStep }) => {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [enterValues, setEnterValues] = useState<Record<number, string>>({});
@@ -529,6 +555,13 @@ const ElementList: React.FC<{
                     title="Enter text"
                   >Text</button>
                 )}
+                {el.elementType === 'button' && (
+                  <button
+                    onClick={() => setExpandedIdx(isExpanded ? null : i)}
+                    className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${isExpanded ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}
+                    title="Set date or time value"
+                  >📅</button>
+                )}
                 <button
                   onClick={() => onAddStep('assert_visible', el)}
                   className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 hover:bg-purple-200"
@@ -557,6 +590,31 @@ const ElementList: React.FC<{
                     onClick={() => { onAddStep('enter_text', el, enterValues[i]); setExpandedIdx(null); setEnterValues(v => ({ ...v, [i]: '' })); }}
                     className="shrink-0 text-[10px] px-2 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40"
                   >+ Enter</button>
+                </div>
+              )}
+              {/* Expanded picker panel */}
+              {isExpanded && el.elementType === 'button' && !el.isInput && (
+                <div className="px-2 pb-2 space-y-1.5">
+                  <div className="flex gap-1.5 items-center">
+                    <input type="date" className="flex-1 rounded border px-2 py-1 text-xs bg-background" id={`date-${i}`} />
+                    <button
+                      onClick={() => {
+                        const v = (document.getElementById(`date-${i}`) as HTMLInputElement)?.value;
+                        if (v) { onAddStep('set_date', el, v); setExpandedIdx(null); }
+                      }}
+                      className="shrink-0 text-[10px] px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600"
+                    >+ Set Date</button>
+                  </div>
+                  <div className="flex gap-1.5 items-center">
+                    <input type="time" className="flex-1 rounded border px-2 py-1 text-xs bg-background" id={`time-${i}`} />
+                    <button
+                      onClick={() => {
+                        const v = (document.getElementById(`time-${i}`) as HTMLInputElement)?.value;
+                        if (v) { onAddStep('set_time', el, v); setExpandedIdx(null); }
+                      }}
+                      className="shrink-0 text-[10px] px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600"
+                    >+ Set Time</button>
+                  </div>
                 </div>
               )}
             </div>
