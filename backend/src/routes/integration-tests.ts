@@ -2031,6 +2031,21 @@ function findWidgetAtPosition(node: any, x: number, y: number): any | null {
 // ─── Pure Flutter VM Service Widget Tree (NO UIAutomator) ─────────────────────
 // Converts FlutterWidget[] from VM Service to element format
 
+// Returns the last Scaffold node found in depth-first order.
+// Flutter's Navigator stack has all route subtrees in the tree simultaneously;
+// the last Scaffold is the topmost (currently active) route.
+function findLastScaffold(node: any, depth = 0): any | null {
+  if (!node || depth > 120) return null;
+  const desc: string = node.description || '';
+  let last: any = null;
+  if (desc === 'Scaffold' || desc.startsWith('CupertinoPageScaffold')) last = node;
+  for (const child of [...(node.children || []), ...(node.properties || [])]) {
+    const found = findLastScaffold(child, depth + 1);
+    if (found) last = found;
+  }
+  return last;
+}
+
 function flutterWidgetToElement(widget: any, index: number): any {
   const description = widget.description || '';
   const widgetType = description.split('(')[0] || 'Widget';
@@ -2285,8 +2300,13 @@ async function getFlutterWidgetTreePureVM(session: any): Promise<{ elements: any
     throw new Error('Failed to get widget tree from VM Service');
   }
 
+  // Flutter keeps all Navigator route subtrees alive simultaneously.
+  // Only parse the LAST Scaffold in the tree — that is the topmost active route.
+  const activeSubtree = findLastScaffold(rootTree) || rootTree;
+  logger.info(`[FlutterSession ${id}] Active subtree root: ${(activeSubtree as any).description || 'root'}`);
+
   // Parse the widget tree into actionable elements
-  const flutterWidgets = parseWidgetTree(rootTree);
+  const flutterWidgets = parseWidgetTree(activeSubtree);
   logger.info(`[FlutterSession ${id}] VM Service returned ${flutterWidgets.length} widgets`);
 
   // Convert FlutterWidget[] to element format
