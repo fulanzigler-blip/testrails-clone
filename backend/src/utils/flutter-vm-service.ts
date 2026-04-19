@@ -301,4 +301,5 @@ function isButtonWidget(desc: string): boolean {
 }
 
 function isInputWidget(desc: string): boolean {
-  return /TextField|TextFormField|CupertinoTextField|EditableText|Checkbox|Switch|Sli
+  return /TextField|TextFormField|CupertinoTextField|EditableText|Checkbox|Switch|Slider|Radio\b|DropdownButtonFormField|DatePicker|TimePicker/i.test(desc);
+}
