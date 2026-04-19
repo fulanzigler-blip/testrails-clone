@@ -1901,12 +1901,14 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       let hitWidget = null;
 
       try {
-        // Try getDetailsSubtree to get widget tree with render bounds
-        const rootTree = await vmServiceRpc(session, 'ext.flutter.inspector.getDetailsSubtree', {
+        // Get summary tree first (includes valueId for root widget), then fetch details with bounds
+        const summaryTree = await vmServiceRpc(session, 'ext.flutter.inspector.getRootWidgetSummaryTreeWithPreviews', {
           groupName: 'explorer',
-          arg: '',  // empty = root widget
-          subtreeDepth: '30',
         });
+        const rootId = summaryTree?.valueId || summaryTree?.objectId || '';
+        const rootTree = rootId
+          ? await vmServiceRpc(session, 'ext.flutter.inspector.getDetailsSubtree', { groupName: 'explorer', arg: rootId, subtreeDepth: '30' })
+          : summaryTree;
 
         logger.info(`[FlutterSession ${id}] Got details subtree, searching for widget at (${x}, ${y})`);
 
@@ -2275,10 +2277,8 @@ async function getFlutterWidgetTreePureVM(session: any): Promise<{ elements: any
 
   // Use vmServiceRpc to call Flutter VM Service via SSH relay
   // Get the root widget tree (summary tree - fast, includes all widgets)
-  const rootTree = await vmServiceRpc(session, 'ext.flutter.inspector.getDetailsSubtree', {
+  const rootTree = await vmServiceRpc(session, 'ext.flutter.inspector.getRootWidgetSummaryTreeWithPreviews', {
     groupName: 'explorer',
-    arg: '',
-    subtreeDepth: '30',
   });
 
   if (!rootTree) {
