@@ -139,6 +139,16 @@ export function scanAndInjectContent(content: string, _fileName: string, profile
     return pending.some(p => p.startPos <= startPos && p.endPos >= endPos);
   }
 
+  // If `const ` immediately precedes the widget, shift startPos back so the
+  // original `const Widget()` becomes `child: const Widget()` in the wrapper,
+  // avoiding `const Semantics(...)` which fails when Semantics has no const ctor.
+  function resolveStartPos(widgetStart: number): number {
+    if (widgetStart >= 6 && content.slice(widgetStart - 6, widgetStart) === 'const ') {
+      return widgetStart - 6;
+    }
+    return widgetStart;
+  }
+
   function alreadyHasSemantics(content: string, widgetStart: number): boolean {
     // Look at the 120 chars before the widget for `Semantics(` with `child:`
     const before = content.slice(Math.max(0, widgetStart - 120), widgetStart);
@@ -172,7 +182,7 @@ export function scanAndInjectContent(content: string, _fileName: string, profile
     if (alreadyHasSemantics(content, widgetStart)) continue;
 
     pending.push({
-      startPos: widgetStart,
+      startPos: resolveStartPos(widgetStart),
       endPos: closeParen,
       insertBefore: `Semantics(label: '${escapeLabel(label)}', textField: true, child: `,
       insertAfter: ')',
@@ -209,7 +219,7 @@ export function scanAndInjectContent(content: string, _fileName: string, profile
     if (isAlreadyWrapped(widgetStart, closeParen)) continue;
 
     pending.push({
-      startPos: widgetStart,
+      startPos: resolveStartPos(widgetStart),
       endPos: closeParen,
       insertBefore: `Semantics(label: '${escapeLabel(label)}', button: true, child: `,
       insertAfter: ')',
@@ -242,7 +252,7 @@ export function scanAndInjectContent(content: string, _fileName: string, profile
     if (isAlreadyWrapped(widgetStart, closeParen)) continue;
 
     pending.push({
-      startPos: widgetStart,
+      startPos: resolveStartPos(widgetStart),
       endPos: closeParen,
       insertBefore: `Semantics(label: '${escapeLabel(label)}', button: true, child: `,
       insertAfter: ')',
@@ -264,7 +274,7 @@ export function scanAndInjectContent(content: string, _fileName: string, profile
     if (isAlreadyWrapped(widgetStart, closeParen)) continue;
     const label = m[1] === 'CloseButton' ? 'Close' : 'Back';
     pending.push({
-      startPos: widgetStart, endPos: closeParen,
+      startPos: resolveStartPos(widgetStart), endPos: closeParen,
       insertBefore: `Semantics(label: '${label}', button: true, child: `,
       insertAfter: ')',
       widgetType: m[1], label, injectionType: 'semantics_wrapper',
@@ -373,7 +383,7 @@ export function scanAndInjectContent(content: string, _fileName: string, profile
         if (isAlreadyWrapped(widgetStart, closeParen)) continue;
 
         pending.push({
-          startPos: widgetStart, endPos: closeParen,
+          startPos: resolveStartPos(widgetStart), endPos: closeParen,
           insertBefore: `Semantics(label: '${escapeLabel(label)}', button: true, child: `,
           insertAfter: ')',
           widgetType: rule.widget, label, injectionType: 'semantics_wrapper',
@@ -405,7 +415,7 @@ export function scanAndInjectContent(content: string, _fileName: string, profile
         if (isAlreadyWrapped(widgetStart, closeParen)) continue;
 
         pending.push({
-          startPos: widgetStart, endPos: closeParen,
+          startPos: resolveStartPos(widgetStart), endPos: closeParen,
           insertBefore: `Semantics(label: '${escapeLabel(label)}', textField: true, child: `,
           insertAfter: ')',
           widgetType: rule.widget, label, injectionType: 'semantics_wrapper',
