@@ -2313,50 +2313,49 @@ async function getFlutterWidgetTreeHybrid(
 
 async function getFlutterWidgetTreePureVM(session: any): Promise<{ elements: any[]; screenshot: string }> {
   const { id, runner } = session;
+  const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+  const adbEnv = 'export ANDROID_HOME="$HOME/Library/Android/sdk" && export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ';
 
-  // Use vmServiceRpc to call Flutter VM Service via SSH relay
-  // Get the root widget tree (summary tree - fast, includes all widgets)
-  const rootTree = await vmServiceRpc(session, 'ext.flutter.inspector.getRootWidgetSummaryTreeWithPreviews', {
-    groupName: 'explorer',
-  });
+  // Run VM Service tree, UIAutomator dump, and screenshot in parallel
+  const [rootTree, xmlResult, screenshotBuf] = await Promise.all([
+    vmServiceRpc(session, 'ext.flutter.inspector.getRootWidgetSummaryTreeWithPreviews', { groupName: 'explorer' }),
+    execSSHWithConfig(adbEnv + `adb ${deviceArg} shell uiautomator dump /dev/tty 2>/dev/null`, runner, 20000),
+    execSSHBinary(adbEnv + `adb ${deviceArg} exec-out screencap -p`, runner, 25000),
+  ]);
 
-  if (!rootTree) {
-    throw new Error('Failed to get widget tree from VM Service');
+  if (!rootTree) throw new Error('Failed to get widget tree from VM Service');
+
+  const screenshot = screenshotBuf.toString('base64');
+  const xml = xmlResult.output;
+
+  // ── Popup detection via UIAutomator ──────────────────────────────────────
+  // The Flutter inspector never includes dialog/sheet routes in the summary tree.
+  // UIAutomator DOES see them via Android accessibility. Detect a popup by
+  // checking if all clickable elements are clustered in a sub-area of the screen
+  // (dialog box pattern) rather than spread across the full screen.
+  const popupElements = detectAndExtractPopup(xml, id);
+  if (popupElements) {
+    logger.info(`[FlutterSession ${id}] Popup detected via UIAutomator: ${popupElements.length} elements`);
+    return { elements: popupElements, screenshot };
   }
 
-  // Flutter keeps all Navigator route subtrees alive simultaneously.
-  // Only parse the LAST Scaffold in the tree — that is the topmost active route.
-  // Debug: log every unique description seen in tree to find popup widget names
-  const allDescs = new Set<string>();
-  const collectDescs = (n: any, d = 0) => { if (!n || d > 120) return; allDescs.add(n.description || ''); [...(n.children||[]),...(n.properties||[])].forEach(c => collectDescs(c, d+1)); };
-  collectDescs(rootTree);
-  logger.info(`[FlutterSession ${id}] All widget types: ${[...allDescs].filter(Boolean).join(', ')}`);
+  // ── Normal screen: use VM Service tree filtered to active Scaffold ────────
   const activeSubtree = findLastScaffold(rootTree) || rootTree;
-  logger.info(`[FlutterSession ${id}] Active subtree root: ${(activeSubtree as any).description || 'root'}`);
+  logger.info(`[FlutterSession ${id}] Active subtree: ${(activeSubtree as any).description || 'root'}`);
 
-  // Parse the widget tree into actionable elements
   const flutterWidgets = parseWidgetTree(activeSubtree);
   logger.info(`[FlutterSession ${id}] VM Service returned ${flutterWidgets.length} widgets`);
 
-  // Convert FlutterWidget[] to element format
   const elements = flutterWidgets
     .map((w, i) => flutterWidgetToElement(w, i))
     .filter(e => {
-      // Filter out low-value elements
-      // - Keep all buttons, inputs, checkboxes
-      // - For text: keep only if has meaningful content (>2 chars)
-      if (e.elementType === 'button' || e.elementType === 'input' || e.elementType === 'checkbox') {
-        return true;
-      }
+      if (e.elementType === 'button' || e.elementType === 'input' || e.elementType === 'checkbox') return true;
       if (e.elementType === 'text' && e.text && e.text.length > 2) {
-        // Skip generic text labels like "/", ":", etc.
-        const skipPatterns = /^[\/\:\;\,\.\-\+\=\(\)\[\]\{\}]+$/;
-        return !skipPatterns.test(e.text.trim());
+        return !/^[\/\:\;\,\.\-\+\=\(\)\[\]\{\}]+$/.test(e.text.trim());
       }
       return false;
     });
 
-  // Deduplicate by finderValue + elementType
   const seen = new Set<string>();
   const deduped = elements.filter(e => {
     const key = `${e.elementType}|${e.finderValue}|${e.finderStrategy}`;
@@ -2366,14 +2365,85 @@ async function getFlutterWidgetTreePureVM(session: any): Promise<{ elements: any
   });
 
   logger.info(`[FlutterSession ${id}] After filtering: ${deduped.length} actionable elements`);
-
-  // Take screenshot at same time
-  const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
-  const adbEnv = 'export ANDROID_HOME="$HOME/Library/Android/sdk" && export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ';
-  const screenshotBuf = await execSSHBinary(adbEnv + `adb ${deviceArg} exec-out screencap -p`, runner, 25000);
-  const screenshot = screenshotBuf.toString('base64');
-
   return { elements: deduped, screenshot };
+}
+
+// Detect if a popup/dialog/sheet is open via UIAutomator XML.
+// Returns elements inside the popup, or null if no popup detected.
+function detectAndExtractPopup(xml: string, sessionId: string): any[] | null {
+  if (!xml) return null;
+
+  const boundsRe = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/;
+  const nodeRe = /<node\s+([^>]*)\/>/g;
+  const get = (attrs: string, k: string) => { const r = new RegExp(`${k}="([^"]*)"`).exec(attrs); return r ? r[1] : ''; };
+
+  // Collect all nodes with text/content-desc
+  interface UiNode { text: string; bounds: string; x1: number; y1: number; x2: number; y2: number; clickable: boolean; }
+  const nodes: UiNode[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const rawText = get(attrs, 'text') || get(attrs, 'content-desc');
+    const bounds = get(attrs, 'bounds');
+    if (!rawText?.trim() || !bounds) continue;
+    const bm = boundsRe.exec(bounds);
+    if (!bm) continue;
+    nodes.push({
+      text: rawText.trim(),
+      bounds,
+      x1: parseInt(bm[1]), y1: parseInt(bm[2]),
+      x2: parseInt(bm[3]), y2: parseInt(bm[4]),
+      clickable: get(attrs, 'clickable') === 'true',
+    });
+  }
+  if (!nodes.length) return null;
+
+  // Estimate screen dimensions from the widest element
+  const screenW = Math.max(...nodes.map(n => n.x2));
+  const screenH = Math.max(...nodes.map(n => n.y2));
+
+  // Find bounding box of all CLICKABLE elements
+  const clickable = nodes.filter(n => n.clickable);
+  if (clickable.length < 2) return null;
+
+  const minX = Math.min(...clickable.map(n => n.x1));
+  const maxX = Math.max(...clickable.map(n => n.x2));
+  const minY = Math.min(...clickable.map(n => n.y1));
+  const maxY = Math.max(...clickable.map(n => n.y2));
+
+  const dialogW = maxX - minX;
+  const dialogH = maxY - minY;
+
+  // Popup heuristic: clickable elements fit in <80% width AND <80% height,
+  // AND they're horizontally centered (not edge-to-edge)
+  const isHorizontallyCentered = minX > screenW * 0.05 && maxX < screenW * 0.95;
+  const isNarrowerThanScreen = dialogW < screenW * 0.80;
+  const isShorterThanScreen = dialogH < screenH * 0.80;
+
+  if (!(isHorizontallyCentered && isNarrowerThanScreen && isShorterThanScreen)) return null;
+
+  logger.info(`[Session ${sessionId}] Popup bounds: [${minX},${minY}][${maxX},${maxY}] screen: ${screenW}x${screenH}`);
+
+  // Extract all nodes within the popup bounds (with margin)
+  const margin = 20;
+  const popupNodes = nodes.filter(n =>
+    n.x1 >= minX - margin && n.x2 <= maxX + margin &&
+    n.y1 >= minY - margin && n.y2 <= maxY + margin &&
+    n.text.length >= 1
+  );
+
+  const seen = new Set<string>();
+  return popupNodes
+    .filter(n => { if (seen.has(n.text)) return false; seen.add(n.text); return true; })
+    .map((n, i) => ({
+      text: n.text, contentDesc: n.text, resourceId: '', idShort: '',
+      className: 'flutter.popup',
+      clickable: n.clickable, isInput: false, isCheckable: false,
+      bounds: n.bounds, x1: n.x1, y1: n.y1, x2: n.x2, y2: n.y2,
+      elementType: n.clickable ? 'button' : 'text',
+      finderStrategy: 'text' as const, finderValue: n.text,
+      selector: `[text="${n.text}"]`,
+    }));
 }
 
 // ─── Extract all interactive elements from UIAutomator XML ──────────────────
