@@ -175,35 +175,56 @@ export async function vmServiceRpc(session: FlutterSession, method: string, para
   const tokenMatch = session.vmServiceUrl.match(/:(\d+)\/(.+?)(?:\/ws)?\/?$/);
   const token = tokenMatch?.[2] || '';
 
-  const payload = JSON.stringify({ jsonrpc: '2.0', id: '1', method, params });
-
-  // Use Python3 (websocket-client) on the Mac runner to relay the VM Service RPC.
-  // Base64-encode the script to avoid ALL shell quoting issues (single quotes in URLs/payload
-  // would break the shell's single-quoted -c string).
   const wsUrl = `ws://127.0.0.1:${port}/${token}/ws`;
-  const pyLines = [
+  const isExtension = method.startsWith('ext.');
+
+  // For Flutter service extensions (ext.*) we must use callServiceExtension with an isolateId.
+  // Plain VM methods (getVM, getIsolate, etc.) are called directly.
+  // The Python script loops on recv() to skip stream notifications and match by id.
+  const pyLines = isExtension ? [
+    'import websocket, json, sys',
+    `ws = websocket.create_connection(${JSON.stringify(wsUrl)}, timeout=15)`,
+    'def recv_id(ws, rid):',
+    '    for _ in range(20):',
+    '        msg = json.loads(ws.recv())',
+    '        if str(msg.get("id")) == str(rid): return msg',
+    '    raise RuntimeError("response not received")',
+    // Step 1: getVM to get isolate ID
+    'ws.send(json.dumps({"jsonrpc":"2.0","id":"1","method":"getVM","params":{}}))',
+    'vm = recv_id(ws, "1")',
+    'isolates = vm.get("result", {}).get("isolates", [])',
+    'isolate_id = next((i["id"] for i in isolates if "kernel" not in i.get("name","").lower()), isolates[0]["id"] if isolates else None)',
+    'if not isolate_id: sys.exit("no isolate")',
+    // Step 2: callServiceExtension with isolateId
+    `ws.send(json.dumps({"jsonrpc":"2.0","id":"2","method":"callServiceExtension","params":{"method":${JSON.stringify(method)},"isolateId":isolate_id,**${JSON.stringify(params)}}}))`,
+    'result = recv_id(ws, "2")',
+    'print(json.dumps(result))',
+    'ws.close()',
+  ] : [
     'import websocket, json',
-    `ws = websocket.create_connection(${JSON.stringify(wsUrl)}, timeout=10)`,
-    `ws.send(${JSON.stringify(payload)})`,
+    `ws = websocket.create_connection(${JSON.stringify(wsUrl)}, timeout=15)`,
+    `ws.send(${JSON.stringify(JSON.stringify({ jsonrpc: '2.0', id: '1', method, params }))})`,
     'print(ws.recv())',
     'ws.close()',
-  ].join('\n');
-  const encoded = Buffer.from(pyLines).toString('base64');
-  // Try homebrew python3 first (has websocket-client), fall back to system python3
+  ];
+
+  const encoded = Buffer.from(pyLines.join('\n')).toString('base64');
   const cmd = `PYTHON3=$( (/opt/homebrew/bin/python3 -c "import websocket" 2>/dev/null && echo /opt/homebrew/bin/python3) || (/usr/local/bin/python3 -c "import websocket" 2>/dev/null && echo /usr/local/bin/python3) || echo python3); $PYTHON3 -c "import base64; exec(base64.b64decode('${encoded}').decode())"`;
 
-
-  const result = await execSSHWithConfig(cmd, session.runner, 15000);
+  const result = await execSSHWithConfig(cmd, session.runner, 20000);
 
   if (result.code !== 0) throw new Error(`VM Service RPC failed: ${result.output}`);
+  const raw = result.output.trim();
+  let parsed: any;
   try {
-    const parsed = JSON.parse(result.output.trim());
-    if (parsed.error) throw new Error(parsed.error.message || JSON.stringify(parsed.error));
-    // For some extensions, the full response is the result (not wrapped in 'result' key)
-    return parsed.result !== undefined ? parsed.result : parsed;
+    parsed = JSON.parse(raw);
   } catch {
-    throw new Error(`VM Service returned invalid JSON: ${result.output.slice(0, 200)}`);
+    throw new Error(`VM Service returned invalid JSON: ${raw.slice(0, 200)}`);
   }
+  if (parsed.error) throw new Error(parsed.error.message || JSON.stringify(parsed.error));
+  // callServiceExtension wraps under result.result; direct calls wrap under result
+  const inner = parsed.result;
+  return inner?.result !== undefined ? inner.result : (inner ?? parsed);
 }
 
 // ─── Poll for Observatory URL ─────────────────────────────────────────────────
