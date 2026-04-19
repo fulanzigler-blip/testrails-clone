@@ -302,16 +302,18 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
   ];
 
   // Workaround for macOS 13 + newer Flutter: bypass VM version check
-  const flutterEnv = [
+  // These are pushed as separate script lines so exports are available to all subsequent commands
+  const flutterEnvLines = [
     'export DART_VM_OPTIONS="--no-enable-macos-version-check"',
     `export FLUTTER_ROOT="${homeDir}/development/flutter"`,
     `export PATH="${homeDir}/development/flutter/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"`,
-  ].join(' && ');
+  ];
+
+  // Push env exports as individual lines so they're available to all subsequent commands
+  scriptLines.push(...flutterEnvLines);
 
   if (noBuild) {
-    // Use the forwarded SSH key for git to access private repos
     scriptLines.push(
-      flutterEnv,
       `echo "Running flutter pub get (using forwarded SSH key)..."`,
       `GIT_SSH_COMMAND="ssh -i ${tempKeyPath} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" flutter pub get 2>&1`,
       'PUB_EXIT=$?',
@@ -324,7 +326,6 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
     );
   } else {
     scriptLines.push(
-      flutterEnv,
       `echo "Running flutter pub get..."`,
       `flutter pub get 2>&1`,
       'PUB_EXIT=$?',
@@ -338,7 +339,7 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
 
   scriptLines.push(
     `echo "Running test..."`,
-    `${flutterEnv} flutter test integration_test/${testFileName} -d ${deviceId}${noBuild ? ' --no-pub' : ''} 2>&1`,
+    `flutter test integration_test/${testFileName} -d ${deviceId}${noBuild ? ' --no-pub' : ''} 2>&1`,
     'echo "EXIT_CODE:$?"',
   );
   const scriptContent = scriptLines.join('\n') + '\n';
