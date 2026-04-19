@@ -2031,14 +2031,38 @@ function findWidgetAtPosition(node: any, x: number, y: number): any | null {
 // ─── Pure Flutter VM Service Widget Tree (NO UIAutomator) ─────────────────────
 // Converts FlutterWidget[] from VM Service to element format
 
-// Returns the last Scaffold node found in depth-first order.
-// Flutter's Navigator stack has all route subtrees in the tree simultaneously;
-// the last Scaffold is the topmost (currently active) route.
+// Returns the last "screen root" node in depth-first order.
+// A screen root is either a Scaffold (regular route) or a dialog/overlay widget
+// (dialog route pushed on top). Flutter keeps ALL Navigator routes alive simultaneously,
+// so we must find the topmost one by taking the last match in DFS order.
 function findLastScaffold(node: any, depth = 0): any | null {
   if (!node || depth > 120) return null;
   const desc: string = node.description || '';
   let last: any = null;
-  if (desc === 'Scaffold' || desc.startsWith('CupertinoPageScaffold')) last = node;
+
+  const isScreenRoot =
+    desc === 'Scaffold' ||
+    desc === 'CupertinoPageScaffold' ||
+    // Material dialogs / pickers
+    desc === 'Dialog' ||
+    desc === 'AlertDialog' ||
+    desc === 'SimpleDialog' ||
+    desc === 'DatePickerDialog' ||
+    desc === 'TimePickerDialog' ||
+    desc === 'DateRangePickerDialog' ||
+    // Bottom sheets
+    desc === 'BottomSheet' ||
+    desc === 'ModalBottomSheet' ||
+    // Cupertino
+    desc === 'CupertinoAlertDialog' ||
+    desc === 'CupertinoActionSheet' ||
+    desc === 'CupertinoDatePicker' ||
+    desc === 'CupertinoTimerPicker' ||
+    // Generic: any widget whose type name ends in Dialog, Picker, or Sheet
+    /(?:Dialog|Picker|Sheet|BottomBar)$/.test(desc);
+
+  if (isScreenRoot) last = node;
+
   for (const child of [...(node.children || []), ...(node.properties || [])]) {
     const found = findLastScaffold(child, depth + 1);
     if (found) last = found;
