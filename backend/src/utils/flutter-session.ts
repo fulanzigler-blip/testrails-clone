@@ -171,22 +171,28 @@ export async function vmServiceRpc(session: FlutterSession, method: string, para
   const portMatch = session.vmServiceUrl.match(/:(\d+)\//);
   if (!portMatch) throw new Error('Cannot parse VM service port');
   const port = portMatch[1];
-  const token = session.vmServiceUrl.match(/\/([a-zA-Z0-9_-]+)\/?$/)?.[1] || '';
+  // Token may contain base64 chars including '=' — capture everything between the port slash and trailing slash
+  const tokenMatch = session.vmServiceUrl.match(/:(\d+)\/(.+?)(?:\/ws)?\/?$/);
+  const token = tokenMatch?.[2] || '';
 
   const payload = JSON.stringify({ jsonrpc: '2.0', id: '1', method, params });
-  const escapedPayload = payload.replace(/'/g, "'\\''");
 
-  // Use node on the Mac runner to make the WebSocket call and return the result
-  const nodeScript = `
-const ws = require('ws');
-const w = new ws('ws://127.0.0.1:${port}/${token}/ws');
-w.on('open', () => w.send('${escapedPayload}'));
-w.on('message', d => { console.log(d.toString()); w.close(); process.exit(0); });
-w.on('error', e => { console.error(e.message); process.exit(1); });
-setTimeout(() => process.exit(1), 10000);
-`.trim().replace(/\n/g, ' ');
+  // Use Python3 (websocket-client) on the Mac runner to relay the VM Service RPC.
+  // Base64-encode the script to avoid ALL shell quoting issues (single quotes in URLs/payload
+  // would break the shell's single-quoted -c string).
+  const wsUrl = `ws://127.0.0.1:${port}/${token}/ws`;
+  const pyLines = [
+    'import websocket, json',
+    `ws = websocket.create_connection(${JSON.stringify(wsUrl)}, timeout=10)`,
+    `ws.send(${JSON.stringify(payload)})`,
+    'print(ws.recv())',
+    'ws.close()',
+  ].join('\n');
+  const encoded = Buffer.from(pyLines).toString('base64');
+  // Try homebrew python3 first (has websocket-client), fall back to system python3
+  const cmd = `PYTHON3=$( (/opt/homebrew/bin/python3 -c "import websocket" 2>/dev/null && echo /opt/homebrew/bin/python3) || (/usr/local/bin/python3 -c "import websocket" 2>/dev/null && echo /usr/local/bin/python3) || echo python3); $PYTHON3 -c "import base64; exec(base64.b64decode('${encoded}').decode())"`;
 
-  const cmd = `node -e "${nodeScript.replace(/"/g, '\\"')}"`;
+
   const result = await execSSHWithConfig(cmd, session.runner, 15000);
 
   if (result.code !== 0) throw new Error(`VM Service RPC failed: ${result.output}`);

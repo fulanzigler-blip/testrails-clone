@@ -601,6 +601,8 @@ const LiveViewPanel: React.FC<{
   const [pickedWidgetBounds, setPickedWidgetBounds] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
 
   const [autoScan, setAutoScan] = useState(true);
+  const [injecting, setInjecting] = useState(false);
+  const [injectResult, setInjectResult] = useState<{ filesModified: number; totalInjected: number } | null>(null);
 
   const imgRef = useRef<HTMLImageElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -813,6 +815,20 @@ const LiveViewPanel: React.FC<{
     setFlutterSessionId(null); flutterSessionIdRef.current = null; setFlutterWidgets([]); setPickedWidget(null);
   };
 
+  const injectSemantics = async (dryRun = false) => {
+    setInjecting(true); setInjectResult(null); setError('');
+    try {
+      const resp = await api.post('/integration-tests/semantic-inject', { runnerId, dryRun }, { timeout: 120000 });
+      const report = resp.data?.data?.report;
+      setInjectResult({ filesModified: report?.filesModified ?? 0, totalInjected: report?.totalInjected ?? 0 });
+      if (!dryRun && (report?.filesModified ?? 0) > 0) {
+        // Re-scan after injection so new semantics are visible immediately
+        setTimeout(() => { if (flutterSessionIdRef.current) doScanFlutter(false); else doScanScreen(false); }, 1000);
+      }
+    } catch (err: any) { setError(err.response?.data?.error?.message || 'Inject failed'); }
+    finally { setInjecting(false); }
+  };
+
   const doScanFlutter = async (auto = false) => {
     const sid = auto ? flutterSessionIdRef.current : flutterSessionId;
     if (!sid || scanningRef.current) return;
@@ -888,6 +904,16 @@ const LiveViewPanel: React.FC<{
                 Stop Session
               </button>
             )}
+            {active && !testRunning && (
+              <button
+                onClick={() => injectSemantics(false)}
+                disabled={injecting}
+                title="Auto-inject Semantics() wrappers into Flutter source so all widgets are detectable by UIAutomator"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50">
+                {injecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Layers className="w-3 h-3" />}
+                {injecting ? 'Injecting...' : 'Inject Semantics'}
+              </button>
+            )}
             <button onClick={() => { setActive(v => !v); setPickedEl(null); setPickPos(null); setScannedElements([]); setFlutterWidgets([]); setError(''); }} disabled={testRunning}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors disabled:opacity-50 ${active ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}>
               {active ? <><VideoOff className="w-3 h-3" /> Stop</> : <><Video className="w-3 h-3" /> Start Live View</>}
@@ -902,6 +928,13 @@ const LiveViewPanel: React.FC<{
           </p>
         )}
         {error && !testRunning && <div className="flex items-center gap-2 text-xs text-red-500 bg-red-50 p-2 rounded mb-3"><AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {error}</div>}
+        {injectResult && (
+          <div className="flex items-center gap-2 text-xs text-teal-700 bg-teal-50 border border-teal-200 p-2 rounded mb-3">
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+            Semantics injected: <strong>{injectResult.filesModified} files</strong> modified, <strong>{injectResult.totalInjected} widgets</strong> wrapped. Re-scan to see new elements.
+            <button onClick={() => setInjectResult(null)} className="ml-auto text-teal-500 hover:text-teal-700">✕</button>
+          </div>
+        )}
         {active && (
           <div className="flex gap-4 items-start">
             {/* Phone frame */}
@@ -912,7 +945,7 @@ const LiveViewPanel: React.FC<{
                   <div className="relative w-full h-full">
                     <img ref={imgRef} src={`data:image/png;base64,${screenshot}`} alt="Device screen"
                       className={`w-full h-full object-fill select-none ${testRunning ? 'cursor-not-allowed' : (scannedElements.length > 0 || flutterWidgets.length > 0) ? 'cursor-default' : 'cursor-crosshair'}`}
-                      onClick={((scannedElements.length === 0 && flutterWidgets.length === 0) || flutterSessionId) ? handleImageClick : undefined}
+                      onClick={(scannedElements.length === 0 && flutterWidgets.length === 0) ? handleImageClick : undefined}
                       onLoad={e => { const img = e.currentTarget; setScreenW(img.clientWidth); setScreenH(img.clientHeight); }}
                       draggable={false} />
                     {testRunning && <div className="absolute inset-0 bg-blue-900/20 pointer-events-none flex items-end justify-center pb-3"><div className="flex items-center gap-1.5 bg-blue-600/80 text-white text-[10px] px-2 py-1 rounded-full"><Loader2 className="w-2.5 h-2.5 animate-spin" />Running</div></div>}
@@ -948,7 +981,7 @@ const LiveViewPanel: React.FC<{
                       )
                     )}
                     {/* Click marker (single-click mode or Flutter Session click) */}
-                    {pickPos && !testRunning && (scannedElements.length === 0 || flutterSessionId) && flutterWidgets.length === 0 && (
+                    {pickPos && !testRunning && scannedElements.length === 0 && flutterWidgets.length === 0 && (
                       <div className="absolute pointer-events-none" style={{ left: pickPos.px, top: pickPos.py, transform: 'translate(-50%, -50%)' }}>
                         {identifying ? <div className="w-7 h-7 rounded-full border-2 border-blue-400 bg-blue-400/20 flex items-center justify-center"><Loader2 className="w-3 h-3 text-blue-500 animate-spin" /></div>
                           : pickedEl || pickedWidget ? <div className="w-7 h-7 rounded-full border-2 border-green-400 bg-green-400/30" />

@@ -1801,7 +1801,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // GET /flutter-session/:id/widget-tree — pure Flutter VM Service approach (NO UIAutomator)
+  // GET /flutter-session/:id/widget-tree — hybrid: SSH source grep (inputs) + UIAutomator (buttons)
   fastify.get('/flutter-session/:id/widget-tree', {
     onRequest: [fastify.authenticate],
   }, async (request: any, reply) => {
@@ -1813,8 +1813,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
         return reply.code(503).send({ success: false, error: { code: 'SESSION_NOT_READY', message: `Session status: ${session.status}` } });
       }
 
-      // Pure Flutter approach: use VM Service via SSH relay to query live widget tree
-      logger.info(`[FlutterSession ${id}] Using pure VM Service approach (no UIAutomator)`);
+      logger.info(`[FlutterSession ${id}] VM Service scan via Python3 SSH relay`);
       const { elements, screenshot } = await getFlutterWidgetTreePureVM(session);
 
       return successResponse(reply, {
@@ -1822,14 +1821,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
         widgets: elements,
         screenshot,
         scannedAt: Date.now(),
-        _debug: {
-          method: 'pure-vm-service',
-          elementCount: elements.length,
-          elementTypes: elements.reduce((acc, e) => {
-            acc[e.elementType] = (acc[e.elementType] || 0) + 1;
-            return acc;
-          }, {} as Record<string, number>),
-        },
+        _debug: { method: 'vm-service-python', elementCount: elements.length },
       }, undefined);
     } catch (error: any) {
       logger.error('[FlutterSession] Widget tree failed:', error);
@@ -1859,6 +1851,28 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
     } catch (error: any) {
       logger.error('[FlutterSession] Stop failed:', error);
       return errorResponses.handle(reply, error, 'stop flutter session');
+    }
+  });
+
+  // POST /semantic-inject — inject Semantics identifiers into Flutter project
+  fastify.post('/semantic-inject', {
+    onRequest: [fastify.authenticate],
+  }, async (request: any, reply) => {
+    try {
+      const { runnerId, dryRun = false } = request.body as { runnerId?: string; dryRun?: boolean };
+      const runner = await resolveRunnerSSH(runnerId);
+
+      if (!runner.projectPath) {
+        return errorResponses.badRequest(reply, 'Runner has no projectPath configured. Set the Flutter project path in Runner settings.');
+      }
+
+      const { injectSemanticIdentifiers } = await import('../utils/semantic-injector');
+      const report = await injectSemanticIdentifiers(runner as any, runner.projectPath, { dryRun });
+
+      return successResponse(reply, { report }, undefined);
+    } catch (error: any) {
+      logger.error('[SemanticInject] Failed:', error);
+      return errorResponses.handle(reply, error, 'inject semantic identifiers');
     }
   });
 
@@ -2081,6 +2095,191 @@ function flutterWidgetToElement(widget: any, index: number): any {
     // Additional Flutter-specific fields
     widgetId: widget.widgetId || '',
     description,
+  };
+}
+
+// ─── Hybrid Widget Tree: SSH source grep (inputs) + UIAutomator (buttons) ────────
+
+async function getFlutterWidgetTreeHybrid(
+  session: any,
+): Promise<{ elements: any[]; screenshot: string; debug: Record<string, any> }> {
+  const { id, runner } = session;
+  const projectPath: string = runner.projectPath || '';
+  const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+  const adbEnv =
+    'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
+    'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ';
+
+  // ── 1. Run UIAutomator dump + screenshot + source greps in parallel ──────
+  const xmlCmd = adbEnv + `adb ${deviceArg} shell uiautomator dump /dev/tty 2>/dev/null`;
+  const [xmlResult, screenshotBuf, inputGrepResult, dartFilesResult] = await Promise.all([
+    execSSHWithConfig(xmlCmd, runner, 20000),
+    execSSHBinary(adbEnv + `adb ${deviceArg} exec-out screencap -p`, runner, 25000),
+    projectPath
+      ? execSSHWithConfig(`grep -rn 'hintText:\\|labelText:' '${projectPath}/lib' 2>/dev/null`, runner, 20000)
+      : Promise.resolve({ output: '', code: 0 }),
+    projectPath
+      ? execSSHWithConfig(
+          `grep -rln "Text('" '${projectPath}/lib' 2>/dev/null | grep -v '\\.g\\.dart' | grep -v '\\.freezed\\.dart' | head -100`,
+          runner, 20000,
+        )
+      : Promise.resolve({ output: '', code: 0 }),
+  ]);
+
+  const screenshot = screenshotBuf.toString('base64');
+  const xml = xmlResult.output;
+
+  // ── 2. Screen detection: score dart files by Text() value overlap with UIAutomator ──
+  // Collect both text= and content-desc= (SemanticsBinding exposes values as content-desc)
+  const visibleTexts = new Set<string>();
+  const textAttrRe = /\b(?:text|content-desc)="([^"]{2,60})"/g;
+  let tm: RegExpExecArray | null;
+  while ((tm = textAttrRe.exec(xml)) !== null) {
+    const val = tm[1].trim();
+    // For multiline content-desc (e.g. "Andi Pratama\nHutang: 5j"), split and add each line
+    val.split(/\n|&#10;/).forEach(part => { if (part.trim().length >= 2) visibleTexts.add(part.trim()); });
+  }
+
+  const dartFiles = dartFilesResult.output.split('\n').map(f => f.trim()).filter(f => f.endsWith('.dart'));
+  const currentScreenFiles = new Set<string>();
+
+  if (dartFiles.length > 0 && visibleTexts.size > 0 && projectPath) {
+    const scores: Array<{ file: string; score: number }> = await Promise.all(
+      dartFiles.map(async file => {
+        try {
+          const r = await execSSHWithConfig(`cat '${file}' 2>/dev/null`, runner, 10000);
+          const content = r.output;
+          let score = 0;
+          visibleTexts.forEach(vt => {
+            if (content.includes(`'${vt}'`) || content.includes(`"${vt}"`)) score++;
+          });
+          return { file, score };
+        } catch { return { file, score: 0 }; }
+      }),
+    );
+
+    const maxScore = Math.max(...scores.map(s => s.score), 0);
+    if (maxScore >= 2) {
+      // Confident detection: at least 2 static texts match
+      scores.filter(s => s.score >= maxScore - 1).forEach(s => currentScreenFiles.add(s.file));
+    }
+    // maxScore 0 or 1 → dynamic screen, skip source inputs entirely (don't fallback to all files)
+    logger.info(`[FlutterSession ${id}] Screen files: ${[...currentScreenFiles].map(f => f.split('/').pop()).join(', ') || '(none — dynamic screen)'} (maxScore=${maxScore})`);
+  }
+
+  // ── 3. Source inputs from current screen files ───────────────────────────
+  const elements: any[] = [];
+  const seenInputLabels = new Set<string>();
+
+  if (inputGrepResult.output) {
+    for (const line of inputGrepResult.output.split('\n')) {
+      if (!line.trim()) continue;
+      const fileMatch = line.match(/^([^:]+\.dart):/);
+      if (!fileMatch) continue;
+      const file = fileMatch[1];
+
+      // Only include inputs from detected screen files
+      // If currentScreenFiles is empty (detection failed/skipped), show nothing
+      if (!currentScreenFiles.has(file)) continue;
+
+      const hintMatch = line.match(/hintText\s*:\s*['"]([^'"]+)['"]/) ||
+                        line.match(/labelText\s*:\s*['"]([^'"]+)['"]/);
+      if (!hintMatch) continue;
+      const label = hintMatch[1];
+      if (seenInputLabels.has(label)) continue;
+      seenInputLabels.add(label);
+
+      elements.push({
+        text: label,
+        contentDesc: label,
+        resourceId: '',
+        idShort: '',
+        className: 'flutter.TextFormField',
+        clickable: false,
+        isInput: true,
+        isCheckable: false,
+        bounds: '',
+        x1: 0, y1: 0, x2: 0, y2: 0,
+        elementType: 'input',
+        finderStrategy: 'text',
+        finderValue: label,
+        selector: `[text="${label}"]`,
+      });
+    }
+  }
+
+  // ── 4. UIAutomator clickable elements (buttons, list items, tabs) ─────────
+  const boundsRe = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/;
+  const nodeRe = /<node\s+([^>]*)\/>/g;
+  const seenBounds = new Set<string>();
+  const buttonElements: any[] = [];
+
+  let nm: RegExpExecArray | null;
+  while ((nm = nodeRe.exec(xml)) !== null) {
+    const attrs = nm[1];
+    const get = (k: string) => { const r = new RegExp(`${k}="([^"]*)"`).exec(attrs); return r ? r[1] : ''; };
+
+    const className = get('class');
+    const clickable = get('clickable') === 'true';
+    const focusable = get('focusable') === 'true';
+    const contentDesc = get('content-desc') || '';
+    const rawText = get('text') || contentDesc;
+    const bounds = get('bounds');
+
+    // Skip: EditText (use source inputs instead), no text, system UI root containers
+    if (className.includes('EditText')) continue;
+    if (!rawText.trim()) continue;
+    if (className.includes('DecorView')) continue;
+    // Must be actionable: clickable, focusable, or has a content-desc (from Semantics injection)
+    if (!clickable && !focusable && !contentDesc) continue;
+
+    const bm = boundsRe.exec(bounds);
+    if (!bm) continue;
+    const x1 = parseInt(bm[1]), y1 = parseInt(bm[2]);
+    const x2 = parseInt(bm[3]), y2 = parseInt(bm[4]);
+    if (x2 <= x1 || y2 <= y1) continue;
+    // Skip full-screen containers
+    if ((x2 - x1) > 970 && (y2 - y1) > 1720) continue;
+
+    if (seenBounds.has(bounds)) continue;
+    seenBounds.add(bounds);
+
+    // Multiline text (list items like "Andi\nHutang: 5j") → use first line as label
+    const firstLine = rawText.split(/\n|&#10;/)[0].trim();
+    if (!firstLine || firstLine.length < 2) continue;
+
+    buttonElements.push({
+      text: firstLine,
+      contentDesc: firstLine,
+      resourceId: get('resource-id') || '',
+      idShort: '',
+      className,
+      clickable: true,
+      isInput: false,
+      isCheckable: get('checkable') === 'true',
+      bounds, x1, y1, x2, y2,
+      elementType: 'button',
+      finderStrategy: 'text' as const,
+      finderValue: firstLine,
+      selector: `[text="${firstLine}"]`,
+    });
+  }
+
+  // Sort buttons top → bottom
+  buttonElements.sort((a, b) => a.y1 - b.y1);
+  elements.push(...buttonElements);
+
+  logger.info(`[FlutterSession ${id}] Hybrid: ${elements.filter(e => e.elementType === 'input').length} inputs (source) + ${buttonElements.length} buttons (UIAutomator)`);
+
+  return {
+    elements,
+    screenshot,
+    debug: {
+      screenFiles: [...currentScreenFiles].map(f => f.split('/').pop()),
+      visibleTextCount: visibleTexts.size,
+      inputCount: elements.filter(e => e.elementType === 'input').length,
+      buttonCount: buttonElements.length,
+    },
   };
 }
 
