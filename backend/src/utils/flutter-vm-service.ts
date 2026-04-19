@@ -106,12 +106,12 @@ export class FlutterVMService {
     return this.rpc('callServiceExtension', { method, isolateId, ...params }, 20000);
   }
 
-  /** Get the summary widget tree (fast, all widgets, no render bounds) */
+  /** Get the full widget tree via getDetailsSubtree from root */
   async getSummaryTree(): Promise<any> {
-    return this.callFlutterExt('ext.flutter.inspector.getRootWidgetTree', {
+    return this.callFlutterExt('ext.flutter.inspector.getDetailsSubtree', {
       groupName: this.groupName,
-      isSummaryTree: 'true',
-      withPreviews: 'true',
+      arg: '',
+      subtreeDepth: '30',
     });
   }
 
