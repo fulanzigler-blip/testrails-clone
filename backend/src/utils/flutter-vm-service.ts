@@ -287,7 +287,7 @@ function extractKey(node: any): string {
 }
 
 function isButtonWidget(desc: string): boolean {
-  return /ElevatedButton|TextButton|OutlinedButton|IconButton|FloatingActionButton|GestureDetector|InkWell|CupertinoButton|FilledButton|DropdownButton|PopupMenuButton|SegmentedButton|Chip|ActionChip|FilterChip|ChoiceChip|CheckboxListTile|RadioListTile|SwitchListTile|ListTile|Tab\b|BottomNavigationBarItem/i.test(desc);
+  return /ElevatedButton|TextButton|OutlinedButton|IconButton|BackButton|CloseButton|FloatingActionButton|GestureDetector|InkWell|CupertinoButton|FilledButton|DropdownButton|PopupMenuButton|SegmentedButton|Chip|ActionChip|FilterChip|ChoiceChip|CheckboxListTile|RadioListTile|SwitchListTile|ListTile|Tab\b|BottomNavigationBarItem/i.test(desc);
 }
 
 function isInputWidget(desc: string): boolean {
