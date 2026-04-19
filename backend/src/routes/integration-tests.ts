@@ -292,16 +292,20 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
   const tempKeyPath = `/tmp/gh_key_${ts}`;
   const sshKeyPath = runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519';
 
+  // Derive Flutter SDK path from the runner's home directory (extracted from projectPath)
+  const homeMatch = projectPath.match(/^\/Users\/([^/]+)/);
+  const homeDir = homeMatch ? `/Users/${homeMatch[1]}` : '/Users/clawbot';
+
   const scriptLines = [
     '#!/bin/bash -l',
-    `cd "${projectPath}"`,
+    `cd "${projectPath}" || { echo "Cannot find project directory: ${projectPath}"; echo "EXIT_CODE:1"; exit 1; }`,
   ];
 
   // Workaround for macOS 13 + newer Flutter: bypass VM version check
   const flutterEnv = [
     'export DART_VM_OPTIONS="--no-enable-macos-version-check"',
-    'export FLUTTER_ROOT="/Users/clawbot/development/flutter"',
-    'export PATH="/Users/clawbot/development/flutter/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"',
+    `export FLUTTER_ROOT="${homeDir}/development/flutter"`,
+    `export PATH="${homeDir}/development/flutter/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"`,
   ].join(' && ');
 
   if (noBuild) {
