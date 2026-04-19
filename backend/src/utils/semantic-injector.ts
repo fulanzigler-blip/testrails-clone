@@ -253,6 +253,25 @@ export function scanAndInjectContent(content: string, _fileName: string, profile
     injections.push({ line: getLineNumber(content, widgetStart), widgetType: m[1], label, injectionType: 'semantics_wrapper' });
   }
 
+  // ── Rule 5a: BackButton / CloseButton ─────────────────────────────────────
+  const navBtnRe = /\b(BackButton|CloseButton)\s*\(/g;
+  while ((m = navBtnRe.exec(content)) !== null) {
+    const widgetStart = m.index;
+    const openParen = widgetStart + m[0].lastIndexOf('(');
+    const closeParen = findMatchingParen(content, openParen);
+    if (closeParen < 0) continue;
+    if (alreadyHasSemantics(content, widgetStart)) continue;
+    if (isAlreadyWrapped(widgetStart, closeParen)) continue;
+    const label = m[1] === 'CloseButton' ? 'Close' : 'Back';
+    pending.push({
+      startPos: widgetStart, endPos: closeParen,
+      insertBefore: `Semantics(label: '${label}', button: true, child: `,
+      insertAfter: ')',
+      widgetType: m[1], label, injectionType: 'semantics_wrapper',
+    });
+    injections.push({ line: getLineNumber(content, widgetStart), widgetType: m[1], label, injectionType: 'semantics_wrapper' });
+  }
+
   // ── Rule 5: IconButton without tooltip ────────────────────────────────────
   const iconBtnRe = /\bIconButton\s*\(/g;
   while ((m = iconBtnRe.exec(content)) !== null) {
@@ -264,11 +283,12 @@ export function scanAndInjectContent(content: string, _fileName: string, profile
     if (inner.includes('tooltip')) continue; // already has tooltip
 
     const iconMatch = inner.match(/Icons\.(\w+)/);
-    if (!iconMatch) continue;
-    const label = iconMatch[1]
-      .replace(/_rounded$|_outlined$|_sharp$|_two_tone$/, '')
-      .replace(/_/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase());
+    const label = iconMatch
+      ? iconMatch[1]
+          .replace(/_rounded$|_outlined$|_sharp$|_two_tone$/, '')
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (c: string) => c.toUpperCase())
+      : 'Icon Button';
 
     // Insert tooltip as the first property (right after the opening paren)
     const insertPos = openParen + 1;
@@ -439,7 +459,7 @@ export async function injectSemanticIdentifiers(
   logger.info(`[SemanticInjector] Starting — project: ${projectPath}, dryRun: ${dryRun}, profile: ${profile ? 'yes' : 'default'}`);
 
   // Build grep pattern from standard widgets + custom widget names from profile
-  const standardWidgets = 'TextFormField\\|TextField(\\|InkWell\\|GestureDetector\\|IconButton\\|FloatingActionButton\\|ElevatedButton\\|TextButton\\|OutlinedButton\\|FilledButton';
+  const standardWidgets = 'TextFormField\\|TextField(\\|InkWell\\|GestureDetector\\|IconButton\\|BackButton\\|CloseButton\\|FloatingActionButton\\|ElevatedButton\\|TextButton\\|OutlinedButton\\|FilledButton';
   const customBtnWidgets = (profile?.buttonRules || []).map(r => r.widget).filter(Boolean).join('\\|');
   const customInpWidgets = (profile?.inputRules  || []).map(r => r.widget).filter(Boolean).join('\\|');
   const grepPattern = [standardWidgets, customBtnWidgets, customInpWidgets].filter(Boolean).join('\\|');
