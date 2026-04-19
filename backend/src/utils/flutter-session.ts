@@ -178,25 +178,31 @@ export async function vmServiceRpc(session: FlutterSession, method: string, para
   const wsUrl = `ws://127.0.0.1:${port}/${token}/ws`;
   const isExtension = method.startsWith('ext.');
 
-  // For Flutter service extensions (ext.*) we must use callServiceExtension with an isolateId.
-  // Plain VM methods (getVM, getIsolate, etc.) are called directly.
-  // The Python script loops on recv() to skip stream notifications and match by id.
+  // Flutter service extensions (ext.*) must include isolateId in params.
+  // We first call getVM to get the isolate ID, then call the extension directly
+  // with isolateId merged into params. The Python script skips stream notifications
+  // by looping on recv() and matching by message id.
+  const extParamsJson = JSON.stringify({ ...params });
   const pyLines = isExtension ? [
     'import websocket, json, sys',
     `ws = websocket.create_connection(${JSON.stringify(wsUrl)}, timeout=15)`,
     'def recv_id(ws, rid):',
-    '    for _ in range(20):',
-    '        msg = json.loads(ws.recv())',
+    '    for _ in range(30):',
+    '        raw = ws.recv()',
+    '        try:',
+    '            msg = json.loads(raw)',
+    '        except: continue',
     '        if str(msg.get("id")) == str(rid): return msg',
     '    raise RuntimeError("response not received")',
-    // Step 1: getVM to get isolate ID
+    // Step 1: get isolate ID
     'ws.send(json.dumps({"jsonrpc":"2.0","id":"1","method":"getVM","params":{}}))',
     'vm = recv_id(ws, "1")',
     'isolates = vm.get("result", {}).get("isolates", [])',
     'isolate_id = next((i["id"] for i in isolates if "kernel" not in i.get("name","").lower()), isolates[0]["id"] if isolates else None)',
-    'if not isolate_id: sys.exit("no isolate")',
-    // Step 2: callServiceExtension with isolateId
-    `ws.send(json.dumps({"jsonrpc":"2.0","id":"2","method":"callServiceExtension","params":{"method":${JSON.stringify(method)},"isolateId":isolate_id,**${JSON.stringify(params)}}}))`,
+    'if not isolate_id: sys.exit("no isolate found")',
+    // Step 2: call extension directly with isolateId merged into params
+    `ext_params = {**${extParamsJson}, "isolateId": isolate_id}`,
+    `ws.send(json.dumps({"jsonrpc":"2.0","id":"2","method":${JSON.stringify(method)},"params":ext_params}))`,
     'result = recv_id(ws, "2")',
     'print(json.dumps(result))',
     'ws.close()',
@@ -222,9 +228,7 @@ export async function vmServiceRpc(session: FlutterSession, method: string, para
     throw new Error(`VM Service returned invalid JSON: ${raw.slice(0, 200)}`);
   }
   if (parsed.error) throw new Error(parsed.error.message || JSON.stringify(parsed.error));
-  // callServiceExtension wraps under result.result; direct calls wrap under result
-  const inner = parsed.result;
-  return inner?.result !== undefined ? inner.result : (inner ?? parsed);
+  return parsed.result !== undefined ? parsed.result : parsed;
 }
 
 // ─── Poll for Observatory URL ─────────────────────────────────────────────────
