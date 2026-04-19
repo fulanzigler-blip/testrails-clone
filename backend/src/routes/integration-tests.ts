@@ -2388,7 +2388,9 @@ async function getFlutterWidgetTreePureVM(session: any): Promise<{ elements: any
 }
 
 // Detect if a popup/dialog/sheet is open via UIAutomator XML.
-// Returns elements inside the popup, or null if no popup detected.
+// Strategy: look for dialog action buttons (Cancel/OK/Done/Batal/etc.) then collect
+// all UIAutomator nodes in the same horizontal region above those buttons.
+// This works even when day/picker nodes are not marked clickable.
 function detectAndExtractPopup(xml: string, sessionId: string): any[] | null {
   if (!xml) return null;
 
@@ -2396,7 +2398,6 @@ function detectAndExtractPopup(xml: string, sessionId: string): any[] | null {
   const nodeRe = /<node\s+([^>]*)\/>/g;
   const get = (attrs: string, k: string) => { const r = new RegExp(`${k}="([^"]*)"`).exec(attrs); return r ? r[1] : ''; };
 
-  // Collect all nodes with text/content-desc
   interface UiNode { text: string; bounds: string; x1: number; y1: number; x2: number; y2: number; clickable: boolean; }
   const nodes: UiNode[] = [];
   let m: RegExpExecArray | null;
@@ -2408,8 +2409,7 @@ function detectAndExtractPopup(xml: string, sessionId: string): any[] | null {
     const bm = boundsRe.exec(bounds);
     if (!bm) continue;
     nodes.push({
-      text: rawText.trim(),
-      bounds,
+      text: rawText.trim(), bounds,
       x1: parseInt(bm[1]), y1: parseInt(bm[2]),
       x2: parseInt(bm[3]), y2: parseInt(bm[4]),
       clickable: get(attrs, 'clickable') === 'true',
@@ -2417,51 +2417,40 @@ function detectAndExtractPopup(xml: string, sessionId: string): any[] | null {
   }
   if (!nodes.length) return null;
 
-  // Estimate screen dimensions from the widest element
-  const screenW = Math.max(...nodes.map(n => n.x2));
-  const screenH = Math.max(...nodes.map(n => n.y2));
+  // Look for dialog action buttons by keyword (language-agnostic)
+  const dialogBtnRe = /^(cancel|ok|done|save|apply|close|confirm|dismiss|yes|no|batal|simpan|tutup|konfirmasi|selesai|next|back)$/i;
+  const actionBtns = nodes.filter(n => dialogBtnRe.test(n.text.trim()));
+  if (actionBtns.length === 0) return null;
 
-  // Find bounding box of all CLICKABLE elements
-  const clickable = nodes.filter(n => n.clickable);
-  if (clickable.length < 2) return null;
+  // Bounding box of the action buttons (typically bottom of dialog)
+  const btnMinX = Math.min(...actionBtns.map(n => n.x1));
+  const btnMaxX = Math.max(...actionBtns.map(n => n.x2));
+  const btnMaxY = Math.max(...actionBtns.map(n => n.y2));
 
-  const minX = Math.min(...clickable.map(n => n.x1));
-  const maxX = Math.max(...clickable.map(n => n.x2));
-  const minY = Math.min(...clickable.map(n => n.y1));
-  const maxY = Math.max(...clickable.map(n => n.y2));
+  // Dialog horizontal extent with 10% margin
+  const hMargin = (btnMaxX - btnMinX) * 0.15 + 60;
+  const dialogLeft  = btnMinX - hMargin;
+  const dialogRight = btnMaxX + hMargin;
 
-  const dialogW = maxX - minX;
-  const dialogH = maxY - minY;
-
-  // Popup heuristic: clickable elements fit in <80% width AND <80% height,
-  // AND they're horizontally centered (not edge-to-edge)
-  const isHorizontallyCentered = minX > screenW * 0.05 && maxX < screenW * 0.95;
-  const isNarrowerThanScreen = dialogW < screenW * 0.80;
-  const isShorterThanScreen = dialogH < screenH * 0.80;
-
-  if (!(isHorizontallyCentered && isNarrowerThanScreen && isShorterThanScreen)) return null;
-
-  logger.info(`[Session ${sessionId}] Popup bounds: [${minX},${minY}][${maxX},${maxY}] screen: ${screenW}x${screenH}`);
-
-  // Extract all nodes within the popup bounds (with margin)
-  const margin = 20;
-  const popupNodes = nodes.filter(n =>
-    n.x1 >= minX - margin && n.x2 <= maxX + margin &&
-    n.y1 >= minY - margin && n.y2 <= maxY + margin &&
-    n.text.length >= 1
+  // Collect ALL nodes within the horizontal dialog band, from top down to button bottom
+  const dialogNodes = nodes.filter(n =>
+    n.x1 >= dialogLeft && n.x2 <= dialogRight &&
+    n.y2 <= btnMaxY + 30
   );
 
+  logger.info(`[Session ${sessionId}] Dialog detected via buttons [${actionBtns.map(n => n.text).join('/')}]: ${dialogNodes.length} nodes`);
+
   const seen = new Set<string>();
-  return popupNodes
-    .filter(n => { if (seen.has(n.text)) return false; seen.add(n.text); return true; })
-    .map((n, i) => ({
+  return dialogNodes
+    .filter(n => n.text.length >= 1 && !seen.has(n.text) && seen.add(n.text) !== undefined)
+    .map(n => ({
       text: n.text, contentDesc: n.text, resourceId: '', idShort: '',
       className: 'flutter.popup',
       clickable: n.clickable, isInput: false, isCheckable: false,
       bounds: n.bounds, x1: n.x1, y1: n.y1, x2: n.x2, y2: n.y2,
       elementType: n.clickable ? 'button' : 'text',
-      finderStrategy: 'text' as const, finderValue: n.text,
-      selector: `[text="${n.text}"]`,
+      finderStrategy: 'semantics' as const, finderValue: n.text,
+      selector: `[content-desc="${n.text}"]`,
     }));
 }
 
