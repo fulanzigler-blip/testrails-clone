@@ -629,10 +629,11 @@ const ElementList: React.FC<{
 
 const LiveViewPanel: React.FC<{
   runnerId?: string;
+  profileId?: string;
   testRunning?: boolean;
   testResult?: { success: boolean } | null;
   onStepAdded: (step: Partial<TestStep>) => void;
-}> = ({ runnerId, testRunning = false, testResult, onStepAdded }) => {
+}> = ({ runnerId, profileId, testRunning = false, testResult, onStepAdded }) => {
   const [active, setActive] = useState(false);
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -876,7 +877,7 @@ const LiveViewPanel: React.FC<{
   const injectSemantics = async (dryRun = false) => {
     setInjecting(true); setInjectResult(null); setError('');
     try {
-      const resp = await api.post('/integration-tests/semantic-inject', { runnerId, dryRun, profileId: selectedProfile || undefined }, { timeout: 120000 });
+      const resp = await api.post('/integration-tests/semantic-inject', { runnerId, dryRun, profileId: profileId || undefined }, { timeout: 120000 });
       const report = resp.data?.data?.report;
       setInjectResult({ filesModified: report?.filesModified ?? 0, totalInjected: report?.totalInjected ?? 0 });
       if (!dryRun && (report?.filesModified ?? 0) > 0) {
@@ -1840,6 +1841,7 @@ const VisualTestBuilder: React.FC = () => {
         <div className="col-span-4">
           <LiveViewPanel
             runnerId={selectedRunner || undefined}
+            profileId={selectedProfile || undefined}
             testRunning={running}
             testResult={testResult}
             onStepAdded={step => addStep(step.type || 'tap', step)}
