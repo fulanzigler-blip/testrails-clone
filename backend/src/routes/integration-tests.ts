@@ -2326,6 +2326,11 @@ async function getFlutterWidgetTreePureVM(session: any): Promise<{ elements: any
 
   // Flutter keeps all Navigator route subtrees alive simultaneously.
   // Only parse the LAST Scaffold in the tree — that is the topmost active route.
+  // Debug: log every unique description seen in tree to find popup widget names
+  const allDescs = new Set<string>();
+  const collectDescs = (n: any, d = 0) => { if (!n || d > 120) return; allDescs.add(n.description || ''); [...(n.children||[]),...(n.properties||[])].forEach(c => collectDescs(c, d+1)); };
+  collectDescs(rootTree);
+  logger.info(`[FlutterSession ${id}] All widget types: ${[...allDescs].filter(Boolean).join(', ')}`);
   const activeSubtree = findLastScaffold(rootTree) || rootTree;
   logger.info(`[FlutterSession ${id}] Active subtree root: ${(activeSubtree as any).description || 'root'}`);
 
