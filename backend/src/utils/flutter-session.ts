@@ -228,7 +228,10 @@ export async function vmServiceRpc(session: FlutterSession, method: string, para
     throw new Error(`VM Service returned invalid JSON: ${raw.slice(0, 200)}`);
   }
   if (parsed.error) throw new Error(parsed.error.message || JSON.stringify(parsed.error));
-  return parsed.result !== undefined ? parsed.result : parsed;
+  // Extension calls (ext.*) wrap the actual data under result.result;
+  // plain VM calls (getVM etc.) just use result directly.
+  const r = parsed.result;
+  return (r?.result !== undefined) ? r.result : (r ?? parsed);
 }
 
 // ─── Poll for Observatory URL ─────────────────────────────────────────────────
