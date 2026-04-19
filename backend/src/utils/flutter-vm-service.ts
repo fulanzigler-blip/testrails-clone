@@ -256,16 +256,6 @@ function extractLabelFromProps(properties: any[] | undefined): string {
   return '';
 }
 
-function extractLabelFromProps(properties: any[] | undefined): string {
-  if (!properties?.length) return '';
-  for (const p of properties) {
-    if (p.name === 'label' || p.name === 'semanticsLabel') {
-      return (p.description || p.valueAsString || '').replace(/^"|"$/g, '').replace(/^'|'$/g, '').trim();
-    }
-  }
-  return '';
-}
-
 function extractTooltipFromProps(properties: any[] | undefined): string {
   if (!properties?.length) return '';
   for (const p of properties) {
