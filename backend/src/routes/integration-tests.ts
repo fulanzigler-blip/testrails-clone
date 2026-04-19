@@ -410,6 +410,8 @@ export function generateTestFromElements(
     value?: string;
     value2?: string;
     text?: string;
+    finderStrategy?: string;
+    finderValue?: string;
   }>,
   _credentials?: { email: string; password: string },
 ): string {
@@ -444,7 +446,24 @@ void main() {
 `;
 
   // Helper: build a Dart finder string from any catalog element (button/input/text)
-  const buildFinder = (elementId?: string): string => {
+  const buildFinder = (stepOrId?: string | { elementId?: string; finderStrategy?: string; finderValue?: string; text?: string }): string => {
+    // Accept either a plain elementId string or a full step object
+    const step = typeof stepOrId === 'object' ? stepOrId : { elementId: stepOrId };
+    const elementId = step.elementId;
+
+    // Live-view steps carry finderStrategy/finderValue directly — use them first
+    const fs = (step as any).finderStrategy as string | undefined;
+    const fv = (step as any).finderValue as string | undefined;
+    if (fs && fv) {
+      switch (fs) {
+        case 'text':      return `find.text('${fv}')`;
+        case 'semantics': return `find.bySemanticsLabel('${fv}')`;
+        case 'key':       return `find.byKey(const ValueKey('${fv}'))`;
+        case 'tooltip':   return `find.byTooltip('${fv}')`;
+        case 'type':      return `find.byType(${fv})`;
+      }
+    }
+
     if (!elementId) return `find.text('Element')`;
 
     // Try buttons first (has richest finderStrategy)
@@ -621,13 +640,13 @@ void main() {
         break;
       }
       case 'double_tap': {
-        const finder = buildFinder(step.elementId);
+        const finder = buildFinder(step);
         code += `    await tester.tap(${finder}, tapCount: 2);\n`;
         code += `    await tester.pumpAndSettle();\n`;
         break;
       }
       case 'long_press': {
-        const finder = buildFinder(step.elementId);
+        const finder = buildFinder(step);
         code += `    await tester.longPress(${finder});\n`;
         code += `    await tester.pumpAndSettle();\n`;
         break;
@@ -640,7 +659,7 @@ void main() {
         break;
       }
       case 'scroll_until_visible': {
-        const finder = buildFinder(step.elementId);
+        const finder = buildFinder(step);
         code += `    await tester.ensureVisible(${finder});\n`;
         code += `    await tester.pumpAndSettle();\n`;
         break;
@@ -678,12 +697,12 @@ void main() {
         break;
       }
       case 'assert_visible': {
-        const finder = buildFinder(step.elementId);
+        const finder = buildFinder(step);
         code += `    expect(${finder}, findsOneWidget);\n`;
         break;
       }
       case 'assert_not_visible': {
-        const finder = buildFinder(step.elementId);
+        const finder = buildFinder(step);
         code += `    expect(${finder}, findsNothing);\n`;
         break;
       }
@@ -1367,7 +1386,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
   }, async (request: any, reply) => {
     try {
       const { steps, credentials, projectPath } = request.body as {
-        steps: Array<{ type: string; elementId?: string; value?: string; value2?: string; text?: string }>;
+        steps: Array<{ type: string; elementId?: string; value?: string; value2?: string; text?: string; finderStrategy?: string; finderValue?: string }>;
         credentials?: { email: string; password: string };
         projectPath?: string;
       };
