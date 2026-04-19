@@ -1920,19 +1920,6 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
         }
       } catch (err: any) {
         logger.error(`[FlutterSession ${id}] Hit test failed: ${err.message}`);
-        // Try fallback to summary tree (no bounds, but at least get some info)
-        try {
-          const summaryTree = await vmServiceRpc(session, 'ext.flutter.inspector.getRootWidgetTree', {
-            groupName: 'explorer',
-            isSummaryTree: 'true',
-            withPreviews: 'true',
-          });
-          // Just return the root widget as fallback
-          hitWidget = summaryTree;
-          logger.info(`[FlutterSession ${id}] Fallback to summary tree (no bounds)`);
-        } catch (err2: any) {
-          logger.error(`[FlutterSession ${id}] Fallback also failed: ${err2.message}`);
-        }
       }
 
       if (!hitWidget) {
@@ -2288,10 +2275,10 @@ async function getFlutterWidgetTreePureVM(session: any): Promise<{ elements: any
 
   // Use vmServiceRpc to call Flutter VM Service via SSH relay
   // Get the root widget tree (summary tree - fast, includes all widgets)
-  const rootTree = await vmServiceRpc(session, 'ext.flutter.inspector.getRootWidgetTree', {
+  const rootTree = await vmServiceRpc(session, 'ext.flutter.inspector.getDetailsSubtree', {
     groupName: 'explorer',
-    isSummaryTree: 'true',
-    withPreviews: 'true',
+    arg: '',
+    subtreeDepth: '30',
   });
 
   if (!rootTree) {
