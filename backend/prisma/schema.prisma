@@ -460,6 +460,11 @@ model AppProfile {
   id              String   @id @default(uuid())
   name            String   // e.g. "Raya", "Discipline Tracker", "Standard Flutter"
   description     String?
+  // Target platform: flutter (white-box, source + integration_test) |
+  // android / ios (black-box, UIAutomator/Appium step replay)
+  platform        String   @default("flutter")
+  // Package / bundle id for native platforms (e.g. com.example.app)
+  appId           String?  @map("app_id")
   // Custom button widget rules: [{widget, labelProp, triggerProp}]
   buttonRules     Json     @default("[]") @map("button_rules")
   // Custom input widget rules: [{widget, labelProp}]

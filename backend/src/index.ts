@@ -30,6 +30,7 @@ import maestroRoutes from './routes/maestro'
 import githubScenariosRoutes from './routes/github-scenarios';
 import integrationTestRoutes from './routes/integration-tests';
 import webIntegrationRoutes from './routes/web-integration-tests';
+import nativeTestRoutes from './routes/native-tests';
 import appProfileRoutes from './routes/app-profiles';
 
 // Create Fastify instance
@@ -276,6 +277,7 @@ async function registerRoutes() {
   await fastify.register(githubScenariosRoutes, { prefix: '/api/v1/integrations/github-scenarios' });
   await fastify.register(integrationTestRoutes, { prefix: '/api/v1/integration-tests' });
   await fastify.register(webIntegrationRoutes, { prefix: '/api/v1/web-tests' });
+  await fastify.register(nativeTestRoutes, { prefix: '/api/v1/native-tests' });
   await fastify.register(appProfileRoutes, { prefix: '/api/v1' });
 }
 

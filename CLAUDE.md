@@ -67,6 +67,17 @@ Three places use `buildTypeFinder()` in `integration-tests.ts` (tap, enter_text,
 - `discoverAppContext(projectPath?)` is parameterized; legacy AI endpoints resolve the default runner's path
 - Default `appId` in FlowBuilder/CrawlGenerateModal/PageAutomation = last used (localStorage `vtb_last_app_id`), not a fixed package
 
+## Native Mobile Support (branch feature/native-mobile-support)
+- One Visual Test Builder menu, platform selector: flutter | android | ios (ios disabled, planned via Appium)
+- Flutter = white-box (source scan + generated integration_test Dart) — unchanged dedicated flow
+- Android native = black-box: `mobile-driver.ts` interface + `native-android-driver.ts`
+  (UIAutomator dump parser → element catalog; step replay via adb tap/input/keyevent over SSH)
+- Native finders: resource-id → content-desc → text (contains, case-insensitive — dynamic data) → bounds center
+- Routes `/api/v1/native-tests`: GET /apps (pm list packages -3), POST /scan, /screen, /run
+- Native "generated code" = JSON replay manifest (steps), not compiled code
+- `AppProfile.platform` (default "flutter") + `AppProfile.appId` columns added (applied via psql)
+- Unit tests: `native-android-driver.test.ts` (dump parser fixtures)
+
 ## App Profile System
 - `AppProfile` model: `buttonRules[]`, `inputRules[]`, `injectorRules{}`
 - Runner can have `defaultProfileId`
