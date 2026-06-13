@@ -42,7 +42,7 @@ interface WebElementCatalog {
 interface WebTestStep {
   id: string;
   type: 'tap' | 'enter_text' | 'navigate' | 'assert_visible' | 'assert_not_visible' | 'assert_text'
-      | 'wait' | 'screenshot' | 'set_viewport' | 'hover' | 'select' | 'check' | 'uncheck' | 'press_key';
+      | 'wait' | 'screenshot' | 'set_viewport' | 'hover' | 'select' | 'dropdown-item' | 'check' | 'uncheck' | 'press_key' | 'table-row' | 'list-item';
   elementId?: string; selector?: string; value?: string; value2?: string; text?: string;
   role?: string; label?: string; placeholder?: string; tag?: string; fallbackSelectors?: string[];
 }
@@ -87,7 +87,15 @@ interface ElementOption { id: string; label: string; sublabel?: string; icon?: s
 const ElementSearchSelect: React.FC<{
   value: string; placeholder?: string; options: ElementOption[];
   onChange: (opt: ElementOption | null) => void; className?: string;
-}> = ({ value, placeholder = 'Search element...', options, onChange, className = '' }) => {
+  // Shown when value is set but not present in options — e.g. steps added from
+  // the live-session Quick-Add panel reference snapshot elements that aren't in
+  // the scan catalog. Without this the picker looks empty even though the step
+  // has a valid recorded target.
+  fallbackLabel?: string;
+  // Element ids encode an array index that shifts as pages are (re)loaded into
+  // the catalog, so also re-match the option by its CSS selector.
+  matchSelector?: string;
+}> = ({ value, placeholder = 'Search element...', options, onChange, className = '', fallbackLabel, matchSelector }) => {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -96,8 +104,9 @@ const ElementSearchSelect: React.FC<{
   const filtered = query.trim()
     ? indexed.filter(o => o.label.toLowerCase().includes(query.toLowerCase()) || (o.sublabel || '').toLowerCase().includes(query.toLowerCase()) || (o.page || '').toLowerCase().includes(query.toLowerCase()))
     : indexed;
-  const currentOpt = value ? indexed.find(o => o.id === value) : undefined;
-  const selectedLabel = currentOpt ? `${currentOpt.icon || ''} ${currentOpt.label}` : '';
+  const currentOpt = (value ? indexed.find(o => o.id === value) : undefined)
+    ?? (matchSelector ? indexed.find(o => o.data?.selector === matchSelector) : undefined);
+  const selectedLabel = currentOpt ? `${currentOpt.icon || ''} ${currentOpt.label}` : ((value || matchSelector) && fallbackLabel ? fallbackLabel : '');
 
   const grouped: { page: string; items: typeof indexed }[] = [];
   filtered.forEach(opt => {
@@ -126,10 +135,10 @@ const ElementSearchSelect: React.FC<{
             <div key={group.page}>
               {grouped.length > 1 && <div className="sticky top-0 flex items-center gap-1 px-3 py-1 bg-muted/80 border-b text-[10px] font-semibold text-muted-foreground uppercase"><Globe className="h-3 w-3 shrink-0" /><span className="truncate">{shortPage(group.page)}</span><span className="ml-auto">{group.items.length}</span></div>}
               {group.items.map(opt => (
-                <div key={opt._idx} className={`flex items-center gap-2 px-3 py-2.5 text-sm cursor-pointer hover:bg-accent/60 border-b border-border/30 ${opt.id === value ? 'bg-accent/30 font-medium' : ''}`} onClick={() => { onChange(opt); setOpen(false); setQuery(''); }}>
+                <div key={opt._idx} className={`flex items-center gap-2 px-3 py-2.5 text-sm cursor-pointer hover:bg-accent/60 border-b border-border/30 ${opt.id === (currentOpt?.id ?? value) ? 'bg-accent/30 font-medium' : ''}`} onClick={() => { onChange(opt); setOpen(false); setQuery(''); }}>
                   {opt.icon && <span className="shrink-0 text-base">{opt.icon}</span>}
                   <div className="min-w-0 flex-1"><div className="truncate font-medium">{opt.label}</div>{opt.sublabel && <div className="text-xs text-muted-foreground truncate mt-0.5">{opt.sublabel}</div>}</div>
-                  {opt.id === value && <span className="text-xs text-primary shrink-0 font-bold">✓</span>}
+                  {opt.id === (currentOpt?.id ?? value) && <span className="text-xs text-primary shrink-0 font-bold">✓</span>}
                 </div>
               ))}
             </div>
@@ -159,8 +168,12 @@ const StepRow: React.FC<{
   onDelete: (id: string) => void; onMoveUp: (i: number) => void; onMoveDown: (i: number) => void;
 }> = ({ step, index, total, catalog, onUpdate, onDelete, onMoveUp, onMoveDown }) => {
   const stepDef = STEP_TYPES.find(s => s.type === step.type);
-  const Icon = stepDef?.icon || Type;
-  const catDef = STEP_CATEGORIES.find(c => c.steps.some(s => s.type === step.type));
+  // Types added via Quick-Add only (not in the palette)
+  const extraLabels: Record<string, string> = { 'dropdown-item': 'Select Option', 'table-row': 'Click Table Row', 'list-item': 'Click List Item' };
+  const stepLabel = stepDef?.label || extraLabels[step.type] || step.type;
+  const Icon = stepDef?.icon || MousePointerClick;
+  const catDef = STEP_CATEGORIES.find(c => c.steps.some(s => s.type === step.type))
+    || (extraLabels[step.type] ? STEP_CATEGORIES[0] : undefined);
 
   const renderControls = () => {
     switch (step.type) {
@@ -170,37 +183,64 @@ const StepRow: React.FC<{
       case 'enter_text': {
         const opts: ElementOption[] = (catalog?.inputs || []).map(i => ({ id: i.id, label: i.label || i.placeholder || i.id, sublabel: `${i.type} · ${i.selector}`, icon: '📥', page: i.page, data: i }));
         return (<div className="flex gap-2 mt-2">
-          <ElementSearchSelect className="flex-1 min-w-0" value={step.elementId || ''} placeholder="Search input..." options={opts} onChange={opt => { const el = opt?.data; onUpdate(step.id, { elementId: opt?.id, selector: el?.selector, label: el?.label || el?.placeholder, placeholder: el?.placeholder, tag: el?.tag || el?.type, fallbackSelectors: el?.fallbackSelectors }); }} />
+          <ElementSearchSelect className="flex-1 min-w-0" value={step.elementId || ''} placeholder="Search input..." options={opts} fallbackLabel={step.label || step.placeholder || step.selector} matchSelector={step.selector} onChange={opt => { const el = opt?.data; onUpdate(step.id, { elementId: opt?.id, selector: el?.selector, label: el?.label || el?.placeholder, placeholder: el?.placeholder, tag: el?.tag || el?.type, fallbackSelectors: el?.fallbackSelectors }); }} />
           <Input placeholder="Value to type" value={step.value || ''} onChange={e => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-sm" />
         </div>);
       }
       case 'tap': case 'hover': case 'check': case 'uncheck': {
         const opts: ElementOption[] = [
-          ...(catalog?.buttons || []).map((b, i) => ({ id: `b:${i}:${b.id}`, label: `"${b.text}"`, sublabel: `${b.type} · ${b.selector}`, icon: '🔘', page: b.page, data: b })),
-          ...(catalog?.texts || []).map((t, i) => ({ id: `t:${i}:${t.id}`, label: `"${t.text.slice(0, 60)}"`, sublabel: `text · ${t.selector}`, icon: '📝', page: t.page, data: t })),
+          ...(catalog?.buttons || []).map((b, i) => ({ id: `b:${b.id}`, label: `"${b.text}"`, sublabel: `${b.type} · ${b.selector}`, icon: '🔘', page: b.page, data: b })),
+          ...(catalog?.texts || []).map((t, i) => ({ id: `t:${t.id}`, label: `"${t.text.slice(0, 60)}"`, sublabel: `text · ${t.selector}`, icon: '📝', page: t.page, data: t })),
         ];
-        return (<div className="flex gap-2 mt-2"><ElementSearchSelect className="flex-1" value={step.elementId || ''} placeholder="Search element..." options={opts} onChange={opt => { const el = opt?.data; onUpdate(step.id, { elementId: opt?.id, selector: el?.selector, text: el?.text || el?.label, tag: el?.tag, role: el?.role || 'button', fallbackSelectors: el?.fallbackSelectors }); }} /></div>);
+        return (<div className="flex gap-2 mt-2"><ElementSearchSelect className="flex-1" value={step.elementId || ''} placeholder="Search element..." options={opts} fallbackLabel={step.text ? `🔘 "${step.text}"` : step.selector} matchSelector={step.selector} onChange={opt => { const el = opt?.data; onUpdate(step.id, { elementId: opt?.id, selector: el?.selector, text: el?.text || el?.label, tag: el?.tag, role: el?.role || 'button', fallbackSelectors: el?.fallbackSelectors }); }} /></div>);
+      }
+      case 'dropdown-item': case 'table-row': case 'list-item': {
+        // Dynamic-data steps: target is found by visible text at runtime, value/text editable
+        const typed = (catalog?.buttons || []).map((b, i) => ({ id: `b:${b.id}`, label: `"${b.text}"`, sublabel: `${b.type} · ${b.selector}`, icon: step.type === 'dropdown-item' ? '▾' : step.type === 'table-row' ? '📊' : '📋', page: b.page, data: b, _type: b.type }));
+        const opts: ElementOption[] = typed.filter(o => o._type === step.type).length > 0
+          ? typed.filter(o => o._type === step.type)
+          : typed;
+        return (<div className="flex gap-2 mt-2">
+          <ElementSearchSelect className="flex-1 min-w-0" value={step.elementId || ''} placeholder="Search element..." options={opts} fallbackLabel={step.text ? `${step.type === 'dropdown-item' ? '▾' : step.type === 'table-row' ? '📊' : '📋'} "${step.text.slice(0, 60)}"` : step.selector} matchSelector={step.selector} onChange={opt => { const el = opt?.data; onUpdate(step.id, { elementId: opt?.id, selector: el?.selector, text: el?.text || el?.label, tag: el?.tag, role: el?.role || 'button', fallbackSelectors: el?.fallbackSelectors }); }} />
+          {step.type === 'dropdown-item' ? (
+            <Input
+              placeholder="Option label/value (dynamic)"
+              title="Visible option text to select — matched by label first, then value. Edit this when DB data changes."
+              value={step.value || ''}
+              onChange={e => onUpdate(step.id, { value: e.target.value })}
+              className="flex-1 text-sm"
+            />
+          ) : (
+            <Input
+              placeholder="Match text (row contains...)"
+              title="The row/item containing this text will be clicked — independent of its position. Edit to target different data."
+              value={step.text || ''}
+              onChange={e => onUpdate(step.id, { text: e.target.value })}
+              className="flex-1 text-sm"
+            />
+          )}
+        </div>);
       }
       case 'select': {
         const opts: ElementOption[] = (catalog?.inputs || []).filter(i => i.type === 'select').map(i => ({ id: i.id, label: i.label || i.id, sublabel: i.selector, icon: '▾', page: i.page, data: i }));
-        return (<div className="flex gap-2 mt-2"><ElementSearchSelect className="flex-1" value={step.elementId || ''} placeholder="Search dropdown..." options={opts} onChange={opt => { onUpdate(step.id, { elementId: opt?.id, selector: opt?.data?.selector }); }} /><Input placeholder="Option value" value={step.value || ''} onChange={e => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-sm" /></div>);
+        return (<div className="flex gap-2 mt-2"><ElementSearchSelect className="flex-1" value={step.elementId || ''} placeholder="Search dropdown..." options={opts} fallbackLabel={step.selector} onChange={opt => { onUpdate(step.id, { elementId: opt?.id, selector: opt?.data?.selector }); }} /><Input placeholder="Option value" value={step.value || ''} onChange={e => onUpdate(step.id, { value: e.target.value })} className="flex-1 text-sm" /></div>);
       }
       case 'press_key':
         return (<div className="flex gap-2 mt-2"><select className="flex-1 rounded border px-3 py-2 text-sm bg-background" value={step.value || ''} onChange={e => onUpdate(step.id, { value: e.target.value })}><option value="">Select key...</option>{['Enter','Tab','Escape','Backspace','Delete','ArrowUp','ArrowDown'].map(k => <option key={k} value={k}>{k}</option>)}</select></div>);
       case 'assert_visible': case 'assert_not_visible': {
         const opts: ElementOption[] = [
-          ...(catalog?.buttons || []).map((b, i) => ({ id: `b:${i}:${b.id}`, label: `"${b.text}"`, sublabel: b.selector, icon: '🔘', page: b.page, data: b })),
-          ...(catalog?.texts || []).map((t, i) => ({ id: `t:${i}:${t.id}`, label: `"${t.text.slice(0, 60)}"`, sublabel: t.selector, icon: '📝', page: t.page, data: t })),
-          ...(catalog?.inputs || []).map((inp, i) => ({ id: `i:${i}:${inp.id}`, label: inp.label || inp.id, sublabel: inp.selector, icon: '📥', page: inp.page, data: inp })),
+          ...(catalog?.buttons || []).map((b, i) => ({ id: `b:${b.id}`, label: `"${b.text}"`, sublabel: b.selector, icon: '🔘', page: b.page, data: b })),
+          ...(catalog?.texts || []).map((t, i) => ({ id: `t:${t.id}`, label: `"${t.text.slice(0, 60)}"`, sublabel: t.selector, icon: '📝', page: t.page, data: t })),
+          ...(catalog?.inputs || []).map((inp, i) => ({ id: `i:${inp.id}`, label: inp.label || inp.id, sublabel: inp.selector, icon: '📥', page: inp.page, data: inp })),
         ];
-        return (<div className="flex gap-2 mt-2"><ElementSearchSelect className="flex-1" value={step.elementId || ''} placeholder="Search element..." options={opts} onChange={opt => { const el = opt?.data; onUpdate(step.id, { elementId: opt?.id, selector: el?.selector, text: el?.text || '', tag: el?.tag, role: el?.role, fallbackSelectors: el?.fallbackSelectors }); }} /></div>);
+        return (<div className="flex gap-2 mt-2"><ElementSearchSelect className="flex-1" value={step.elementId || ''} placeholder="Search element..." options={opts} fallbackLabel={step.text ? `"${step.text.slice(0, 60)}"` : step.selector} matchSelector={step.selector} onChange={opt => { const el = opt?.data; onUpdate(step.id, { elementId: opt?.id, selector: el?.selector, text: el?.text || '', tag: el?.tag, role: el?.role, fallbackSelectors: el?.fallbackSelectors }); }} /></div>);
       }
       case 'assert_text': {
         const opts: ElementOption[] = [
           { id: '', label: '(body — any text on page)', sublabel: 'searches entire page', icon: '🌐', data: null },
           ...(catalog?.texts || []).map(t => ({ id: t.selector, label: `"${t.text.slice(0, 60)}"`, sublabel: t.selector, icon: '📝', page: t.page, data: t })),
         ];
-        return (<div className="flex gap-2 mt-2"><ElementSearchSelect className="flex-1" value={step.selector || ''} placeholder="Search text element..." options={opts} onChange={opt => onUpdate(step.id, { selector: opt?.id || '' })} /><Input placeholder="Expected text" value={step.text || ''} onChange={e => onUpdate(step.id, { text: e.target.value })} className="flex-1 text-sm" /></div>);
+        return (<div className="flex gap-2 mt-2"><ElementSearchSelect className="flex-1" value={step.selector || ''} placeholder="Search text element..." options={opts} fallbackLabel={step.selector} onChange={opt => onUpdate(step.id, { selector: opt?.id || '' })} /><Input placeholder="Expected text" value={step.text || ''} onChange={e => onUpdate(step.id, { text: e.target.value })} className="flex-1 text-sm" /></div>);
       }
       case 'wait':
         return (<div className="flex gap-2 mt-2 items-center"><span className="text-sm text-muted-foreground">Wait</span><Input type="number" value={step.value || '1000'} onChange={e => onUpdate(step.id, { value: e.target.value })} className="w-24 text-sm" /><span className="text-sm text-muted-foreground">ms</span></div>);
@@ -224,7 +264,7 @@ const StepRow: React.FC<{
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">{stepDef?.label}</span>
+          <span className="text-sm font-medium">{stepLabel}</span>
           <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onDelete(step.id)}><Trash2 className="w-3 h-3 text-red-500" /></Button>
         </div>
         {renderControls()}
@@ -236,17 +276,47 @@ const StepRow: React.FC<{
 
 // ─── Element Quick-Add Panel ────────────────────────────────────────────────────
 
+// Categories for the Buttons tab — the scraper mixes real buttons, links, dropdown
+// options, table rows, list items and icons into one array; group them so the
+// panel stays scannable.
+const BUTTON_GROUPS: Array<{ key: string; label: string; icon: string; match: (t: string) => boolean }> = [
+  { key: 'buttons', label: 'Buttons', icon: '🔘', match: t => !['icon', 'link', 'nav', 'dropdown-link', 'dropdown-item', 'table-row', 'list-item'].includes(t) },
+  { key: 'links', label: 'Links & Nav', icon: '🔗', match: t => ['link', 'nav', 'dropdown-link'].includes(t) },
+  { key: 'dropdowns', label: 'Dropdown Options', icon: '▾', match: t => t === 'dropdown-item' },
+  { key: 'rows', label: 'Table Rows', icon: '📊', match: t => t === 'table-row' },
+  { key: 'items', label: 'List Items', icon: '📋', match: t => t === 'list-item' },
+  { key: 'icons', label: 'Icons', icon: '✨', match: t => t === 'icon' },
+];
+// Scraper prefixes row/item texts with these emojis — redundant once grouped
+const stripEmojiPrefix = (s: string) => s.replace(/^[📊📋📦]\s*/, '');
+
 const ElementQuickAdd: React.FC<{
   snapshot: PageSnapshot;
   onAddStep: (step: Partial<WebTestStep>) => void;
-  onNavigate?: (selector: string) => void;
+  onNavigate?: (selector: string, elementType?: string) => void;
   navigating?: boolean;
 }> = ({ snapshot, onAddStep, onNavigate, navigating }) => {
   const [tab, setTab] = useState<'inputs' | 'buttons' | 'texts'>('inputs');
+  const [btnGroup, setBtnGroup] = useState<string>('all');
+  const [search, setSearch] = useState('');
   const els = snapshot.elements;
   const hasInputs = els.inputs.length > 0;
   const hasButtons = els.buttons.length > 0;
   const hasTexts = els.texts.length > 0;
+
+  const q = search.trim().toLowerCase();
+  const matchesSearch = (s?: string) => !q || (s || '').toLowerCase().includes(q);
+
+  // Buttons with their original index preserved (elementId depends on it), grouped by category
+  const indexedButtons = els.buttons.map((btn, i) => ({ btn, i }));
+  const groupedButtons = BUTTON_GROUPS
+    .map(g => ({
+      ...g,
+      items: indexedButtons.filter(({ btn }) => g.match(btn.type || '') && matchesSearch(btn.text)),
+      total: indexedButtons.filter(({ btn }) => g.match(btn.type || '')).length,
+    }))
+    .filter(g => g.total > 0);
+  const visibleGroups = btnGroup === 'all' ? groupedButtons : groupedButtons.filter(g => g.key === btnGroup);
 
   // Auto-select first non-empty tab
   const activeTab = (tab === 'inputs' && !hasInputs) ? (hasButtons ? 'buttons' : 'texts')
@@ -275,9 +345,40 @@ const ElementQuickAdd: React.FC<{
         )}
       </div>
 
+      {/* Search */}
+      <div className="px-2 pt-2 shrink-0">
+        <input
+          className="w-full rounded border px-2 py-1 text-xs bg-background outline-none focus:border-primary"
+          placeholder="Filter elements..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
+      {/* Category chips (Buttons tab only) */}
+      {activeTab === 'buttons' && groupedButtons.length > 1 && (
+        <div className="flex flex-wrap gap-1 px-2 pt-2 shrink-0">
+          <button
+            onClick={() => setBtnGroup('all')}
+            className={`text-[10px] px-1.5 py-0.5 rounded-full border transition-colors ${btnGroup === 'all' ? 'bg-green-500 text-white border-green-500' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            All ({els.buttons.length})
+          </button>
+          {groupedButtons.map(g => (
+            <button
+              key={g.key}
+              onClick={() => setBtnGroup(btnGroup === g.key ? 'all' : g.key)}
+              className={`text-[10px] px-1.5 py-0.5 rounded-full border transition-colors ${btnGroup === g.key ? 'bg-green-500 text-white border-green-500' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              {g.icon} {g.label} ({g.total})
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Element list */}
       <div className="overflow-y-auto flex-1 space-y-1 p-2">
-        {activeTab === 'inputs' && els.inputs.map((inp, i) => (
+        {activeTab === 'inputs' && els.inputs.filter(inp => matchesSearch(inp.label || inp.placeholder || inp.name || inp.id)).map((inp, i) => (
           <div key={i} className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/20 rounded px-2 py-1.5 group">
             <Type className="w-3 h-3 text-blue-500 shrink-0" />
             <span className="text-xs flex-1 truncate">{inp.label || inp.placeholder || inp.name || inp.id}</span>
@@ -290,34 +391,43 @@ const ElementQuickAdd: React.FC<{
             </button>
           </div>
         ))}
-        {activeTab === 'buttons' && els.buttons.map((btn, i) => (
-          <div key={i} className="flex items-center gap-1.5 bg-green-50 dark:bg-green-950/20 rounded px-2 py-1.5 group">
-            <MousePointerClick className="w-3 h-3 text-green-500 shrink-0" />
-            <span className="text-xs flex-1 truncate">"{btn.text}"</span>
-            <span className="text-[10px] text-muted-foreground shrink-0">({btn.type})</span>
-            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
-              {onNavigate && (
-                <button
-                  disabled={navigating}
-                  onClick={() => onNavigate(btn.selector)}
-                  className="bg-orange-400 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-orange-500 disabled:opacity-50"
-                  title="Click this element in the browser and load the resulting page"
-                >
-                  {navigating ? '...' : '→ Go'}
-                </button>
-              )}
-              <button onClick={() => onAddStep({ type: 'tap', elementId: `b:${i}:${btn.id}`, selector: btn.selector, text: btn.text, tag: btn.tag, role: btn.role || 'button', fallbackSelectors: btn.fallbackSelectors })} className="bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-green-600">+ Click</button>
-              <button onClick={() => onAddStep({ type: 'assert_visible', elementId: `b:${i}:${btn.id}`, selector: btn.selector, text: btn.text, tag: btn.tag, role: btn.role, fallbackSelectors: btn.fallbackSelectors })} className="bg-purple-500 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-purple-600">+ Assert</button>
+        {activeTab === 'buttons' && visibleGroups.map(group => (
+          <div key={group.key}>
+            <div className="sticky top-0 z-10 flex items-center gap-1 px-1 py-1 bg-background/95 backdrop-blur-sm text-[10px] font-semibold text-muted-foreground uppercase">
+              <span>{group.icon}</span><span>{group.label}</span><span className="ml-auto">{group.items.length}</span>
+            </div>
+            <div className="space-y-1">
+              {group.items.map(({ btn, i }) => (
+                <div key={i} className="flex items-center gap-1.5 bg-green-50 dark:bg-green-950/20 rounded px-2 py-1.5 group">
+                  <MousePointerClick className="w-3 h-3 text-green-500 shrink-0" />
+                  <span className="text-xs flex-1 truncate">"{stripEmojiPrefix(btn.text)}"</span>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                    {onNavigate && (
+                      <button
+                        disabled={navigating}
+                        onClick={() => onNavigate(btn.selector, btn.type)}
+                        className="bg-orange-400 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-orange-500 disabled:opacity-50"
+                        title="Click this element in the browser and load the resulting page"
+                      >
+                        {navigating ? '...' : '→ Go'}
+                      </button>
+                    )}
+                    <button onClick={() => onAddStep({ type: (['dropdown-item', 'table-row', 'list-item'].includes(btn.type || '') ? btn.type : 'tap') as WebTestStep['type'], elementId: `b:${btn.id}`, selector: btn.selector, text: stripEmojiPrefix(btn.text), tag: btn.tag, role: btn.role || 'button', fallbackSelectors: btn.fallbackSelectors })} className="bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-green-600">+ Click</button>
+                    <button onClick={() => onAddStep({ type: 'assert_visible', elementId: `b:${btn.id}`, selector: btn.selector, text: btn.text, tag: btn.tag, role: btn.role, fallbackSelectors: btn.fallbackSelectors })} className="bg-purple-500 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-purple-600">+ Assert</button>
+                  </div>
+                </div>
+              ))}
+              {group.items.length === 0 && <p className="text-xs text-muted-foreground py-2 text-center">No match in this category</p>}
             </div>
           </div>
         ))}
-        {activeTab === 'texts' && els.texts.slice(0, 60).map((txt, i) => (
+        {activeTab === 'texts' && els.texts.map((txt, i) => ({ txt, i })).filter(({ txt }) => matchesSearch(txt.text)).slice(0, 60).map(({ txt, i }) => (
           <div key={i} className="flex items-center gap-1.5 bg-purple-50 dark:bg-purple-950/20 rounded px-2 py-1.5 group">
             <FileText className="w-3 h-3 text-purple-500 shrink-0" />
-            <span className="text-xs flex-1 truncate">"{txt.text.slice(0, 70)}"</span>
+            <span className="text-xs flex-1 truncate">"{stripEmojiPrefix(txt.text).slice(0, 70)}"</span>
             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
               <button onClick={() => onAddStep({ type: 'assert_text', selector: txt.selector, text: txt.text.slice(0, 80) })} className="bg-purple-500 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-purple-600">+ Assert Text</button>
-              <button onClick={() => onAddStep({ type: 'assert_visible', elementId: `t:${i}:${txt.id}`, selector: txt.selector, tag: txt.tag, fallbackSelectors: txt.fallbackSelectors })} className="bg-blue-500 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-blue-600">+ Visible</button>
+              <button onClick={() => onAddStep({ type: 'assert_visible', elementId: `t:${txt.id}`, selector: txt.selector, tag: txt.tag, fallbackSelectors: txt.fallbackSelectors })} className="bg-blue-500 text-white text-[10px] px-1.5 py-0.5 rounded hover:bg-blue-600">+ Visible</button>
             </div>
           </div>
         ))}
@@ -455,12 +565,12 @@ const WebVisualBuilder: React.FC = () => {
     }
   };
 
-  const handleClickNavigate = async (selector: string) => {
+  const handleClickNavigate = async (selector: string, elementType?: string) => {
     if (!sessionId || navigating || sessionStatus === 'loading') return;
     setNavigating(true);
     setSessionError('');
     try {
-      const resp = await api.post(`/web-tests/session/${sessionId}/click`, { selector }, { timeout: 30000 });
+      const resp = await api.post(`/web-tests/session/${sessionId}/click`, { selector, elementType }, { timeout: 30000 });
       const data: PageSnapshot = resp.data?.data || resp.data;
       setSnapshot(data);
       setPageUrl(data.url);

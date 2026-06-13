@@ -22,15 +22,15 @@ export async function generateDartCode(
     throw new Error('ZAI_API_KEY environment variable is not set');
   }
 
-  // Extract package name dynamically from main.dart
-  // The app's own package is the one that matches the project directory name or the first import that's NOT a common Flutter package
+  // Package name: pubspec.yaml (via appContext.packageName) is canonical for any
+  // app; the main.dart import heuristic is only a fallback.
   const allImports = appContext?.mainDart?.match(/import\s+'package:([^/]+)/g) || [];
   const appPkgs = allImports
     .map(m => m.match(/package:([^/]+)/)?.[1])
     .filter(Boolean)
     .filter(p => !['flutter', 'cupertino', 'material', 'go_router', 'flutter_riverpod', 'google_fonts', 'intl', 'provider'].includes(p));
 
-  const packageName = appPkgs[0] || 'my_app';
+  const packageName = appContext?.packageName || appPkgs[0] || 'my_app';
 
   // Use discovered values or fallbacks
   const fieldType = appContext?.fieldTypes || 'TextField';

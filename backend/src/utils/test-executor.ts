@@ -113,11 +113,18 @@ echo "EXIT_CODE:$?"`;
 
 // ─── Environment Configuration ───────────────────────────────────────────────────
 
-const FLUTTER_PROJECT_PATH: string =
-  process.env.FLUTTER_PROJECT_PATH ||
-  '/Users/clawbot/actions-runner/_work/discipline-tracker/discipline-tracker';
+// No app-specific default — path must come from env (or callers should use the
+// runner-based functions above, which carry their own projectPath)
+const FLUTTER_PROJECT_PATH: string = process.env.FLUTTER_PROJECT_PATH || '';
 const FLUTTER_BIN: string =
   process.env.FLUTTER_BIN || '/Users/clawbot/development/flutter/bin/flutter';
+
+function requireProjectPath(): string {
+  if (!FLUTTER_PROJECT_PATH) {
+    throw new Error('No Flutter project path configured — set the FLUTTER_PROJECT_PATH env var or use a runner with projectPath');
+  }
+  return FLUTTER_PROJECT_PATH;
+}
 
 // ─── Additional Test Types ───────────────────────────────────────────────────────
 
@@ -144,7 +151,8 @@ export async function executeFlutterTest(
     logs.push('');
 
     // Ensure test directory exists
-    const testDir = `${FLUTTER_PROJECT_PATH}/integration_test`;
+    const projectPath = requireProjectPath();
+    const testDir = `${projectPath}/integration_test`;
     await execSSH(`mkdir -p "${testDir}"`, 10000);
 
     // Write test file remotely
@@ -161,7 +169,7 @@ export async function executeFlutterTest(
 
     // Run the test
     logs.push(`Running Flutter test...`);
-    const testCmd = `cd "${FLUTTER_PROJECT_PATH}" && "${FLUTTER_BIN}" test integration_test/${testFilePath.split('/').pop()} --dart-define=CI=true`;
+    const testCmd = `cd "${projectPath}" && "${FLUTTER_BIN}" test integration_test/${testFilePath.split('/').pop()} --dart-define=CI=true`;
 
     const result = await execSSH(testCmd, 180000); // 3 minute timeout
 
@@ -199,9 +207,10 @@ export async function executeFlutterTest(
 
 // ─── List Available Tests ───────────────────────────────────────────────────────
 
-export async function listIntegrationTests(): Promise<string[]> {
+export async function listIntegrationTests(projectPath?: string): Promise<string[]> {
   try {
-    const result = await execSSH(`ls -1 "${FLUTTER_PROJECT_PATH}/integration_test/" 2>/dev/null || echo ''`, 10000);
+    const base = projectPath || requireProjectPath();
+    const result = await execSSH(`ls -1 "${base}/integration_test/" 2>/dev/null || echo ''`, 10000);
     return result.output.split('\n').filter(Boolean).filter(f => f.endsWith('.dart'));
   } catch {
     return [];
@@ -210,7 +219,8 @@ export async function listIntegrationTests(): Promise<string[]> {
 
 // ─── Get Test File Content ───────────────────────────────────────────────────────
 
-export async function getTestFileContent(testFileName: string): Promise<string> {
-  const result = await execSSH(`cat "${FLUTTER_PROJECT_PATH}/integration_test/${testFileName}" 2>/dev/null`, 10000);
+export async function getTestFileContent(testFileName: string, projectPath?: string): Promise<string> {
+  const base = projectPath || requireProjectPath();
+  const result = await execSSH(`cat "${base}/integration_test/${testFileName}" 2>/dev/null`, 10000);
   return result.output;
 }

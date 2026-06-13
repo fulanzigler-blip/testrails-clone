@@ -44,7 +44,9 @@ export interface SuiteFlow {
 
 const PageAutomation: React.FC = () => {
   // State
-  const [appId, setAppId] = useState('com.disciplinetracker.app');
+  // No app-specific default — remember whatever app the user worked with last
+  const [appId, setAppId] = useState(() => localStorage.getItem('vtb_last_app_id') || '');
+  useEffect(() => { if (appId) localStorage.setItem('vtb_last_app_id', appId); }, [appId]);
   const [capturing, setCapturing] = useState(false);
   const [elements, setElements] = useState<CapturedElement[]>([]);
   const [pageName, setPageName] = useState('');

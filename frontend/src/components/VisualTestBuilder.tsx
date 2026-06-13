@@ -1111,6 +1111,18 @@ const VisualTestBuilder: React.FC = () => {
   const [scanError, setScanError] = useState('');
   const [scanMode, setScanMode] = useState<'regular' | 'hybrid'>('regular');
   const [codebasePath, setCodebasePath] = useState<string>('');
+  // Recently used custom codebase paths (any Flutter app, not a fixed preset list)
+  const [recentPaths, setRecentPaths] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('vtb_recent_paths') || '[]'); } catch { return []; }
+  });
+  const rememberPath = (p: string) => {
+    if (!p) return;
+    setRecentPaths(prev => {
+      const next = [p, ...prev.filter(x => x !== p)].slice(0, 5);
+      try { localStorage.setItem('vtb_recent_paths', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
   const [runners, setRunners] = useState<Array<{id: string; name: string; host: string; deviceId?: string; isDefault: boolean; projectPath?: string; defaultProfileId?: string}>>([]);
   const [selectedRunner, setSelectedRunner] = useState<string>('');
   const [profiles, setProfiles] = useState<Array<{id: string; name: string; isDefault: boolean}>>([]);
@@ -1125,6 +1137,11 @@ const VisualTestBuilder: React.FC = () => {
   const [error, setError] = useState('');
   const [savingTestCase, setSavingTestCase] = useState(false);
   const [savedTestCase, setSavedTestCase] = useState<{id: string; title: string} | null>(null);
+  const [saveDialog, setSaveDialog] = useState(false);
+  const [saveForm, setSaveForm] = useState({ name: '', projectId: '', suiteId: '', priority: 'high', description: '' });
+  const [saveProjects, setSaveProjects] = useState<Array<{id: string; name: string}>>([]);
+  const [saveSuites, setSaveSuites] = useState<Array<{id: string; name: string}>>([]);
+  const [loadingSuites, setLoadingSuites] = useState(false);
 
   const [elementFilter, setElementFilter] = useState<'all' | 'inputs' | 'buttons' | 'texts'>('all');
   const [elementSearch, setElementSearch] = useState('');
@@ -1248,6 +1265,7 @@ const VisualTestBuilder: React.FC = () => {
         timeout: scanMode === 'hybrid' ? 900000 : 120000,
       });
       setCatalog(resp.data?.data || resp.data);
+      rememberPath(codebasePath.trim());
     } catch (err: any) {
       setScanError(err.response?.data?.error?.message || err.message || 'Scan failed');
     } finally {
@@ -1329,20 +1347,47 @@ const VisualTestBuilder: React.FC = () => {
 
   const handleSaveAsTestCase = async () => {
     if (!generatedCode) { setError('Generate code first'); return; }
+    // Pre-fill name from test code
+    const titleMatch = generatedCode.match(/testWidgets\(\s*['"]([^'"]+)['"]/);
+    const autoTitle = titleMatch?.[1] || 'Generated Integration Test';
+    setSaveForm({ name: autoTitle, projectId: '', suiteId: '', priority: 'high', description: '' });
+    setSaveSuites([]);
+    // Fetch projects for the dropdown
+    try {
+      const resp = await api.get('/projects');
+      setSaveProjects(resp.data?.data || resp.data || []);
+    } catch { setSaveProjects([]); }
+    setSaveDialog(true);
+  };
+
+  const handleSaveProjectChange = async (projectId: string) => {
+    setSaveForm(f => ({ ...f, projectId, suiteId: '' }));
+    if (!projectId) { setSaveSuites([]); return; }
+    setLoadingSuites(true);
+    try {
+      const resp = await api.get('/test-suites', { params: { projectId } });
+      setSaveSuites(resp.data?.data || resp.data || []);
+    } catch { setSaveSuites([]); }
+    finally { setLoadingSuites(false); }
+  };
+
+  const handleSaveDialogSubmit = async () => {
     setSavingTestCase(true);
     setError('');
     try {
       const resp = await api.post('/integration-tests/save-as-testcase', {
         dartCode: generatedCode,
-        testResult: testResult ? {
-          success: testResult.success,
-          output: testResult.output,
-          duration: testResult.duration,
-        } : undefined,
+        testResult: testResult ? { success: testResult.success, output: testResult.output, duration: testResult.duration } : undefined,
         runnerId: selectedRunner || undefined,
+        name: saveForm.name.trim() || undefined,
+        projectId: saveForm.projectId || undefined,
+        suiteId: saveForm.suiteId || undefined,
+        priority: saveForm.priority || undefined,
+        description: saveForm.description.trim() || undefined,
       });
       const saved = resp.data?.data;
       setSavedTestCase({ id: saved?.id, title: saved?.title });
+      setSaveDialog(false);
     } catch (err: any) {
       setError(err.response?.data?.error?.message || err.message || 'Save failed');
     } finally {
@@ -1356,6 +1401,7 @@ const VisualTestBuilder: React.FC = () => {
   };
 
   return (
+    <>
     <div className="space-y-4">
       {/* Header */}
       <div>
@@ -1365,25 +1411,36 @@ const VisualTestBuilder: React.FC = () => {
 
       {/* Scan Config Bar */}
       <div className="flex flex-wrap items-end gap-3 p-3 bg-muted/30 rounded-lg border">
-        {/* Codebase Selector */}
+        {/* Codebase Selector — options come from runner configs + recent custom paths */}
         <div className="flex flex-col gap-1 flex-1 min-w-[280px]">
           <Label className="text-xs text-muted-foreground">Codebase</Label>
           <div className="flex gap-1">
-            <select
-              value={codebasePath || '__custom__'}
-              onChange={(e) => {
-                if (e.target.value === '__custom__') {
-                  setCodebasePath('');
-                } else {
-                  setCodebasePath(e.target.value);
-                }
-              }}
-              className="rounded border px-2 py-1.5 text-xs bg-background min-w-[130px]"
-            >
-              <option value="/Users/bankraya/Development/discipline-tracker">Discipline Tracker</option>
-              <option value="/Users/bankraya/Development/Raya-dev">Raya Dev (Bank Raya)</option>
-              <option value="__custom__">Custom Path...</option>
-            </select>
+            {(() => {
+              const runnerPaths = runners.filter(r => r.projectPath).map(r => ({ path: r.projectPath as string, label: `${r.name} — ${(r.projectPath as string).split('/').filter(Boolean).pop()}` }));
+              const extraRecent = recentPaths.filter(p => !runnerPaths.some(rp => rp.path === p));
+              const known = new Set([...runnerPaths.map(rp => rp.path), ...extraRecent]);
+              return (
+                <select
+                  value={known.has(codebasePath) ? codebasePath : '__custom__'}
+                  onChange={(e) => {
+                    if (e.target.value === '__custom__') {
+                      setCodebasePath('');
+                    } else {
+                      setCodebasePath(e.target.value);
+                    }
+                  }}
+                  className="rounded border px-2 py-1.5 text-xs bg-background min-w-[130px]"
+                >
+                  {runnerPaths.map(rp => (
+                    <option key={rp.path} value={rp.path}>{rp.label}</option>
+                  ))}
+                  {extraRecent.map(p => (
+                    <option key={p} value={p}>{p.split('/').filter(Boolean).pop()} (recent)</option>
+                  ))}
+                  <option value="__custom__">Custom Path...</option>
+                </select>
+              );
+            })()}
             <input
               type="text"
               value={codebasePath}
@@ -1849,6 +1906,80 @@ const VisualTestBuilder: React.FC = () => {
         </div>
       </div>
     </div>
+
+    {/* Save Test Case Dialog */}
+    {saveDialog && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSaveDialog(false)}>
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+          <h2 className="text-lg font-semibold mb-4">Save as Test Case</h2>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium">Test Case Name *</Label>
+              <Input
+                value={saveForm.name}
+                onChange={e => setSaveForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Enter test case name"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Project</Label>
+              <select
+                value={saveForm.projectId}
+                onChange={e => handleSaveProjectChange(e.target.value)}
+                className="mt-1 w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— No Project —</option>
+                {saveProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Suite</Label>
+              <select
+                value={saveForm.suiteId}
+                onChange={e => setSaveForm(f => ({ ...f, suiteId: e.target.value }))}
+                className="mt-1 w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={!saveForm.projectId || loadingSuites}
+              >
+                <option value="">— No Suite —</option>
+                {saveSuites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              {loadingSuites && <p className="text-xs text-gray-400 mt-1">Loading suites…</p>}
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Priority</Label>
+              <select
+                value={saveForm.priority}
+                onChange={e => setSaveForm(f => ({ ...f, priority: e.target.value }))}
+                className="mt-1 w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Description</Label>
+              <textarea
+                value={saveForm.description}
+                onChange={e => setSaveForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Optional description…"
+                rows={3}
+                className="mt-1 w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-6">
+            <Button variant="outline" size="sm" onClick={() => setSaveDialog(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleSaveDialogSubmit} disabled={savingTestCase || !saveForm.name.trim()}>
+              {savingTestCase ? 'Saving…' : 'Save Test Case'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 

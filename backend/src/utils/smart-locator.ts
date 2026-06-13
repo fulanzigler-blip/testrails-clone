@@ -31,8 +31,10 @@ export async function smartLocate(
 ): Promise<SmartLocateResult> {
   const attempts: Array<{ strategy: string; selector: string }> = [];
 
-  // Strategy 1: Exact selector (if provided and specific)
-  if (ctx.selector && !ctx.selector.includes(':has-text')) {
+  // Strategy 1: Exact selector. :has-text selectors are allowed — the scraper
+  // deliberately anchors dynamic rows/items on visible text, which survives
+  // position changes between runs.
+  if (ctx.selector) {
     attempts.push({ strategy: 'exact-selector', selector: ctx.selector });
     try {
       const loc = page.locator(ctx.selector).first();

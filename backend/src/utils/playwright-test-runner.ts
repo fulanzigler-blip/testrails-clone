@@ -4,12 +4,13 @@ import * as path from 'path';
 import logger from '../utils/logger';
 import { smartLocate, LocatorContext } from './smart-locator';
 import { WebAuthConfig, performLogin } from './web-element-scraper';
+import { parseOptionSelector, settleAfterInteraction } from './web-interaction-utils';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export interface WebTestStep {
   id: string;
-  type: 'tap' | 'enter_text' | 'navigate' | 'assert_visible' | 'assert_not_visible' | 'assert_text' | 'wait' | 'screenshot' | 'set_viewport' | 'hover' | 'select' | 'check' | 'uncheck' | 'press_key';
+  type: 'tap' | 'enter_text' | 'navigate' | 'assert_visible' | 'assert_not_visible' | 'assert_text' | 'wait' | 'screenshot' | 'set_viewport' | 'hover' | 'select' | 'dropdown-item' | 'check' | 'uncheck' | 'press_key' | 'table-row' | 'list-item';
   elementId?: string;
   selector?: string;
   value?: string;
@@ -75,6 +76,18 @@ async function executeStep(
     }
 
     case 'tap': {
+      // Steps saved before the dropdown-item type existed may "tap" a native
+      // <option> — those can't be clicked, so route them through selectOption.
+      const parsed = parseOptionSelector(step.selector);
+      if (parsed) {
+        logs.push(`Selecting option "${parsed.optionValue}" from: ${parsed.selectSelector}`);
+        const result = await smartLocate(page, { selector: parsed.selectSelector });
+        if (!result.locator) throw new Error(`Select element not found. Tried: ${parsed.selectSelector}`);
+        await result.locator.selectOption(parsed.optionValue, { timeout: 5000 });
+        await settleAfterInteraction(page);
+        logs.push(`  → Selected`);
+        break;
+      }
       const ctx = buildLocatorCtx(step);
       logs.push(`Clicking: ${ctx.selector || ctx.text || 'unknown'}`);
       const result = await smartLocate(page, ctx);
@@ -82,6 +95,53 @@ async function executeStep(
       logs.push(`  → Found via: ${result.strategy} ("${result.selector}")`);
       await result.locator.click({ timeout: 5000 });
       await page.waitForTimeout(300);
+      logs.push(`  → Clicked`);
+      break;
+    }
+
+    case 'table-row':
+    case 'list-item': {
+      // Rows/items hold dynamic DB data: their position changes between runs,
+      // so locate by visible text first and only fall back to the recorded
+      // positional selector. step.text holds either the user-edited match text
+      // or the scraped row text ("📊 cell1 | cell2 | ...") — use its first cell.
+      const label = step.type === 'table-row' ? 'table row' : 'list item';
+      const keyText = (step.text || '')
+        .replace(/^[📊📋📦]\s*/, '')
+        .split('|')[0]
+        .trim()
+        .slice(0, 60);
+      const tag = step.tag || (step.type === 'table-row' ? 'tr' : 'li');
+
+      let locator = null;
+      let foundVia = '';
+      if (keyText.length >= 2) {
+        const textSel = `${tag}:has-text("${keyText.replace(/"/g, '\\"')}")`;
+        logs.push(`Clicking ${label} containing: "${keyText}"`);
+        try {
+          const loc = page.locator(textSel).first();
+          await loc.waitFor({ state: 'visible', timeout: 5000 });
+          locator = loc;
+          foundVia = `text-match ("${textSel}")`;
+        } catch {
+          logs.push(`  → No ${label} contains "${keyText}", falling back to recorded selector`);
+        }
+      } else {
+        logs.push(`Clicking ${label}: ${step.selector || 'unknown'}`);
+      }
+
+      if (!locator) {
+        const ctx = buildLocatorCtx(step);
+        if (keyText.length >= 2) ctx.text = keyText; // raw scraped text with "|" never matches DOM
+        const result = await smartLocate(page, ctx);
+        if (!result.locator) throw new Error(`${label} not found. Tried: ${keyText || ctx.selector || step.text}`);
+        locator = result.locator;
+        foundVia = `${result.strategy} ("${result.selector}")`;
+      }
+
+      logs.push(`  → Found via: ${foundVia}`);
+      await locator.click({ timeout: 5000 });
+      await settleAfterInteraction(page);
       logs.push(`  → Clicked`);
       break;
     }
@@ -115,6 +175,68 @@ async function executeStep(
       if (!result.locator) throw new Error(`Dropdown not found. Tried: ${ctx.selector}`);
       await result.locator.selectOption(step.value || '', { timeout: 5000 });
       logs.push(`  → Selected`);
+      break;
+    }
+
+    case 'dropdown-item': {
+      // Native <select> options — selector format from the scraper:
+      // "<select selector> option[value=\"x\"]". Options can't be clicked, so
+      // run selectOption on the parent <select>.
+      const parsedOpt = parseOptionSelector(step.selector);
+      if (parsedOpt) {
+        const { selectSelector, optionValue } = parsedOpt;
+        // Options are dynamic DB data — values are often DB ids that differ
+        // between runs, while the visible label stays meaningful. Attempt order:
+        //   user override (step.value): label first, then as value
+        //   recorded: value first, then label from step.text ("selectLabel: optionLabel")
+        const userValue = step.value?.trim();
+        const recordedLabel = step.text?.includes(': ')
+          ? step.text.split(': ').slice(1).join(': ').trim()
+          : '';
+        const attempts: Array<{ opt: string | { label: string }; desc: string }> = userValue
+          ? [
+              { opt: { label: userValue }, desc: `label "${userValue}"` },
+              { opt: userValue, desc: `value "${userValue}"` },
+            ]
+          : [
+              { opt: optionValue, desc: `value "${optionValue}"` },
+              ...(recordedLabel ? [{ opt: { label: recordedLabel }, desc: `label "${recordedLabel}"` }] : []),
+            ];
+
+        logs.push(`Selecting option from: ${selectSelector}`);
+        const result = await smartLocate(page, { selector: selectSelector });
+        if (!result.locator) throw new Error(`Select element not found. Tried: ${selectSelector}`);
+
+        let selected = false;
+        let lastError: any = null;
+        for (const attempt of attempts) {
+          try {
+            await result.locator.selectOption(attempt.opt as any, { timeout: 5000 });
+            logs.push(`  → Selected by ${attempt.desc}`);
+            selected = true;
+            break;
+          } catch (err: any) {
+            lastError = err;
+            logs.push(`  → ${attempt.desc} not found, trying next...`);
+          }
+        }
+        if (!selected) throw new Error(`Option not found (tried ${attempts.map(a => a.desc).join(', ')}): ${lastError?.message || ''}`);
+
+        // Filters often trigger AJAX — wait for the resulting DOM update
+        logs.push(`  → Waiting for content update...`);
+        await settleAfterInteraction(page);
+      } else {
+        // Custom dropdown menu item (not a native <select> option) — click it
+        const ctx = buildLocatorCtx(step);
+        logs.push(`Clicking dropdown item: ${ctx.selector || ctx.text || 'unknown'}`);
+        const result = await smartLocate(page, ctx);
+        if (!result.locator) throw new Error(`Dropdown item not found. Tried: ${step.selector || step.text}`);
+        await result.locator.click({ timeout: 5000 });
+
+        logs.push(`  → Waiting for content update...`);
+        await settleAfterInteraction(page);
+        logs.push(`  → Clicked`);
+      }
       break;
     }
 
@@ -531,6 +653,26 @@ export function generatePlaywrightCode(
         lines.push(`  await page.locator('${step.selector || step.value || ''}').click();`);
         break;
 
+      case 'table-row':
+      case 'list-item': {
+        // Dynamic data: match by row text when available, position is unstable
+        const rowKey = (step.text || '')
+          .replace(/^[📊📋📦]\s*/, '')
+          .split('|')[0]
+          .trim()
+          .slice(0, 60)
+          .replace(/"/g, '\\"')
+          .replace(/'/g, "\\'");
+        const rowTag = step.tag || (step.type === 'table-row' ? 'tr' : 'li');
+        lines.push(`  // Click ${step.type === 'table-row' ? 'table row' : 'list item'}`);
+        if (rowKey.length >= 2) {
+          lines.push(`  await page.locator('${rowTag}:has-text("${rowKey}")').first().click();`);
+        } else {
+          lines.push(`  await page.locator('${step.selector || ''}').first().click();`);
+        }
+        break;
+      }
+
       case 'enter_text':
         lines.push(`  // Enter text`);
         lines.push(`  await page.locator('${step.selector || ''}').fill('${step.value || ''}');`);
@@ -545,6 +687,39 @@ export function generatePlaywrightCode(
         lines.push(`  // Select option`);
         lines.push(`  await page.locator('${step.selector || ''}').selectOption('${step.value || ''}');`);
         break;
+
+      case 'dropdown-item': {
+        // Extract select and value from selector: "<select selector> option[value=\"x\"]"
+        const parsedOpt2 = parseOptionSelector(step.selector);
+        if (parsedOpt2) {
+          const sel2 = parsedOpt2.selectSelector;
+          const userValue2 = step.value?.trim();
+          const recordedLabel2 = step.text?.includes(': ')
+            ? step.text.split(': ').slice(1).join(': ').trim().replace(/'/g, "\\'")
+            : '';
+          lines.push(`  // Select dropdown option (dynamic data: fall back to label if value differs)`);
+          if (userValue2) {
+            const esc = userValue2.replace(/'/g, "\\'");
+            lines.push(`  await page.locator('${sel2}').selectOption({ label: '${esc}' })`);
+            lines.push(`    .catch(() => page.locator('${sel2}').selectOption('${esc}'));`);
+          } else if (recordedLabel2) {
+            lines.push(`  await page.locator('${sel2}').selectOption('${parsedOpt2.optionValue}')`);
+            lines.push(`    .catch(() => page.locator('${sel2}').selectOption({ label: '${recordedLabel2}' }));`);
+          } else {
+            lines.push(`  await page.locator('${sel2}').selectOption('${parsedOpt2.optionValue}');`);
+          }
+          lines.push(`  await page.waitForTimeout(2000);`);
+          lines.push(`  await page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});`);
+          lines.push(`  await page.waitForTimeout(1500);`);
+        } else {
+          // Custom dropdown menu item — click it
+          lines.push(`  // Click dropdown item and wait for content update`);
+          lines.push(`  await page.locator('${step.selector || ''}').first().click();`);
+          lines.push(`  await page.waitForTimeout(2000);`);
+          lines.push(`  await page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});`);
+        }
+        break;
+      }
 
       case 'check':
         lines.push(`  // Check checkbox`);

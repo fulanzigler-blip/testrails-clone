@@ -136,7 +136,13 @@ export default async function webIntegrationRoutes(fastify: FastifyInstance) {
       return errorResponses.badRequest(reply, err.message || 'Invalid request');
     }
 
-    const config = { maxPages: body.maxPages, maxDepth: body.maxDepth };
+    const config = {
+      maxPages: body.maxPages,
+      maxDepth: body.maxDepth,
+      spaWaitTime: 3000,         // 3s wait for SPA rendering (longer for dynamic content)
+      waitForLoaders: true,      // Wait for loading indicators to disappear
+      waitForNetworkIdle: false, // Disabled (can be slow for SSE/WebSocket apps)
+    };
     logger.info(`[WebTest] Scanning URL: ${body.url}${body.auth ? ' (with auth)' : ''}`);
 
     // Hijack the response so Fastify doesn't interfere with our SSE stream
@@ -293,8 +299,11 @@ export default async function webIntegrationRoutes(fastify: FastifyInstance) {
   fastify.post('/session/:id/click', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
-      const body = z.object({ selector: z.string().min(1) }).parse(request.body);
-      const snapshot = await clickAndNavigate(id, body.selector);
+      const body = z.object({
+        selector: z.string().min(1),
+        elementType: z.string().optional(),
+      }).parse(request.body);
+      const snapshot = await clickAndNavigate(id, body.selector, body.elementType);
       return successResponse(reply, snapshot);
     } catch (err: any) {
       logger.error(`[WebTest] Click-navigate failed: ${err.message}`);
