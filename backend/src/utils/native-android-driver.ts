@@ -54,78 +54,156 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
   const elements: NativeElement[] = [];
   const seenBounds = new Set<string>();
 
-  const nodeRe = /<node\s+([^>]*?)\/?>/g;
+  // Hierarchy-aware walk. The very common Android pattern is a clickable
+  // container (RecyclerView row, ListTile) whose label lives in a child
+  // TextView — the container itself has no text. A flat scan files the row under
+  // "text" and misses it as a tap target. So we track open clickable ancestors
+  // and let a labelled descendant CLAIM the nearest labelless clickable ancestor,
+  // emitting the ROW as a button (ancestor bounds = tap target, child = label).
+  // A labelless clickable container with no labelled child is emitted on pop
+  // (icon-only row) only if it has a resource-id.
+  interface OpenAncestor {
+    isClickable: boolean;
+    hasOwnLabel: boolean;
+    bounds: { x1: number; y1: number; x2: number; y2: number };
+    validBounds: boolean;
+    resourceId: string;
+    contentDesc: string;
+    className: string;
+    claimed: boolean;
+    emittedSelf: boolean;   // already emitted (had own label) → children must not re-emit
+  }
+  const stack: OpenAncestor[] = [];
+
+  const pushElement = (e: {
+    elementType: NativeElement['elementType'];
+    bounds: { x1: number; y1: number; x2: number; y2: number };
+    text: string; contentDesc: string; resourceId: string; className: string;
+    clickable: boolean; checkable: boolean; isPassword: boolean;
+  }) => {
+    const key = `${e.elementType}:${e.bounds.x1},${e.bounds.y1},${e.bounds.x2},${e.bounds.y2}`;
+    if (seenBounds.has(key)) return;
+    seenBounds.add(key);
+
+    const idShort = e.resourceId.split('/').pop() || '';
+    const firstLine = (e.text || e.contentDesc).split('\n')[0].trim();
+    const label = firstLine || idShort || e.className.split('.').pop() || 'element';
+    const cx = Math.round((e.bounds.x1 + e.bounds.x2) / 2);
+    const cy = Math.round((e.bounds.y1 + e.bounds.y2) / 2);
+
+    const finders: NativeFinder[] = [];
+    if (e.resourceId) finders.push({ strategy: 'resource-id', value: e.resourceId });
+    if (e.contentDesc) finders.push({ strategy: 'content-desc', value: e.contentDesc.split('\n')[0].trim() });
+    if (e.text.trim()) finders.push({ strategy: 'text', value: e.text.split('\n')[0].trim() });
+    finders.push({ strategy: 'bounds', value: `${cx},${cy}` });
+    const primary = finders[0];
+
+    elements.push({
+      id: `na_${hashString(`${e.resourceId}|${e.contentDesc}|${e.text}|${e.className}|${e.elementType}`)}`,
+      elementType: e.elementType,
+      label: label.slice(0, 80),
+      text: e.text.slice(0, 200),
+      contentDesc: e.contentDesc,
+      resourceId: e.resourceId,
+      className: e.className,
+      bounds: e.bounds,
+      clickable: e.clickable,
+      checkable: e.checkable,
+      isPassword: e.isPassword,
+      finderStrategy: primary.strategy,
+      finderValue: primary.value,
+      fallbackFinders: finders.slice(1),
+    });
+  };
+
+  // Tokenize opening / self-closing / closing tags in document order
+  const tagRe = /<node\s+([^>]*?)(\/?)>|<\/node>/g;
   let m: RegExpExecArray | null;
-  while ((m = nodeRe.exec(xml)) !== null) {
+  while ((m = tagRe.exec(xml)) !== null) {
+    if (m[0] === '</node>') {
+      const popped = stack.pop();
+      // Labelless clickable container nobody claimed → icon-only row; keep it if
+      // it at least has a resource-id to target.
+      if (popped && popped.isClickable && !popped.hasOwnLabel && !popped.claimed
+          && !popped.emittedSelf && popped.validBounds && popped.resourceId) {
+        pushElement({
+          elementType: 'button', bounds: popped.bounds, text: '', contentDesc: popped.contentDesc,
+          resourceId: popped.resourceId, className: popped.className,
+          clickable: true, checkable: false, isPassword: false,
+        });
+      }
+      continue;
+    }
+
     const attrs = m[1];
+    const selfClosing = m[2] === '/';
     const get = (k: string) => {
       const r = new RegExp(`\\b${k}="([^"]*)"`).exec(attrs);
       return r ? decodeXmlEntities(r[1]) : '';
     };
 
     const className = get('class');
-    if (!className || className.includes('DecorView')) continue;
-
-    const bounds = get('bounds');
-    const bm = BOUNDS_RE.exec(bounds);
-    if (!bm) continue;
-    const x1 = parseInt(bm[1]), y1 = parseInt(bm[2]), x2 = parseInt(bm[3]), y2 = parseInt(bm[4]);
-    if (x2 <= x1 || y2 <= y1) continue;
-    // Skip near-fullscreen containers (layout roots, scrim overlays)
-    if ((x2 - x1) >= screenW * 0.97 && (y2 - y1) >= screenH * 0.92) continue;
-
+    const bm = BOUNDS_RE.exec(get('bounds'));
     const text = get('text');
     const contentDesc = get('content-desc');
     const resourceId = get('resource-id');
     const clickable = get('clickable') === 'true';
     const checkable = get('checkable') === 'true';
     const isPassword = get('password') === 'true';
+    const ownLabel = (text || contentDesc).trim();
+
+    let x1 = 0, y1 = 0, x2 = 0, y2 = 0, validBounds = false;
+    if (bm) {
+      x1 = parseInt(bm[1]); y1 = parseInt(bm[2]); x2 = parseInt(bm[3]); y2 = parseInt(bm[4]);
+      validBounds = x2 > x1 && y2 > y1;
+    }
+    const usable = !!className && !className.includes('DecorView') && validBounds
+      && !((x2 - x1) >= screenW * 0.97 && (y2 - y1) >= screenH * 0.92);
+
     const isEditText = /EditText|AutoCompleteTextView|SearchView/.test(className);
     const isTextView = /TextView|CheckedTextView/.test(className) && !isEditText;
+    const bounds = { x1, y1, x2, y2 };
+    let emittedSelf = false;
 
-    let elementType: NativeElement['elementType'] | null = null;
-    if (isEditText || isPassword) elementType = 'input';
-    else if (clickable || checkable) elementType = 'button';
-    else if (isTextView && text.trim()) elementType = 'text';
-    if (!elementType) continue;
+    if (usable) {
+      if (isEditText || isPassword) {
+        pushElement({ elementType: 'input', bounds, text, contentDesc, resourceId, className, clickable, checkable, isPassword });
+        emittedSelf = true;
+      } else if (clickable || checkable) {
+        if (ownLabel) {
+          // Self-labelled clickable → emit now; children won't re-emit this row
+          pushElement({ elementType: 'button', bounds, text, contentDesc, resourceId, className, clickable: true, checkable, isPassword });
+          emittedSelf = true;
+        } else if (selfClosing) {
+          // Labelless clickable leaf (icon button) — keep only if it has an id
+          if (resourceId) {
+            pushElement({ elementType: 'button', bounds, text, contentDesc, resourceId, className, clickable: true, checkable, isPassword });
+            emittedSelf = true;
+          }
+        }
+        // else: labelless clickable container → defer; a child claims it (or pop emits it)
+      } else if (isTextView && text.trim().length >= 2) {
+        const anc = [...stack].reverse().find(a => a.isClickable && !a.claimed && !a.hasOwnLabel && !a.emittedSelf);
+        if (anc) {
+          anc.claimed = true;
+          // Emit the ROW as button: tap the container, identify by child text
+          pushElement({
+            elementType: 'button', bounds: anc.validBounds ? anc.bounds : bounds,
+            text, contentDesc, resourceId: anc.resourceId || resourceId, className,
+            clickable: true, checkable: false, isPassword: false,
+          });
+        } else {
+          pushElement({ elementType: 'text', bounds, text, contentDesc, resourceId, className, clickable, checkable, isPassword });
+        }
+      }
+    }
 
-    // Label: prefer human-readable text, then content-desc, then short resource-id
-    const idShort = resourceId.split('/').pop() || '';
-    const firstLine = (text || contentDesc).split('\n')[0].trim();
-    const label = firstLine || idShort || className.split('.').pop() || 'element';
-    // Buttons without any identity (no text/desc/id) are usually decorative — skip
-    if (elementType === 'button' && !firstLine && !resourceId) continue;
-    if (elementType === 'text' && firstLine.length < 2) continue;
-
-    // Dedup identical bounds (parent + child often share the clickable area)
-    const key = `${elementType}:${bounds}`;
-    if (seenBounds.has(key)) continue;
-    seenBounds.add(key);
-
-    // Finder chain
-    const finders: NativeFinder[] = [];
-    if (resourceId) finders.push({ strategy: 'resource-id', value: resourceId });
-    if (contentDesc) finders.push({ strategy: 'content-desc', value: contentDesc.split('\n')[0].trim() });
-    if (text.trim()) finders.push({ strategy: 'text', value: text.split('\n')[0].trim() });
-    finders.push({ strategy: 'bounds', value: `${Math.round((x1 + x2) / 2)},${Math.round((y1 + y2) / 2)}` });
-    const primary = finders[0];
-
-    elements.push({
-      id: `na_${hashString(`${resourceId}|${contentDesc}|${text}|${className}|${elementType}`)}`,
-      elementType,
-      label: label.slice(0, 80),
-      text: text.slice(0, 200),
-      contentDesc,
-      resourceId,
-      className,
-      bounds: { x1, y1, x2, y2 },
-      clickable,
-      checkable,
-      isPassword,
-      finderStrategy: primary.strategy,
-      finderValue: primary.value,
-      fallbackFinders: finders.slice(1),
-    });
+    if (!selfClosing && !className.includes('DecorView')) {
+      stack.push({
+        isClickable: clickable, hasOwnLabel: !!ownLabel, bounds, validBounds,
+        resourceId, contentDesc, className, claimed: false, emittedSelf,
+      });
+    }
   }
 
   // Reading order: top → bottom, left → right
