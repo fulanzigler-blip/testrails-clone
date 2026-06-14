@@ -643,7 +643,10 @@ const LiveViewPanel: React.FC<{
   testRunning?: boolean;
   testResult?: { success: boolean } | null;
   onStepAdded: (step: Partial<TestStep>) => void;
-}> = ({ runnerId, profileId, testRunning = false, testResult, onStepAdded }) => {
+  // Flutter session + semantic injection are white-box (Dart source) features —
+  // hidden for native platforms where we drive the OS accessibility tree directly.
+  isFlutter?: boolean;
+}> = ({ runnerId, profileId, testRunning = false, testResult, onStepAdded, isFlutter = true }) => {
   const [active, setActive] = useState(false);
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -962,18 +965,18 @@ const LiveViewPanel: React.FC<{
                 {scanningWidgets ? 'Scanning...' : flutterWidgets.length > 0 ? `Re-scan (${flutterWidgets.length})` : 'Scan Screen'}
               </button>
             )}
-            {active && !flutterSessionId && !testRunning && (
+            {isFlutter && active && !flutterSessionId && !testRunning && (
               <button onClick={startFlutterSession} disabled={sessionStarting} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50" title="Start flutter run --debug for accurate Flutter widget scanning">
                 {sessionStarting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Hand className="w-3 h-3" />}
                 {sessionStarting ? 'Starting...' : 'Flutter Session'}
               </button>
             )}
-            {active && flutterSessionId && !testRunning && (
+            {isFlutter && active && flutterSessionId && !testRunning && (
               <button onClick={stopFlutterSession} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-orange-500 text-white hover:bg-orange-600">
                 Stop Session
               </button>
             )}
-            {active && !testRunning && (
+            {isFlutter && active && !testRunning && (
               <button
                 onClick={() => injectSemantics(false)}
                 disabled={injecting}
@@ -1296,6 +1299,17 @@ const VisualTestBuilder: React.FC = () => {
       };
     });
 
+  // After a scan, reveal the results immediately: expand every returned screen
+  // and reset the type filter to "all" (a stale "inputs" filter hides a native
+  // screen that only has buttons → "Showing 0 of N screens" with an empty body).
+  const revealCatalog = (cat: any) => {
+    setCatalog(cat);
+    setElementFilter('all');
+    setElementSearch('');
+    const names = (cat?.screens || []).map((s: any) => s.name).filter(Boolean);
+    setExpandedScreens(new Set(names));
+  };
+
   const handleScan = async () => {
     if (platform !== 'flutter') {
       // Native: scan whatever is on the device screen (launching the app if chosen)
@@ -1307,7 +1321,7 @@ const VisualTestBuilder: React.FC = () => {
           runnerId: selectedRunner || undefined,
           appId: nativeAppId.trim() || undefined,
         }, { timeout: 120000 });
-        setCatalog(resp.data?.data || resp.data);
+        revealCatalog(resp.data?.data || resp.data);
         if (nativeAppId.trim()) localStorage.setItem('vtb_native_app_id', nativeAppId.trim());
       } catch (err: any) {
         setScanError(err.response?.data?.error?.message || err.message || 'Scan failed');
@@ -1333,7 +1347,7 @@ const VisualTestBuilder: React.FC = () => {
       const resp = await api.post(endpoint, payload, {
         timeout: scanMode === 'hybrid' ? 900000 : 120000,
       });
-      setCatalog(resp.data?.data || resp.data);
+      revealCatalog(resp.data?.data || resp.data);
       rememberPath(codebasePath.trim());
     } catch (err: any) {
       setScanError(err.response?.data?.error?.message || err.message || 'Scan failed');
@@ -1687,7 +1701,8 @@ const VisualTestBuilder: React.FC = () => {
         </div>
         )}
 
-        {/* Device Picker */}
+        {/* Device Picker (Flutter set_surface_size — native uses the real device size) */}
+        {platform === 'flutter' && (
         <div className="flex flex-col gap-1 relative" data-device-picker>
           <Label className="text-xs text-muted-foreground">Device</Label>
           <div className="relative">
@@ -1726,6 +1741,7 @@ const VisualTestBuilder: React.FC = () => {
             )}
           </div>
         </div>
+        )}
 
         {/* Scan Button */}
         <Button onClick={handleScan} disabled={scanning} size="sm" className="h-[30px]">
@@ -1940,14 +1956,19 @@ const VisualTestBuilder: React.FC = () => {
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">Step Palette</CardTitle></CardHeader>
             <CardContent className="pt-0 space-y-4">
-              {STEP_CATEGORIES.map(cat => (
+              {STEP_CATEGORIES.map(cat => {
+                // In native mode hide steps the driver can't replay (they'd be
+                // silently dropped at generate time), and skip now-empty categories.
+                const steps = platform === 'flutter' ? cat.steps : cat.steps.filter(s => NATIVE_SUPPORTED.includes(s.type));
+                if (steps.length === 0) return null;
+                return (
                 <div key={cat.name}>
                   <div className="flex items-center gap-2 mb-2">
                     <div className={`w-3 h-3 rounded ${cat.color}`} />
                     <span className="text-xs font-semibold text-muted-foreground uppercase">{cat.name}</span>
                   </div>
                   <div className="space-y-1">
-                    {cat.steps.map(st => (
+                    {steps.map(st => (
                       <button key={st.type} onClick={() => addStep(st.type)}
                         className="w-full flex items-center gap-2 p-2 rounded border cursor-pointer hover:bg-muted transition-colors text-left">
                         <div className={`w-6 h-6 rounded ${cat.color} flex items-center justify-center`}>
@@ -1962,7 +1983,8 @@ const VisualTestBuilder: React.FC = () => {
                     ))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
           {catalog && (
@@ -2028,10 +2050,12 @@ const VisualTestBuilder: React.FC = () => {
                     {savedTestCase ? '✓ Saved!' : 'Save as Test Case'}
                   </Button>
                 )}
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none ml-2">
-                  <input type="checkbox" checked={noBuild} onChange={e => setNoBuild(e.target.checked)} className="rounded" />
-                  Skip APK build (--no-build)
-                </label>
+                {platform === 'flutter' && (
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none ml-2">
+                    <input type="checkbox" checked={noBuild} onChange={e => setNoBuild(e.target.checked)} className="rounded" />
+                    Skip APK build (--no-build)
+                  </label>
+                )}
               </div>
               {generatedCode && (
                 <pre className="bg-gray-900 text-green-400 p-3 rounded text-xs font-mono max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all">{generatedCode}</pre>
@@ -2071,6 +2095,7 @@ const VisualTestBuilder: React.FC = () => {
             testRunning={running}
             testResult={testResult}
             onStepAdded={step => addStep(step.type || 'tap', step)}
+            isFlutter={platform === 'flutter'}
           />
         </div>
       </div>

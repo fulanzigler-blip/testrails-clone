@@ -98,6 +98,10 @@ export default async function nativeTestRoutes(fastify: FastifyInstance) {
         id: e.id,
         label: e.label,
         text: e.label,
+        // `type` mirrors the Flutter catalog shape the UI renders (chips/labels);
+        // `isStatic` lets text elements be counted as static vs dynamic.
+        type: e.elementType,
+        isStatic: e.elementType === 'text',
         elementType: e.elementType,
         finderStrategy: e.finderStrategy,
         finderValue: e.finderValue,
