@@ -1285,14 +1285,28 @@ const VisualTestBuilder: React.FC = () => {
 
   // Translate builder steps → native replay steps (unsupported types are dropped)
   const NATIVE_SUPPORTED = ['tap', 'enter_text', 'assert_visible', 'assert_not_visible', 'assert_text', 'wait', 'screenshot', 'send_key', 'scroll'];
+  const NATIVE_STRATEGIES = ['resource-id', 'content-desc', 'text', 'bounds'];
+  // Steps added from the Live Device View carry Flutter finder strategies
+  // (key/semantics/type) which the native driver doesn't accept. Map them to the
+  // closest UIAutomator strategy; fall back to the step's visible text.
+  const toNativeFinder = (strategy?: string, value?: string, text?: string): { finderStrategy: string; finderValue: string } => {
+    if (strategy && NATIVE_STRATEGIES.includes(strategy) && value) return { finderStrategy: strategy, finderValue: value };
+    if (strategy === 'key' && value) return { finderStrategy: 'resource-id', finderValue: value };       // Flutter key ≈ resource-id (suffix-matched server-side)
+    if (strategy === 'semantics' && value) return { finderStrategy: 'content-desc', finderValue: value };
+    // 'type' or anything else: only the visible text is meaningful for black-box
+    return { finderStrategy: 'text', finderValue: text || value || '' };
+  };
   const toNativeSteps = () => steps
     .filter(s => NATIVE_SUPPORTED.includes(s.type))
     .map(s => {
       const el = findCatalogElement(s.elementId);
+      const f = el?.finderStrategy
+        ? { finderStrategy: el.finderStrategy, finderValue: el.finderValue || '' }
+        : toNativeFinder(s.finderStrategy, s.finderValue, s.text);
       return {
         type: s.type === 'send_key' ? 'press_key' : s.type,
-        finderStrategy: el?.finderStrategy || s.finderStrategy || 'text',
-        finderValue: el?.finderValue || s.finderValue || s.text || '',
+        finderStrategy: f.finderStrategy,
+        finderValue: f.finderValue,
         fallbackFinders: el?.fallbackFinders,
         value: s.value,
         text: s.text,

@@ -89,6 +89,11 @@ describe('findNativeElement', () => {
     expect(el?.label).toBe('Masuk');
   });
 
+  it('matches resource-id by short suffix (Flutter "key" finders / short ids)', () => {
+    const el = findNativeElement(els, { strategy: 'resource-id', value: 'btn_login' });
+    expect(el?.label).toBe('Masuk');
+  });
+
   it('matches text case-insensitively and by contains (dynamic data)', () => {
     expect(findNativeElement(els, { strategy: 'text', value: 'budi' })?.label).toBe('Budi Santoso');
     expect(findNativeElement(els, { strategy: 'text', value: 'MASUK' })?.label).toBe('Masuk');

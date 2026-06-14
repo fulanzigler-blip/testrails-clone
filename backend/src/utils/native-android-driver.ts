@@ -217,7 +217,12 @@ export function findNativeElement(elements: NativeElement[], finder: NativeFinde
   const norm = (s: string) => s.toLowerCase().trim();
   switch (finder.strategy) {
     case 'resource-id':
-      return elements.find(e => e.resourceId === finder.value) || null;
+      // Exact, else suffix match so a short id ("action_bar_title") matches a
+      // fully-qualified one ("com.app:id/action_bar_title") — Flutter live-view
+      // "key" finders and some scrapers emit the short form.
+      return elements.find(e => e.resourceId === finder.value)
+        || elements.find(e => e.resourceId.endsWith(`/${finder.value}`) || e.resourceId.endsWith(`:id/${finder.value}`))
+        || null;
     case 'content-desc':
       return elements.find(e => norm(e.contentDesc).includes(norm(finder.value))) || null;
     case 'text':
