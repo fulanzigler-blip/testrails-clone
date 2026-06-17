@@ -62,13 +62,12 @@ const Layout: React.FC = () => {
               <defs>
                 <linearGradient id="vetSidebar" x1="0" y1="0" x2="1" y2="1">
                   <stop offset="0" stopColor="#6366f1" />
-                  <stop offset="1" stopColor="#4338ca" />
+                  <stop offset="1" stopColor="#a855f7" />
                 </linearGradient>
               </defs>
               <rect width="120" height="120" rx="28" fill="url(#vetSidebar)" />
-              <circle cx="50" cy="50" r="26" fill="none" stroke="#fff" strokeWidth="8" />
-              <path d="M42 39 L64 50 L42 61 Z" fill="#fff" />
-              <path d="M70 70 L90 90" fill="none" stroke="#fff" strokeWidth="11" strokeLinecap="round" />
+              <path d="M22 60 C40 36, 80 36, 98 60 C80 84, 40 84, 22 60 Z" fill="none" stroke="#fff" strokeWidth="6" strokeLinejoin="round" />
+              <path d="M51 47 L73 60 L51 73 Z" fill="#fff" />
             </svg>
             <span className="text-xl font-bold leading-none">VET <span className="font-medium text-muted-foreground">Engine</span></span>
           </div>
