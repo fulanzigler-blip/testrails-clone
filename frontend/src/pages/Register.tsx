@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
-import { TestTube } from 'lucide-react'
 
 const Register: React.FC = () => {
   const navigate = useNavigate()
@@ -41,8 +40,22 @@ const Register: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/50">
       <div className="w-full max-w-md">
-        <div className="flex items-center justify-center mb-8">
-          <TestTube className="h-12 w-12 text-primary" />
+        <div className="flex flex-col items-center gap-3 mb-8">
+          <svg viewBox="0 0 120 120" className="h-16 w-16" aria-hidden="true">
+            <defs>
+              <linearGradient id="vetRegister" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stopColor="#6366f1" />
+                <stop offset="1" stopColor="#a855f7" />
+              </linearGradient>
+            </defs>
+            <rect width="120" height="120" rx="28" fill="url(#vetRegister)" />
+            <path d="M22 60 C40 36, 80 36, 98 60 C80 84, 40 84, 22 60 Z" fill="none" stroke="#fff" strokeWidth="6" strokeLinejoin="round" />
+            <path d="M51 47 L73 60 L51 73 Z" fill="#fff" />
+          </svg>
+          <div className="text-center">
+            <div className="text-2xl font-bold tracking-wide leading-none">VET</div>
+            <div className="text-sm text-muted-foreground mt-1">Visual Exploratory Test Engine</div>
+          </div>
         </div>
         <Card>
           <CardHeader className="space-y-1 text-center">
