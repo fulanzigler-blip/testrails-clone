@@ -47,7 +47,7 @@ const Register: React.FC = () => {
         <Card>
           <CardHeader className="space-y-1 text-center">
             <CardTitle className="text-2xl font-bold">Create account</CardTitle>
-            <CardDescription>Sign up to get started with TestRails</CardDescription>
+            <CardDescription>Sign up to get started with VET Engine</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">

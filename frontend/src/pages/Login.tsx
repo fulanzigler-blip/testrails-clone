@@ -40,7 +40,7 @@ const Login: React.FC = () => {
         <Card>
           <CardHeader className="space-y-1 text-center">
             <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
-            <CardDescription>Sign in to your TestRails account</CardDescription>
+            <CardDescription>Sign in to your VET Engine account</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">

@@ -57,9 +57,20 @@ const Layout: React.FC = () => {
       <aside className="w-64 border-r bg-card">
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="flex h-16 items-center border-b px-6">
-            <TestTube className="h-6 w-6 text-primary mr-2" />
-            <span className="text-xl font-bold">TestRails</span>
+          <div className="flex h-16 items-center border-b px-6 gap-2.5">
+            <svg viewBox="0 0 120 120" className="h-8 w-8 shrink-0" aria-hidden="true">
+              <defs>
+                <linearGradient id="vetSidebar" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stopColor="#6366f1" />
+                  <stop offset="1" stopColor="#4338ca" />
+                </linearGradient>
+              </defs>
+              <rect width="120" height="120" rx="28" fill="url(#vetSidebar)" />
+              <circle cx="50" cy="50" r="26" fill="none" stroke="#fff" strokeWidth="8" />
+              <path d="M42 39 L64 50 L42 61 Z" fill="#fff" />
+              <path d="M70 70 L90 90" fill="none" stroke="#fff" strokeWidth="11" strokeLinecap="round" />
+            </svg>
+            <span className="text-xl font-bold leading-none">VET <span className="font-medium text-muted-foreground">Engine</span></span>
           </div>
 
           {/* New Test Run CTA */}
@@ -130,7 +141,7 @@ const Layout: React.FC = () => {
         {/* Header */}
         <header className="h-16 border-b bg-card flex items-center justify-between px-6">
           <h1 className="text-lg font-semibold">
-            {navigation.find((item) => item.href === location.pathname)?.name || 'TestRails'}
+            {navigation.find((item) => item.href === location.pathname)?.name || 'VET Engine'}
           </h1>
           <div className="flex items-center gap-4">
             <button className="relative rounded-full p-2 hover:bg-muted transition-colors" onClick={() => setDrawerOpen(true)}>
