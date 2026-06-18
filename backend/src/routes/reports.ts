@@ -80,26 +80,24 @@ export default async function reportRoutes(fastify: FastifyInstance) {
         failureCounts[key].count++;
       });
 
+      // Keys match the frontend ReportSummary contract (testCaseId, title, failCount)
       const topFailures = Object.entries(failureCounts)
         .map(([id, data]) => ({
           testCaseId: id,
-          testCaseTitle: data.title,
-          failureCount: data.count,
-          percentage: Math.round((data.count / totalExecuted) * 100),
+          title: data.title,
+          failCount: data.count,
         }))
-        .sort((a, b) => b.failureCount - a.failureCount)
+        .sort((a, b) => b.failCount - a.failCount)
         .slice(0, 10);
 
-      // Generate trend data
-      const trendDates: string[] = [];
-      const trendPassRates: number[] = [];
+      // Per-day trend: passed + failed counts for the last 7 days
+      const trendData: { date: string; passed: number; failed: number }[] = [];
 
       for (let i = 6; i >= 0; i--) {
         const date = new Date();
         date.setDate(date.getDate() - i);
         date.setHours(0, 0, 0, 0);
         const dateStr = date.toISOString().split('T')[0];
-        trendDates.push(dateStr);
 
         const endDate = new Date(date);
         endDate.setDate(endDate.getDate() + 1);
@@ -121,20 +119,29 @@ export default async function reportRoutes(fastify: FastifyInstance) {
           dayTotal += r._count.results;
         });
 
-        trendPassRates.push(dayTotal > 0 ? Math.round((dayPassed / dayTotal) * 100) : 0);
+        trendData.push({ date: dateStr, passed: dayPassed, failed: Math.max(dayTotal - dayPassed, 0) });
       }
+
+      // Distribution of recent runs by status (for the bar chart)
+      const statusCounts: Record<string, number> = {};
+      recentRuns.forEach(r => {
+        const s = (r as any).status || 'unknown';
+        statusCounts[s] = (statusCounts[s] || 0) + 1;
+      });
+      const testRunsByStatus = Object.entries(statusCounts).map(([status, count]) => ({ status, count }));
+
+      const passRate = averagePassRate;
 
       return successResponse(reply, {
         totalTestRuns: testRuns,
         totalTestCases,
         totalTestsExecuted: totalExecuted,
-        averagePassRate,
+        passRate,
+        failRate: Math.max(100 - passRate, 0),
         activeProjects: totalProjects,
+        testRunsByStatus,
+        trendData,
         topFailures,
-        trend: {
-          dates: trendDates,
-          passRates: trendPassRates,
-        },
       }, undefined);
     } catch (error) {
       logger.error('Error getting summary report:', error);
