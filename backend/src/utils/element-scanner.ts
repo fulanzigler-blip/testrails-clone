@@ -123,16 +123,22 @@ export async function scanFlutterProjectLocal(projectPath: string, source: 'loca
     source, repoUrl,
   };
 
-  // 1. Package name from main.dart
+  // 1. Package name — pubspec.yaml `name:` is the canonical source and works for
+  // any app; the main.dart import heuristic is only a fallback.
   const mainFile = path.join(projectPath, 'lib', 'main.dart');
   if (!fs.existsSync(mainFile)) {
     throw new Error(`main.dart not found at ${mainFile}`);
+  }
+  let pubspecName = '';
+  const pubspecFile = path.join(projectPath, 'pubspec.yaml');
+  if (fs.existsSync(pubspecFile)) {
+    pubspecName = fs.readFileSync(pubspecFile, 'utf8').match(/^name:\s*([A-Za-z0-9_]+)/m)?.[1] || '';
   }
   const mainContent = fs.readFileSync(mainFile, 'utf8');
   const allImports = mainContent.match(/import\s+'package:([^/]+)/g) || [];
   const appPkgs = allImports.map(m => m.match(/package:([^/]+)/)?.[1]).filter(Boolean)
     .filter((p: string) => !['flutter', 'cupertino', 'material', 'go_router', 'flutter_riverpod', 'google_fonts', 'intl', 'provider'].includes(p));
-  catalog.packageName = (appPkgs[0] as string) || 'my_app';
+  catalog.packageName = pubspecName || (appPkgs[0] as string) || 'my_app';
   const routeMatches = mainContent.match(/path:\s*['"]([^'"]+)['"]/g) || [];
   catalog.routes = routeMatches.map(r => r.match(/['"]([^'"]+)['"]/)?.[1] || '').filter(Boolean);
 

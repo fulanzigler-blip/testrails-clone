@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { api } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -36,7 +36,9 @@ export interface Flow {
 
 const FlowBuilder: React.FC = () => {
   // State
-  const [appId, setAppId] = useState('com.disciplinetracker.app');
+  // No app-specific default — remember whatever app the user worked with last
+  const [appId, setAppId] = useState(() => localStorage.getItem('vtb_last_app_id') || '');
+  useEffect(() => { if (appId) localStorage.setItem('vtb_last_app_id', appId); }, [appId]);
   const [elements, setElements] = useState<HierarchyElement[]>([]);
   const [loading, setLoading] = useState(false);
   const [flows, setFlows] = useState<Flow[]>([

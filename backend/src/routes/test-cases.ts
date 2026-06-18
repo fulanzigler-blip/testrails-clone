@@ -48,9 +48,14 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
       // SECURITY: Sanitize search input to prevent XSS (FIX #2)
       if (search) {
         const sanitizedSearch = sanitizeInput(search);
-        where.OR = [
-          { title: { contains: sanitizedSearch, mode: 'insensitive' } },
-          { description: { contains: sanitizedSearch, mode: 'insensitive' } },
+        // Use AND so the org/suite filter is preserved alongside the search
+        where.AND = [
+          {
+            OR: [
+              { title: { contains: sanitizedSearch, mode: 'insensitive' } },
+              { description: { contains: sanitizedSearch, mode: 'insensitive' } },
+            ],
+          },
         ];
       }
 

@@ -187,6 +187,13 @@ export function parseWidgetTree(node: any, depth = 0, typeCount: Map<string, num
     // For type-only finders on duplicates, append index so UI can show "TextField #1", "TextField #2"
     else if (count > 1) { finderStrategy = 'type'; finderValue = `${widgetTypeName} #${count}`; }
 
+    // BackButton/CloseButton have no text/tooltip in source — always use byType finder
+    // so generated test uses find.byType(BackButton) not find.text('Back')
+    if (widgetTypeName === 'BackButton' || widgetTypeName === 'CloseButton') {
+      finderStrategy = 'type';
+      finderValue = widgetTypeName;
+    }
+
     if (elementType !== 'other' || key) {
       results.push({
         description: desc,
@@ -287,7 +294,7 @@ function extractKey(node: any): string {
 }
 
 function isButtonWidget(desc: string): boolean {
-  return /ElevatedButton|TextButton|OutlinedButton|IconButton|FloatingActionButton|GestureDetector|InkWell|CupertinoButton|FilledButton|DropdownButton|PopupMenuButton|SegmentedButton|Chip|ActionChip|FilterChip|ChoiceChip|CheckboxListTile|RadioListTile|SwitchListTile|ListTile|Tab\b|BottomNavigationBarItem/i.test(desc);
+  return /ElevatedButton|TextButton|OutlinedButton|IconButton|BackButton|CloseButton|FloatingActionButton|GestureDetector|InkWell|CupertinoButton|FilledButton|DropdownButton|PopupMenuButton|SegmentedButton|Chip|ActionChip|FilterChip|ChoiceChip|CheckboxListTile|RadioListTile|SwitchListTile|ListTile|Tab\b|BottomNavigationBarItem/i.test(desc);
 }
 
 function isInputWidget(desc: string): boolean {

@@ -34,6 +34,10 @@ export const ScraperConfigSchema = z.object({
   requestDelay: z.number().int().nonnegative().optional(),
   concurrentRequests: z.number().int().positive().optional(),
   respectRobotsTxt: z.boolean().optional(),
+  // Dynamic content options
+  spaWaitTime: z.number().int().nonnegative().optional(), // Wait time for SPA rendering (default 1500ms)
+  waitForLoaders: z.boolean().optional(), // Wait for common loaders (spinner, skeleton) to disappear
+  waitForNetworkIdle: z.boolean().optional(), // Wait for network to be idle (slower but more reliable)
 }).strict();
 
 export type ScraperConfig = z.infer<typeof ScraperConfigSchema>;

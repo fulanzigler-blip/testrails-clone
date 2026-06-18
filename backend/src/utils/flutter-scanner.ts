@@ -3,13 +3,13 @@ import logger from './logger';
 
 // ─── Environment Configuration ───────────────────────────────────────────────────
 
-const FLUTTER_PROJECT_PATH: string =
-  process.env.FLUTTER_PROJECT_PATH ||
-  '/Users/clawbot/actions-runner/_work/discipline-tracker/discipline-tracker';
+// No app-specific default — the path must come from the runner config or env
+const FLUTTER_PROJECT_PATH: string = process.env.FLUTTER_PROJECT_PATH || '';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export interface AppContext {
+  packageName: string;
   mainDart: string;
   loginScreen: string;
   authFlow: string;
@@ -22,10 +22,14 @@ export interface AppContext {
 
 // ─── App Context Discovery ───────────────────────────────────────────────────────
 
-export async function discoverAppContext(): Promise<AppContext> {
-  const projectPath = FLUTTER_PROJECT_PATH;
+export async function discoverAppContext(overrideProjectPath?: string): Promise<AppContext> {
+  const projectPath = overrideProjectPath || FLUTTER_PROJECT_PATH;
+  if (!projectPath) {
+    throw new Error('No Flutter project path configured — set the runner\'s projectPath or the FLUTTER_PROJECT_PATH env var');
+  }
 
   const context: AppContext = {
+    packageName: '',
     mainDart: '',
     loginScreen: '',
     authFlow: '',
@@ -35,6 +39,10 @@ export async function discoverAppContext(): Promise<AppContext> {
     loginButton: '',
     fieldTypes: '',
   };
+
+  // Package name from pubspec.yaml (canonical, app-agnostic)
+  const pubspecResult = await execSSH(`grep -m1 '^name:' "${projectPath}/pubspec.yaml" 2>/dev/null`, 15000);
+  context.packageName = pubspecResult.output.match(/^name:\s*([A-Za-z0-9_]+)/m)?.[1] || '';
 
   // Read main.dart to understand app structure
   const mainResult = await execSSH(`cat "${projectPath}/lib/main.dart" 2>/dev/null | head -60`, 15000);

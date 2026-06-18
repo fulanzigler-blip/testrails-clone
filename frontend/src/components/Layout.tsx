@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, LayoutDashboard, TestTube, Play, FolderTree, Users, BarChart3, Settings, LogOut, FolderOpen, Smartphone, Cpu, Wrench, Scan, Globe, Plus } from 'lucide-react'
+import { Bell, LayoutDashboard, TestTube, Play, FolderTree, Users, BarChart3, Settings, LogOut, FolderOpen, Smartphone, Cpu, Wrench, Scan, Globe, Plus, Layers } from 'lucide-react'
 import { useAppSelector } from '../store/hooks'
 import { Badge } from './ui/badge'
 import NotificationsDrawer from './NotificationsDrawer'
@@ -40,6 +40,7 @@ const Layout: React.FC = () => {
     { name: 'Visual Test Builder', href: '/visual-test-builder', icon: Wrench },
     { name: 'Web Visual Builder', href: '/web-visual-builder', icon: Globe },
     { name: 'Hybrid Scanner', href: '/hybrid-scan', icon: Scan },
+    { name: 'App Profiles', href: '/app-profiles', icon: Layers },
     { name: 'Users', href: '/users', icon: Users },
     { name: 'Reports', href: '/reports', icon: BarChart3 },
   ]

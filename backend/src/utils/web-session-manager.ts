@@ -2,6 +2,7 @@ import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import { randomUUID } from 'crypto';
 import logger from './logger';
 import { WebAuthConfig, WebPageElement, extractElementsFromPage, performLogin } from './web-element-scraper';
+import { parseOptionSelector, settleAfterInteraction, waitForDomSettle } from './web-interaction-utils';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -105,7 +106,10 @@ export async function loadPage(sessionId: string, url: string): Promise<PageSnap
 
   try {
     await s.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await s.page.waitForTimeout(1500);
+
+    // Wait until the DOM stops mutating (SPA render + AJAX) instead of a fixed
+    // sleep — fast pages continue in <1s, slow APIs get up to 8s.
+    await waitForDomSettle(s.page, { quietMs: 700, maxMs: 8000 });
 
     const actualUrl = s.page.url();
     const title     = await s.page.title().catch(() => 'Page');
@@ -113,10 +117,15 @@ export async function loadPage(sessionId: string, url: string): Promise<PageSnap
 
     const elements = await extractElementsFromPage(s.page, title || 'Page', actualUrl);
 
+    // Log button types for debugging
+    const buttonTypes = elements.buttons.reduce((acc: any, b) => {
+      acc[b.type] = (acc[b.type] || 0) + 1;
+      return acc;
+    }, {});
+    logger.info(`[SessionManager] ${sessionId}: loaded "${title}" (${actualUrl}) — ${elements.inputs.length} inputs, ${elements.buttons.length} buttons [types: ${JSON.stringify(buttonTypes)}], ${elements.texts.length} texts`);
+
     const screenshotBuf = await s.page.screenshot({ type: 'png', fullPage: true });
     const screenshot    = screenshotBuf.toString('base64');
-
-    logger.info(`[SessionManager] ${sessionId}: loaded "${title}" (${actualUrl}) — ${elements.inputs.length} inputs, ${elements.buttons.length} buttons`);
 
     return { url: actualUrl, title, screenshot, elements };
   } finally {
@@ -137,7 +146,7 @@ export async function exportStorageState(sessionId: string): Promise<object | nu
   }
 }
 
-export async function clickAndNavigate(sessionId: string, selector: string): Promise<PageSnapshot> {
+export async function clickAndNavigate(sessionId: string, selector: string, elementType?: string): Promise<PageSnapshot> {
   const s = sessions.get(sessionId);
   if (!s) throw new Error('Session not found or expired. Please start a new session.');
   if (s.busy) throw new Error('Session is busy — please wait for the current load to finish.');
@@ -146,12 +155,24 @@ export async function clickAndNavigate(sessionId: string, selector: string): Pro
   s.lastUsed = Date.now();
 
   try {
-    // Click the element — ignore if not found (may have navigated already)
-    await s.page.locator(selector).first().click({ timeout: 5000 }).catch(() => {});
+    // Native <select> options can't be clicked — they must go through selectOption.
+    // Custom dropdown menu items (also typed 'dropdown-item') don't match the
+    // option pattern and fall through to a normal click.
+    const parsed = parseOptionSelector(selector);
 
-    // Wait for the page to settle after click (SPA navigation or DOM update)
-    await s.page.waitForTimeout(1500);
-    await s.page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
+    if (parsed) {
+      logger.info(`[SessionManager] ${sessionId}: selecting dropdown option "${parsed.optionValue}" from ${parsed.selectSelector}`);
+      await s.page.locator(parsed.selectSelector).first().selectOption(parsed.optionValue, { timeout: 5000 })
+        .catch(err => logger.warn(`[SessionManager] selectOption failed: ${err.message}`));
+    } else {
+      // Normal click interaction
+      await s.page.locator(selector).first().click({ timeout: 5000 })
+        .catch(err => logger.warn(`[SessionManager] click failed: ${err.message}`));
+    }
+
+    // Let any navigation land, then wait for the DOM to settle (SPA re-render,
+    // AJAX content triggered by the interaction)
+    await settleAfterInteraction(s.page, { quietMs: 700, maxMs: 6000 });
 
     const actualUrl = s.page.url();
     const title     = await s.page.title().catch(() => 'Page');

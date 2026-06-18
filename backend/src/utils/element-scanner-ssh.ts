@@ -341,12 +341,16 @@ export async function scanFlutterProjectSSH(config?: unknown): Promise<ElementCa
     deviceId,
   };
 
-  // 1. Package name from main.dart
+  // 1. Package name — pubspec.yaml `name:` is the canonical source and works for
+  // any app; the main.dart import heuristic is only a fallback (it guesses wrong
+  // when third-party imports come first).
+  const pubspecResult = await execSSHWithConfig(`grep -m1 '^name:' "${path}/pubspec.yaml" 2>/dev/null`, config, 15000);
+  const pubspecName = pubspecResult.output.match(/^name:\s*([A-Za-z0-9_]+)/m)?.[1] || '';
   const mainResult = await execSSHWithConfig(`cat "${path}/lib/main.dart" 2>/dev/null | head -80`, config, 15000);
   const allImports = mainResult.output.match(/import\s+'package:([^/]+)/g) || [];
   const appPkgs = allImports.map(m => m.match(/package:([^/]+)/)?.[1]).filter(Boolean)
     .filter((p: string) => !['flutter', 'cupertino', 'material', 'go_router', 'flutter_riverpod', 'google_fonts', 'intl', 'provider'].includes(p));
-  catalog.packageName = (appPkgs[0] as string) || 'my_app';
+  catalog.packageName = pubspecName || (appPkgs[0] as string) || 'my_app';
   const routeMatches = mainResult.output.match(/path:\s*['"]([^'"]+)['"]/g) || [];
   catalog.routes = routeMatches.map(r => r.match(/['"]([^'"]+)['"]/)?.[1] || '').filter(Boolean);
 

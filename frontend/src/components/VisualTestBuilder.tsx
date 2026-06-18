@@ -25,21 +25,31 @@ interface ScreenElement {
   texts: { id: string; text: string }[];
 }
 
+// Native (android/ios) elements carry their own finder metadata from the scan
+interface NativeFinderMeta {
+  finderStrategy?: 'text' | 'semantics' | 'key' | 'type' | 'resource-id' | 'content-desc' | 'bounds';
+  finderValue?: string;
+  fallbackFinders?: Array<{ strategy: string; value: string }>;
+  bounds?: { x1: number; y1: number; x2: number; y2: number };
+}
+
 interface ElementCatalog {
   packageName: string;
   projectPath: string;
   scannedAt: string;
+  platform?: 'flutter' | 'android' | 'ios';
+  screenshot?: string;
   screens: ScreenElement[];
-  inputs: { id: string; label: string; type: string; screen?: string; hasOnFieldSubmitted: boolean }[];
-  buttons: { id: string; text: string; type: string; screen?: string; action?: string }[];
-  texts: { id: string; text: string; screen?: string; isStatic: boolean; source?: string; modelClass?: string; fieldName?: string }[];
+  inputs: ({ id: string; label: string; type: string; screen?: string; hasOnFieldSubmitted: boolean } & NativeFinderMeta)[];
+  buttons: ({ id: string; text: string; type: string; screen?: string; action?: string } & NativeFinderMeta)[];
+  texts: ({ id: string; text: string; screen?: string; isStatic: boolean; source?: string; modelClass?: string; fieldName?: string } & NativeFinderMeta)[];
   auth?: { flow: 'tap' | 'onFieldSubmitted'; loginButton?: string; credentials: { email: string; password: string; role: string }[] };
   routes: string[];
   // Hybrid scan extra fields
   apiEndpoints?: Array<{ method: string; url: string; file: string; line: number; responseModel?: string }>;
   responseModels?: Array<{ fieldName: string; fieldType: string; modelClass: string; sourceFile: string }>;
   dynamicContentHints?: Array<{ screenFile: string; screenName: string; widgetPattern: string; description: string; responseFields: any[] }>;
-  source?: 'ssh' | 'hybrid';
+  source?: 'ssh' | 'hybrid' | 'native-uiautomator';
 }
 
 interface TestStep {
@@ -49,7 +59,7 @@ interface TestStep {
   value?: string;
   text?: string;
   value2?: string; // For surface size width or scroll dy
-  finderStrategy?: 'text' | 'semantics' | 'key' | 'type'; // Flutter finder from live view
+  finderStrategy?: 'text' | 'semantics' | 'key' | 'type' | 'resource-id' | 'content-desc' | 'bounds';
   finderValue?: string;
 }
 
@@ -629,10 +639,14 @@ const ElementList: React.FC<{
 
 const LiveViewPanel: React.FC<{
   runnerId?: string;
+  profileId?: string;
   testRunning?: boolean;
   testResult?: { success: boolean } | null;
   onStepAdded: (step: Partial<TestStep>) => void;
-}> = ({ runnerId, testRunning = false, testResult, onStepAdded }) => {
+  // Flutter session + semantic injection are white-box (Dart source) features —
+  // hidden for native platforms where we drive the OS accessibility tree directly.
+  isFlutter?: boolean;
+}> = ({ runnerId, profileId, testRunning = false, testResult, onStepAdded, isFlutter = true }) => {
   const [active, setActive] = useState(false);
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -876,7 +890,7 @@ const LiveViewPanel: React.FC<{
   const injectSemantics = async (dryRun = false) => {
     setInjecting(true); setInjectResult(null); setError('');
     try {
-      const resp = await api.post('/integration-tests/semantic-inject', { runnerId, dryRun }, { timeout: 120000 });
+      const resp = await api.post('/integration-tests/semantic-inject', { runnerId, dryRun, profileId: profileId || undefined }, { timeout: 120000 });
       const report = resp.data?.data?.report;
       setInjectResult({ filesModified: report?.filesModified ?? 0, totalInjected: report?.totalInjected ?? 0 });
       if (!dryRun && (report?.filesModified ?? 0) > 0) {
@@ -951,18 +965,18 @@ const LiveViewPanel: React.FC<{
                 {scanningWidgets ? 'Scanning...' : flutterWidgets.length > 0 ? `Re-scan (${flutterWidgets.length})` : 'Scan Screen'}
               </button>
             )}
-            {active && !flutterSessionId && !testRunning && (
+            {isFlutter && active && !flutterSessionId && !testRunning && (
               <button onClick={startFlutterSession} disabled={sessionStarting} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50" title="Start flutter run --debug for accurate Flutter widget scanning">
                 {sessionStarting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Hand className="w-3 h-3" />}
                 {sessionStarting ? 'Starting...' : 'Flutter Session'}
               </button>
             )}
-            {active && flutterSessionId && !testRunning && (
+            {isFlutter && active && flutterSessionId && !testRunning && (
               <button onClick={stopFlutterSession} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-orange-500 text-white hover:bg-orange-600">
                 Stop Session
               </button>
             )}
-            {active && !testRunning && (
+            {isFlutter && active && !testRunning && (
               <button
                 onClick={() => injectSemantics(false)}
                 disabled={injecting}
@@ -1109,9 +1123,30 @@ const VisualTestBuilder: React.FC = () => {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
   const [scanMode, setScanMode] = useState<'regular' | 'hybrid'>('regular');
+  // Target platform: flutter = white-box (source + integration_test); android =
+  // black-box (UIAutomator step replay, no source needed); ios = planned
+  const [platform, setPlatform] = useState<'flutter' | 'android' | 'ios'>('flutter');
+  const [nativeAppId, setNativeAppId] = useState<string>(() => localStorage.getItem('vtb_native_app_id') || '');
+  const [deviceApps, setDeviceApps] = useState<string[]>([]);
+  const [loadingApps, setLoadingApps] = useState(false);
+
   const [codebasePath, setCodebasePath] = useState<string>('');
-  const [runners, setRunners] = useState<Array<{id: string; name: string; host: string; deviceId?: string; isDefault: boolean; projectPath?: string}>>([]);
+  // Recently used custom codebase paths (any Flutter app, not a fixed preset list)
+  const [recentPaths, setRecentPaths] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('vtb_recent_paths') || '[]'); } catch { return []; }
+  });
+  const rememberPath = (p: string) => {
+    if (!p) return;
+    setRecentPaths(prev => {
+      const next = [p, ...prev.filter(x => x !== p)].slice(0, 5);
+      try { localStorage.setItem('vtb_recent_paths', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  const [runners, setRunners] = useState<Array<{id: string; name: string; host: string; deviceId?: string; isDefault: boolean; projectPath?: string; defaultProfileId?: string}>>([]);
   const [selectedRunner, setSelectedRunner] = useState<string>('');
+  const [profiles, setProfiles] = useState<Array<{id: string; name: string; isDefault: boolean}>>([]);
+  const [selectedProfile, setSelectedProfile] = useState<string>('');
   const [steps, setSteps] = useState<TestStep[]>([]);
   const [credentials, setCredentials] = useState({ email: '', password: '' });
   const [generatedCode, setGeneratedCode] = useState('');
@@ -1122,6 +1157,11 @@ const VisualTestBuilder: React.FC = () => {
   const [error, setError] = useState('');
   const [savingTestCase, setSavingTestCase] = useState(false);
   const [savedTestCase, setSavedTestCase] = useState<{id: string; title: string} | null>(null);
+  const [saveDialog, setSaveDialog] = useState(false);
+  const [saveForm, setSaveForm] = useState({ name: '', projectId: '', suiteId: '', priority: 'high', description: '' });
+  const [saveProjects, setSaveProjects] = useState<Array<{id: string; name: string}>>([]);
+  const [saveSuites, setSaveSuites] = useState<Array<{id: string; name: string}>>([]);
+  const [loadingSuites, setLoadingSuites] = useState(false);
 
   const [elementFilter, setElementFilter] = useState<'all' | 'inputs' | 'buttons' | 'texts'>('all');
   const [elementSearch, setElementSearch] = useState('');
@@ -1189,17 +1229,25 @@ const VisualTestBuilder: React.FC = () => {
     }
   };
 
-  // Load runners on mount (no auto-scan)
+  // Load runners + profiles on mount
   useEffect(() => {
     const load = async () => {
       try {
-        const resp = await api.get('/integration-tests/runners');
-        const list = resp.data?.data || resp.data || [];
+        const [rResp, pResp] = await Promise.all([
+          api.get('/integration-tests/runners'),
+          api.get('/app-profiles'),
+        ]);
+        const list = rResp.data?.data || rResp.data || [];
+        const plist = pResp.data?.data || pResp.data || [];
         setRunners(list);
+        setProfiles(plist);
         const def = list.find((r: any) => r.isDefault) || list[0];
         if (def) {
           setSelectedRunner(def.id);
           setCodebasePath(def.projectPath || '');
+          // Auto-select runner's default profile
+          const runnerProfile = def.defaultProfileId || plist.find((p: any) => p.isDefault)?.id || '';
+          setSelectedProfile(runnerProfile);
         }
       } catch {}
     };
@@ -1219,7 +1267,84 @@ const VisualTestBuilder: React.FC = () => {
     return () => document.removeEventListener('mousedown', handler);
   }, [showDevicePicker]);
 
+  // List installed apps on the runner's device (native platforms)
+  const loadDeviceApps = async () => {
+    setLoadingApps(true);
+    try {
+      const resp = await api.get('/native-tests/apps', { params: { runnerId: selectedRunner || undefined, platform } });
+      setDeviceApps(resp.data?.data?.apps || []);
+    } catch { setDeviceApps([]); }
+    finally { setLoadingApps(false); }
+  };
+
+  // Find a catalog element (any kind) by id — used to attach native finders to steps
+  const findCatalogElement = (elementId?: string): (NativeFinderMeta & { id: string }) | undefined => {
+    if (!catalog || !elementId) return undefined;
+    return ([...catalog.inputs, ...catalog.buttons, ...catalog.texts] as any[]).find(e => e.id === elementId);
+  };
+
+  // Translate builder steps → native replay steps (unsupported types are dropped)
+  const NATIVE_SUPPORTED = ['tap', 'enter_text', 'assert_visible', 'assert_not_visible', 'assert_text', 'wait', 'screenshot', 'send_key', 'scroll'];
+  const NATIVE_STRATEGIES = ['resource-id', 'content-desc', 'text', 'bounds'];
+  // Steps added from the Live Device View carry Flutter finder strategies
+  // (key/semantics/type) which the native driver doesn't accept. Map them to the
+  // closest UIAutomator strategy; fall back to the step's visible text.
+  const toNativeFinder = (strategy?: string, value?: string, text?: string): { finderStrategy: string; finderValue: string } => {
+    if (strategy && NATIVE_STRATEGIES.includes(strategy) && value) return { finderStrategy: strategy, finderValue: value };
+    if (strategy === 'key' && value) return { finderStrategy: 'resource-id', finderValue: value };       // Flutter key ≈ resource-id (suffix-matched server-side)
+    if (strategy === 'semantics' && value) return { finderStrategy: 'content-desc', finderValue: value };
+    // 'type' or anything else: only the visible text is meaningful for black-box
+    return { finderStrategy: 'text', finderValue: text || value || '' };
+  };
+  const toNativeSteps = () => steps
+    .filter(s => NATIVE_SUPPORTED.includes(s.type))
+    .map(s => {
+      const el = findCatalogElement(s.elementId);
+      const f = el?.finderStrategy
+        ? { finderStrategy: el.finderStrategy, finderValue: el.finderValue || '' }
+        : toNativeFinder(s.finderStrategy, s.finderValue, s.text);
+      return {
+        type: s.type === 'send_key' ? 'press_key' : s.type,
+        finderStrategy: f.finderStrategy,
+        finderValue: f.finderValue,
+        fallbackFinders: el?.fallbackFinders,
+        value: s.value,
+        text: s.text,
+      };
+    });
+
+  // After a scan, reveal the results immediately: expand every returned screen
+  // and reset the type filter to "all" (a stale "inputs" filter hides a native
+  // screen that only has buttons → "Showing 0 of N screens" with an empty body).
+  const revealCatalog = (cat: any) => {
+    setCatalog(cat);
+    setElementFilter('all');
+    setElementSearch('');
+    const names = (cat?.screens || []).map((s: any) => s.name).filter(Boolean);
+    setExpandedScreens(new Set(names));
+  };
+
   const handleScan = async () => {
+    if (platform !== 'flutter') {
+      // Native: scan whatever is on the device screen (launching the app if chosen)
+      setScanning(true);
+      setScanError('');
+      try {
+        const resp = await api.post('/native-tests/scan', {
+          platform,
+          runnerId: selectedRunner || undefined,
+          appId: nativeAppId.trim() || undefined,
+        }, { timeout: 120000 });
+        revealCatalog(resp.data?.data || resp.data);
+        if (nativeAppId.trim()) localStorage.setItem('vtb_native_app_id', nativeAppId.trim());
+      } catch (err: any) {
+        setScanError(err.response?.data?.error?.message || err.message || 'Scan failed');
+      } finally {
+        setScanning(false);
+      }
+      return;
+    }
+
     if (!codebasePath.trim()) {
       setScanError('Please select or enter a codebase path');
       return;
@@ -1236,7 +1361,8 @@ const VisualTestBuilder: React.FC = () => {
       const resp = await api.post(endpoint, payload, {
         timeout: scanMode === 'hybrid' ? 900000 : 120000,
       });
-      setCatalog(resp.data?.data || resp.data);
+      revealCatalog(resp.data?.data || resp.data);
+      rememberPath(codebasePath.trim());
     } catch (err: any) {
       setScanError(err.response?.data?.error?.message || err.message || 'Scan failed');
     } finally {
@@ -1273,6 +1399,23 @@ const VisualTestBuilder: React.FC = () => {
 
   const handleGenerate = async () => {
     if (steps.length === 0) { setError('Add at least one step'); return; }
+
+    if (platform !== 'flutter') {
+      // Native: the "code" is a replay manifest (JSON steps), executed by the
+      // driver against the installed app — nothing to compile
+      const nativeSteps = toNativeSteps();
+      const skipped = steps.filter(s => !NATIVE_SUPPORTED.includes(s.type)).map(s => s.type);
+      const manifest = {
+        platform,
+        appId: nativeAppId.trim() || undefined,
+        steps: nativeSteps,
+        ...(skipped.length ? { skippedUnsupportedSteps: [...new Set(skipped)] } : {}),
+      };
+      setGeneratedCode(JSON.stringify(manifest, null, 2));
+      setError(skipped.length ? `Note: ${[...new Set(skipped)].join(', ')} not supported on native — skipped` : '');
+      return;
+    }
+
     if (!codebasePath.trim()) { setError('Select or enter a codebase path first'); return; }
     setGenerating(true);
     setError('');
@@ -1292,6 +1435,33 @@ const VisualTestBuilder: React.FC = () => {
 
   const handleRun = async () => {
     if (!generatedCode) { setError('Generate code first'); return; }
+
+    if (platform !== 'flutter') {
+      setRunning(true);
+      setError('');
+      setTestResult(null);
+      setSavedTestCase(null);
+      try {
+        const resp = await api.post('/native-tests/run', {
+          platform,
+          runnerId: selectedRunner || undefined,
+          appId: nativeAppId.trim() || undefined,
+          steps: toNativeSteps(),
+        }, { timeout: 600000 });
+        const data = resp.data?.data || resp.data;
+        setTestResult({
+          success: data?.success ?? false,
+          output: data?.output || '',
+          duration: data?.duration ?? 0,
+        });
+      } catch (err: any) {
+        setError(err.response?.data?.error?.message || err.message || 'Run failed');
+      } finally {
+        setRunning(false);
+      }
+      return;
+    }
+
     setRunning(true);
     setError('');
     setTestResult(null);
@@ -1318,20 +1488,47 @@ const VisualTestBuilder: React.FC = () => {
 
   const handleSaveAsTestCase = async () => {
     if (!generatedCode) { setError('Generate code first'); return; }
+    // Pre-fill name from test code
+    const titleMatch = generatedCode.match(/testWidgets\(\s*['"]([^'"]+)['"]/);
+    const autoTitle = titleMatch?.[1] || 'Generated Integration Test';
+    setSaveForm({ name: autoTitle, projectId: '', suiteId: '', priority: 'high', description: '' });
+    setSaveSuites([]);
+    // Fetch projects for the dropdown
+    try {
+      const resp = await api.get('/projects');
+      setSaveProjects(resp.data?.data || resp.data || []);
+    } catch { setSaveProjects([]); }
+    setSaveDialog(true);
+  };
+
+  const handleSaveProjectChange = async (projectId: string) => {
+    setSaveForm(f => ({ ...f, projectId, suiteId: '' }));
+    if (!projectId) { setSaveSuites([]); return; }
+    setLoadingSuites(true);
+    try {
+      const resp = await api.get('/test-suites', { params: { projectId } });
+      setSaveSuites(resp.data?.data || resp.data || []);
+    } catch { setSaveSuites([]); }
+    finally { setLoadingSuites(false); }
+  };
+
+  const handleSaveDialogSubmit = async () => {
     setSavingTestCase(true);
     setError('');
     try {
       const resp = await api.post('/integration-tests/save-as-testcase', {
         dartCode: generatedCode,
-        testResult: testResult ? {
-          success: testResult.success,
-          output: testResult.output,
-          duration: testResult.duration,
-        } : undefined,
+        testResult: testResult ? { success: testResult.success, output: testResult.output, duration: testResult.duration } : undefined,
         runnerId: selectedRunner || undefined,
+        name: saveForm.name.trim() || undefined,
+        projectId: saveForm.projectId || undefined,
+        suiteId: saveForm.suiteId || undefined,
+        priority: saveForm.priority || undefined,
+        description: saveForm.description.trim() || undefined,
       });
       const saved = resp.data?.data;
       setSavedTestCase({ id: saved?.id, title: saved?.title });
+      setSaveDialog(false);
     } catch (err: any) {
       setError(err.response?.data?.error?.message || err.message || 'Save failed');
     } finally {
@@ -1345,34 +1542,99 @@ const VisualTestBuilder: React.FC = () => {
   };
 
   return (
+    <>
     <div className="space-y-4">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Visual Test Builder</h1>
-        <p className="text-muted-foreground">Scan your Flutter app, pick elements, compose test scenarios</p>
+        <p className="text-muted-foreground">Scan your mobile app (Flutter, native Android), pick elements, compose test scenarios</p>
       </div>
 
       {/* Scan Config Bar */}
       <div className="flex flex-wrap items-end gap-3 p-3 bg-muted/30 rounded-lg border">
-        {/* Codebase Selector */}
+        {/* Platform Selector */}
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Platform</Label>
+          <div className="flex items-center border rounded-md overflow-hidden h-[30px]">
+            {(['flutter', 'android', 'ios'] as const).map((p, idx) => (
+              <button
+                key={p}
+                disabled={p === 'ios'}
+                title={p === 'ios' ? 'iOS support coming soon (Appium/XCUITest)' : undefined}
+                onClick={() => { setPlatform(p); setCatalog(null); setGeneratedCode(''); setTestResult(null); if (p !== 'flutter' && deviceApps.length === 0) loadDeviceApps(); }}
+                className={`px-3 h-full text-xs font-medium capitalize ${idx > 0 ? 'border-l' : ''} ${
+                  platform === p ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+                } disabled:opacity-40 disabled:cursor-not-allowed`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* App Package (native platforms — no source code needed) */}
+        {platform !== 'flutter' && (
+          <div className="flex flex-col gap-1 flex-1 min-w-[280px]">
+            <Label className="text-xs text-muted-foreground">App Package (installed on device)</Label>
+            <div className="flex gap-1">
+              <select
+                value={deviceApps.includes(nativeAppId) ? nativeAppId : '__custom__'}
+                onChange={(e) => setNativeAppId(e.target.value === '__custom__' ? '' : e.target.value)}
+                className="rounded border px-2 py-1.5 text-xs bg-background min-w-[160px]"
+              >
+                {deviceApps.map(a => <option key={a} value={a}>{a}</option>)}
+                <option value="__custom__">Custom / current screen...</option>
+              </select>
+              <input
+                type="text"
+                value={nativeAppId}
+                onChange={(e) => setNativeAppId(e.target.value)}
+                placeholder="com.example.app (empty = scan current screen)"
+                className="rounded border px-2 py-1.5 text-xs bg-background flex-1 min-w-[160px]"
+              />
+              <button
+                onClick={loadDeviceApps}
+                disabled={loadingApps}
+                title="Refresh installed apps from device"
+                className="rounded border px-2 py-1.5 text-xs bg-background hover:bg-muted disabled:opacity-50"
+              >
+                {loadingApps ? '...' : '↻'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Codebase Selector — options come from runner configs + recent custom paths */}
+        {platform === 'flutter' && (
         <div className="flex flex-col gap-1 flex-1 min-w-[280px]">
           <Label className="text-xs text-muted-foreground">Codebase</Label>
           <div className="flex gap-1">
-            <select
-              value={codebasePath || '__custom__'}
-              onChange={(e) => {
-                if (e.target.value === '__custom__') {
-                  setCodebasePath('');
-                } else {
-                  setCodebasePath(e.target.value);
-                }
-              }}
-              className="rounded border px-2 py-1.5 text-xs bg-background min-w-[130px]"
-            >
-              <option value="/Users/bankraya/Development/discipline-tracker">Discipline Tracker</option>
-              <option value="/Users/bankraya/Development/Raya-dev">Raya Dev (Bank Raya)</option>
-              <option value="__custom__">Custom Path...</option>
-            </select>
+            {(() => {
+              const runnerPaths = runners.filter(r => r.projectPath).map(r => ({ path: r.projectPath as string, label: `${r.name} — ${(r.projectPath as string).split('/').filter(Boolean).pop()}` }));
+              const extraRecent = recentPaths.filter(p => !runnerPaths.some(rp => rp.path === p));
+              const known = new Set([...runnerPaths.map(rp => rp.path), ...extraRecent]);
+              return (
+                <select
+                  value={known.has(codebasePath) ? codebasePath : '__custom__'}
+                  onChange={(e) => {
+                    if (e.target.value === '__custom__') {
+                      setCodebasePath('');
+                    } else {
+                      setCodebasePath(e.target.value);
+                    }
+                  }}
+                  className="rounded border px-2 py-1.5 text-xs bg-background min-w-[130px]"
+                >
+                  {runnerPaths.map(rp => (
+                    <option key={rp.path} value={rp.path}>{rp.label}</option>
+                  ))}
+                  {extraRecent.map(p => (
+                    <option key={p} value={p}>{p.split('/').filter(Boolean).pop()} (recent)</option>
+                  ))}
+                  <option value="__custom__">Custom Path...</option>
+                </select>
+              );
+            })()}
             <input
               type="text"
               value={codebasePath}
@@ -1382,6 +1644,7 @@ const VisualTestBuilder: React.FC = () => {
             />
           </div>
         </div>
+        )}
 
         {/* Runner (only if multiple) */}
         {runners.length > 1 && (
@@ -1393,6 +1656,8 @@ const VisualTestBuilder: React.FC = () => {
                 setSelectedRunner(e.target.value);
                 const runner = runners.find(r => r.id === e.target.value);
                 if (runner?.projectPath) setCodebasePath(runner.projectPath);
+                // Auto-switch to runner's default profile
+                if (runner?.defaultProfileId) setSelectedProfile(runner.defaultProfileId);
               }}
               className="rounded border px-2 py-1.5 text-xs bg-background min-w-[130px]"
             >
@@ -1405,7 +1670,26 @@ const VisualTestBuilder: React.FC = () => {
           </div>
         )}
 
-        {/* Scan Mode Toggle */}
+        {/* App Profile (flutter semantic-injector rules) */}
+        {platform === 'flutter' && profiles.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">App Profile</Label>
+            <select
+              value={selectedProfile}
+              onChange={(e) => setSelectedProfile(e.target.value)}
+              className="rounded border px-2 py-1.5 text-xs bg-background min-w-[140px]"
+            >
+              {profiles.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name}{p.isDefault ? ' ★' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Scan Mode Toggle (flutter source scan only) */}
+        {platform === 'flutter' && (
         <div className="flex flex-col gap-1">
           <Label className="text-xs text-muted-foreground">Scan Mode</Label>
           <div className="flex items-center border rounded-md overflow-hidden h-[30px]">
@@ -1429,8 +1713,10 @@ const VisualTestBuilder: React.FC = () => {
             </button>
           </div>
         </div>
+        )}
 
-        {/* Device Picker */}
+        {/* Device Picker (Flutter set_surface_size — native uses the real device size) */}
+        {platform === 'flutter' && (
         <div className="flex flex-col gap-1 relative" data-device-picker>
           <Label className="text-xs text-muted-foreground">Device</Label>
           <div className="relative">
@@ -1469,6 +1755,7 @@ const VisualTestBuilder: React.FC = () => {
             )}
           </div>
         </div>
+        )}
 
         {/* Scan Button */}
         <Button onClick={handleScan} disabled={scanning} size="sm" className="h-[30px]">
@@ -1683,14 +1970,19 @@ const VisualTestBuilder: React.FC = () => {
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">Step Palette</CardTitle></CardHeader>
             <CardContent className="pt-0 space-y-4">
-              {STEP_CATEGORIES.map(cat => (
+              {STEP_CATEGORIES.map(cat => {
+                // In native mode hide steps the driver can't replay (they'd be
+                // silently dropped at generate time), and skip now-empty categories.
+                const steps = platform === 'flutter' ? cat.steps : cat.steps.filter(s => NATIVE_SUPPORTED.includes(s.type));
+                if (steps.length === 0) return null;
+                return (
                 <div key={cat.name}>
                   <div className="flex items-center gap-2 mb-2">
                     <div className={`w-3 h-3 rounded ${cat.color}`} />
                     <span className="text-xs font-semibold text-muted-foreground uppercase">{cat.name}</span>
                   </div>
                   <div className="space-y-1">
-                    {cat.steps.map(st => (
+                    {steps.map(st => (
                       <button key={st.type} onClick={() => addStep(st.type)}
                         className="w-full flex items-center gap-2 p-2 rounded border cursor-pointer hover:bg-muted transition-colors text-left">
                         <div className={`w-6 h-6 rounded ${cat.color} flex items-center justify-center`}>
@@ -1705,7 +1997,8 @@ const VisualTestBuilder: React.FC = () => {
                     ))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
           {catalog && (
@@ -1771,10 +2064,12 @@ const VisualTestBuilder: React.FC = () => {
                     {savedTestCase ? '✓ Saved!' : 'Save as Test Case'}
                   </Button>
                 )}
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none ml-2">
-                  <input type="checkbox" checked={noBuild} onChange={e => setNoBuild(e.target.checked)} className="rounded" />
-                  Skip APK build (--no-build)
-                </label>
+                {platform === 'flutter' && (
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none ml-2">
+                    <input type="checkbox" checked={noBuild} onChange={e => setNoBuild(e.target.checked)} className="rounded" />
+                    Skip APK build (--no-build)
+                  </label>
+                )}
               </div>
               {generatedCode && (
                 <pre className="bg-gray-900 text-green-400 p-3 rounded text-xs font-mono max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all">{generatedCode}</pre>
@@ -1810,13 +2105,89 @@ const VisualTestBuilder: React.FC = () => {
         <div className="col-span-4">
           <LiveViewPanel
             runnerId={selectedRunner || undefined}
+            profileId={selectedProfile || undefined}
             testRunning={running}
             testResult={testResult}
             onStepAdded={step => addStep(step.type || 'tap', step)}
+            isFlutter={platform === 'flutter'}
           />
         </div>
       </div>
     </div>
+
+    {/* Save Test Case Dialog */}
+    {saveDialog && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSaveDialog(false)}>
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+          <h2 className="text-lg font-semibold mb-4">Save as Test Case</h2>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium">Test Case Name *</Label>
+              <Input
+                value={saveForm.name}
+                onChange={e => setSaveForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Enter test case name"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Project</Label>
+              <select
+                value={saveForm.projectId}
+                onChange={e => handleSaveProjectChange(e.target.value)}
+                className="mt-1 w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— No Project —</option>
+                {saveProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Suite</Label>
+              <select
+                value={saveForm.suiteId}
+                onChange={e => setSaveForm(f => ({ ...f, suiteId: e.target.value }))}
+                className="mt-1 w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={!saveForm.projectId || loadingSuites}
+              >
+                <option value="">— No Suite —</option>
+                {saveSuites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              {loadingSuites && <p className="text-xs text-gray-400 mt-1">Loading suites…</p>}
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Priority</Label>
+              <select
+                value={saveForm.priority}
+                onChange={e => setSaveForm(f => ({ ...f, priority: e.target.value }))}
+                className="mt-1 w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Description</Label>
+              <textarea
+                value={saveForm.description}
+                onChange={e => setSaveForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Optional description…"
+                rows={3}
+                className="mt-1 w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-6">
+            <Button variant="outline" size="sm" onClick={() => setSaveDialog(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleSaveDialogSubmit} disabled={savingTestCase || !saveForm.name.trim()}>
+              {savingTestCase ? 'Saving…' : 'Save Test Case'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 

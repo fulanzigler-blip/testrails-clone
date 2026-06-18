@@ -56,7 +56,9 @@ const CrawlGenerateModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
   const [selectedSuiteId, setSelectedSuiteId] = useState('');
   const [availableSuites, setAvailableSuites] = useState<{ id: string; name: string }[]>([]);
   const [suitesLoading, setSuitesLoading] = useState(false);
-  const [appId, setAppId] = useState('com.disciplinetracker.app');
+  // No app-specific default — remember whatever app the user worked with last
+  const [appId, setAppId] = useState(() => localStorage.getItem('vtb_last_app_id') || '');
+  useEffect(() => { if (appId) localStorage.setItem('vtb_last_app_id', appId); }, [appId]);
   const [maxScreens, setMaxScreens] = useState(4);
   const [framework, setFramework] = useState<'native' | 'flutter' | 'auto'>('auto');
   const [stage, setStage] = useState<Stage>('input');

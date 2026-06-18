@@ -127,7 +127,7 @@ interface PendingInjection {
  * Scan content of a single dart file and compute all injections needed.
  * Returns the modified content and a list of changes.
  */
-export function scanAndInjectContent(content: string, _fileName: string): {
+export function scanAndInjectContent(content: string, _fileName: string, profile?: AppProfile): {
   modified: string;
   injections: InjectionChange[];
 } {
@@ -137,6 +137,16 @@ export function scanAndInjectContent(content: string, _fileName: string): {
   // Track regions already covered by a pending injection to avoid overlaps
   function isAlreadyWrapped(startPos: number, endPos: number): boolean {
     return pending.some(p => p.startPos <= startPos && p.endPos >= endPos);
+  }
+
+  // If `const ` immediately precedes the widget, shift startPos back so the
+  // original `const Widget()` becomes `child: const Widget()` in the wrapper,
+  // avoiding `const Semantics(...)` which fails when Semantics has no const ctor.
+  function resolveStartPos(widgetStart: number): number {
+    if (widgetStart >= 6 && content.slice(widgetStart - 6, widgetStart) === 'const ') {
+      return widgetStart - 6;
+    }
+    return widgetStart;
   }
 
   function alreadyHasSemantics(content: string, widgetStart: number): boolean {
@@ -172,7 +182,7 @@ export function scanAndInjectContent(content: string, _fileName: string): {
     if (alreadyHasSemantics(content, widgetStart)) continue;
 
     pending.push({
-      startPos: widgetStart,
+      startPos: resolveStartPos(widgetStart),
       endPos: closeParen,
       insertBefore: `Semantics(label: '${escapeLabel(label)}', textField: true, child: `,
       insertAfter: ')',
@@ -209,7 +219,7 @@ export function scanAndInjectContent(content: string, _fileName: string): {
     if (isAlreadyWrapped(widgetStart, closeParen)) continue;
 
     pending.push({
-      startPos: widgetStart,
+      startPos: resolveStartPos(widgetStart),
       endPos: closeParen,
       insertBefore: `Semantics(label: '${escapeLabel(label)}', button: true, child: `,
       insertAfter: ')',
@@ -242,13 +252,32 @@ export function scanAndInjectContent(content: string, _fileName: string): {
     if (isAlreadyWrapped(widgetStart, closeParen)) continue;
 
     pending.push({
-      startPos: widgetStart,
+      startPos: resolveStartPos(widgetStart),
       endPos: closeParen,
       insertBefore: `Semantics(label: '${escapeLabel(label)}', button: true, child: `,
       insertAfter: ')',
       widgetType: m[1],
       label,
       injectionType: 'semantics_wrapper',
+    });
+    injections.push({ line: getLineNumber(content, widgetStart), widgetType: m[1], label, injectionType: 'semantics_wrapper' });
+  }
+
+  // ── Rule 5a: BackButton / CloseButton ─────────────────────────────────────
+  const navBtnRe = /\b(BackButton|CloseButton)\s*\(/g;
+  while ((m = navBtnRe.exec(content)) !== null) {
+    const widgetStart = m.index;
+    const openParen = widgetStart + m[0].lastIndexOf('(');
+    const closeParen = findMatchingParen(content, openParen);
+    if (closeParen < 0) continue;
+    if (alreadyHasSemantics(content, widgetStart)) continue;
+    if (isAlreadyWrapped(widgetStart, closeParen)) continue;
+    const label = m[1] === 'CloseButton' ? 'Close' : 'Back';
+    pending.push({
+      startPos: resolveStartPos(widgetStart), endPos: closeParen,
+      insertBefore: `Semantics(label: '${label}', button: true, child: `,
+      insertAfter: ')',
+      widgetType: m[1], label, injectionType: 'semantics_wrapper',
     });
     injections.push({ line: getLineNumber(content, widgetStart), widgetType: m[1], label, injectionType: 'semantics_wrapper' });
   }
@@ -264,11 +293,12 @@ export function scanAndInjectContent(content: string, _fileName: string): {
     if (inner.includes('tooltip')) continue; // already has tooltip
 
     const iconMatch = inner.match(/Icons\.(\w+)/);
-    if (!iconMatch) continue;
-    const label = iconMatch[1]
-      .replace(/_rounded$|_outlined$|_sharp$|_two_tone$/, '')
-      .replace(/_/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase());
+    const label = iconMatch
+      ? iconMatch[1]
+          .replace(/_rounded$|_outlined$|_sharp$|_two_tone$/, '')
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (c: string) => c.toUpperCase())
+      : 'Icon Button';
 
     // Insert tooltip as the first property (right after the opening paren)
     const insertPos = openParen + 1;
@@ -326,6 +356,75 @@ export function scanAndInjectContent(content: string, _fileName: string): {
     });
   }
 
+  // ── Profile Rules: custom button widgets ─────────────────────────────────
+  const rules = profile?.injectorRules || {};
+  const propBasedEnabled = rules.prop_based_button !== false; // default on if no profile
+
+  if (profile?.buttonRules?.length && propBasedEnabled) {
+    for (const rule of profile.buttonRules) {
+      if (!rule.widget || !rule.labelProp) continue;
+      const btnRe = new RegExp(`\\b${rule.widget}\\s*\\(`, 'g');
+      while ((m = btnRe.exec(content)) !== null) {
+        const widgetStart = m.index;
+        const openParen = m.index + m[0].lastIndexOf('(');
+        const closeParen = findMatchingParen(content, openParen);
+        if (closeParen < 0) continue;
+
+        const inner = content.slice(openParen, closeParen + 1);
+        // Confirm trigger prop present
+        const trigger = rule.triggerProp || 'onTap';
+        if (!inner.includes(trigger)) continue;
+        // Extract label from labelProp
+        const labelMatch = inner.match(new RegExp(`${rule.labelProp}\\s*:\\s*['"]([^'"]{1,80})['"]`));
+        if (!labelMatch) continue;
+        const label = labelMatch[1];
+
+        if (alreadyHasSemantics(content, widgetStart)) continue;
+        if (isAlreadyWrapped(widgetStart, closeParen)) continue;
+
+        pending.push({
+          startPos: resolveStartPos(widgetStart), endPos: closeParen,
+          insertBefore: `Semantics(label: '${escapeLabel(label)}', button: true, child: `,
+          insertAfter: ')',
+          widgetType: rule.widget, label, injectionType: 'semantics_wrapper',
+        });
+        injections.push({ line: getLineNumber(content, widgetStart), widgetType: rule.widget, label, injectionType: 'semantics_wrapper' });
+      }
+    }
+  }
+
+  // ── Profile Rules: custom input widgets ──────────────────────────────────
+  const propInputEnabled = rules.prop_based_input !== false;
+
+  if (profile?.inputRules?.length && propInputEnabled) {
+    for (const rule of profile.inputRules) {
+      if (!rule.widget || !rule.labelProp) continue;
+      const inpRe = new RegExp(`\\b${rule.widget}\\s*\\(`, 'g');
+      while ((m = inpRe.exec(content)) !== null) {
+        const widgetStart = m.index;
+        const openParen = m.index + m[0].lastIndexOf('(');
+        const closeParen = findMatchingParen(content, openParen);
+        if (closeParen < 0) continue;
+
+        const inner = content.slice(openParen, closeParen + 1);
+        const labelMatch = inner.match(new RegExp(`${rule.labelProp}\\s*:\\s*['"]([^'"]{1,80})['"]`));
+        if (!labelMatch) continue;
+        const label = labelMatch[1];
+
+        if (alreadyHasSemantics(content, widgetStart)) continue;
+        if (isAlreadyWrapped(widgetStart, closeParen)) continue;
+
+        pending.push({
+          startPos: resolveStartPos(widgetStart), endPos: closeParen,
+          insertBefore: `Semantics(label: '${escapeLabel(label)}', textField: true, child: `,
+          insertAfter: ')',
+          widgetType: rule.widget, label, injectionType: 'semantics_wrapper',
+        });
+        injections.push({ line: getLineNumber(content, widgetStart), widgetType: rule.widget, label, injectionType: 'semantics_wrapper' });
+      }
+    }
+  }
+
   if (injections.length === 0) return { modified: content, injections };
 
   // ── Apply injections in REVERSE order (to avoid character-position drift) ─
@@ -355,17 +454,29 @@ export function scanAndInjectContent(content: string, _fileName: string): {
 
 // ─── SSH Orchestration ────────────────────────────────────────────────────────
 
+export interface AppProfile {
+  buttonRules?: Array<{ widget: string; labelProp: string; triggerProp: string }>;
+  inputRules?:  Array<{ widget: string; labelProp: string }>;
+  injectorRules?: Record<string, boolean>;
+}
+
 export async function injectSemanticIdentifiers(
   runner: SSHRunnerConfig,
   projectPath: string,
-  options: { dryRun?: boolean } = {},
+  options: { dryRun?: boolean; profile?: AppProfile | null } = {},
 ): Promise<InjectionReport> {
-  const { dryRun = false } = options;
-  logger.info(`[SemanticInjector] Starting — project: ${projectPath}, dryRun: ${dryRun}`);
+  const { dryRun = false, profile } = options;
+  logger.info(`[SemanticInjector] Starting — project: ${projectPath}, dryRun: ${dryRun}, profile: ${profile ? 'yes' : 'default'}`);
+
+  // Build grep pattern from standard widgets + custom widget names from profile
+  const standardWidgets = 'TextFormField\\|TextField(\\|InkWell\\|GestureDetector\\|IconButton\\|BackButton\\|CloseButton\\|FloatingActionButton\\|ElevatedButton\\|TextButton\\|OutlinedButton\\|FilledButton';
+  const customBtnWidgets = (profile?.buttonRules || []).map(r => r.widget).filter(Boolean).join('\\|');
+  const customInpWidgets = (profile?.inputRules  || []).map(r => r.widget).filter(Boolean).join('\\|');
+  const grepPattern = [standardWidgets, customBtnWidgets, customInpWidgets].filter(Boolean).join('\\|');
 
   // Find all dart files that contain target widgets (excludes generated files)
   const findResult = await execSSHWithConfig(
-    `grep -rl 'TextFormField\\|TextField(\\|InkWell\\|GestureDetector\\|IconButton\\|FloatingActionButton\\|ElevatedButton\\|TextButton\\|OutlinedButton\\|FilledButton' '${projectPath}/lib' 2>/dev/null` +
+    `grep -rl '${grepPattern}' '${projectPath}/lib' 2>/dev/null` +
     ` | grep '\\.dart$' | grep -v '\\.g\\.dart' | grep -v '\\.freezed\\.dart' | grep -v '\\.gr\\.dart'` +
     ` | head -300`,
     runner,
@@ -394,7 +505,7 @@ export async function injectSemanticIdentifiers(
         const originalContent = readResult.output;
         if (!originalContent.trim()) return result;
 
-        const { modified, injections } = scanAndInjectContent(originalContent, file);
+        const { modified, injections } = scanAndInjectContent(originalContent, file, profile || undefined);
         if (injections.length === 0) return result;
 
         result.injections = injections;
