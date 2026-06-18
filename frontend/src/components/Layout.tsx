@@ -36,7 +36,7 @@ const Layout: React.FC = () => {
     { name: 'Test Cases', href: '/test-cases', icon: TestTube },
     { name: 'Test Runs', href: '/test-runs', icon: Play },
     { name: 'Test Suites', href: '/test-suites', icon: FolderTree },
-    { name: 'Visual Test Builder', href: '/visual-test-builder', icon: Wrench },
+    { name: 'Mobile Test Builder', href: '/visual-test-builder', icon: Wrench },
     { name: 'Web Visual Builder', href: '/web-visual-builder', icon: Globe },
     { name: 'App Profiles', href: '/app-profiles', icon: Layers },
     { name: 'Users', href: '/users', icon: Users },

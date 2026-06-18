@@ -1546,7 +1546,7 @@ const VisualTestBuilder: React.FC = () => {
     <div className="space-y-4">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Visual Test Builder</h1>
+        <h1 className="text-2xl font-bold">Mobile Test Builder</h1>
         <p className="text-muted-foreground">Scan your mobile app (Flutter, native Android), pick elements, compose test scenarios</p>
       </div>
 
