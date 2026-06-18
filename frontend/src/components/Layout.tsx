@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, LayoutDashboard, TestTube, Play, FolderTree, Users, BarChart3, Settings, LogOut, FolderOpen, Smartphone, Cpu, Wrench, Scan, Globe, Plus, Layers } from 'lucide-react'
+import { Bell, LayoutDashboard, TestTube, Play, FolderTree, Users, BarChart3, Settings, LogOut, FolderOpen, Cpu, Wrench, Globe, Plus, Layers } from 'lucide-react'
 import { useAppSelector } from '../store/hooks'
 import { Badge } from './ui/badge'
 import NotificationsDrawer from './NotificationsDrawer'
@@ -24,7 +24,7 @@ const Layout: React.FC = () => {
       navigate('/web-visual-builder')
     } else if (config.type === 'mobile') {
       sessionStorage.setItem('mobile_config', JSON.stringify(config))
-      navigate('/page-automation')
+      navigate('/visual-test-builder')
     } else if (config.type === 'manual') {
       navigate('/test-runs')
     }
@@ -36,10 +36,8 @@ const Layout: React.FC = () => {
     { name: 'Test Cases', href: '/test-cases', icon: TestTube },
     { name: 'Test Runs', href: '/test-runs', icon: Play },
     { name: 'Test Suites', href: '/test-suites', icon: FolderTree },
-    { name: 'Page Automation', href: '/page-automation', icon: Smartphone },
     { name: 'Visual Test Builder', href: '/visual-test-builder', icon: Wrench },
     { name: 'Web Visual Builder', href: '/web-visual-builder', icon: Globe },
-    { name: 'Hybrid Scanner', href: '/hybrid-scan', icon: Scan },
     { name: 'App Profiles', href: '/app-profiles', icon: Layers },
     { name: 'Users', href: '/users', icon: Users },
     { name: 'Reports', href: '/reports', icon: BarChart3 },

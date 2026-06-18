@@ -13,9 +13,7 @@ import Users from './pages/Users'
 import Reports from './pages/Reports'
 import Projects from './pages/Projects'
 import FlowBuilderPage from './pages/FlowBuilderPage'
-import PageAutomationPage from './pages/PageAutomationPage'
 import VisualTestBuilderPage from './pages/VisualTestBuilderPage'
-import HybridScanPage from './pages/HybridScanPage'
 import WebVisualBuilderPage from './pages/WebVisualBuilderPage'
 import AppProfilesPage from './pages/AppProfilesPage'
 
@@ -94,10 +92,8 @@ function App() {
           <Route path="users" element={<Users />} />
           <Route path="reports" element={<Reports />} />
           <Route path="flow-builder" element={<FlowBuilderPage />} />
-          <Route path="page-automation" element={<PageAutomationPage />} />
           <Route path="visual-test-builder" element={<VisualTestBuilderPage />} />
           <Route path="web-visual-builder" element={<WebVisualBuilderPage />} />
-          <Route path="hybrid-scan" element={<HybridScanPage />} />
           <Route path="app-profiles" element={<AppProfilesPage />} />
         </Route>
 
