@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, LayoutDashboard, TestTube, Play, FolderTree, Users, BarChart3, Settings, LogOut, FolderOpen, Cpu, Wrench, Globe, Plus, Layers } from 'lucide-react'
+import { Bell, LayoutDashboard, ClipboardList, Play, FolderTree, Users, BarChart3, Settings, LogOut, FolderOpen, Cpu, Smartphone, Globe, Plus, Layers } from 'lucide-react'
 import { useAppSelector } from '../store/hooks'
 import { Badge } from './ui/badge'
 import NotificationsDrawer from './NotificationsDrawer'
@@ -33,10 +33,10 @@ const Layout: React.FC = () => {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Projects', href: '/projects', icon: FolderOpen },
-    { name: 'Test Cases', href: '/test-cases', icon: TestTube },
+    { name: 'Test Cases', href: '/test-cases', icon: ClipboardList },
     { name: 'Test Runs', href: '/test-runs', icon: Play },
     { name: 'Test Suites', href: '/test-suites', icon: FolderTree },
-    { name: 'Mobile Test Builder', href: '/visual-test-builder', icon: Wrench },
+    { name: 'Mobile Test Builder', href: '/visual-test-builder', icon: Smartphone },
     { name: 'Web Visual Builder', href: '/web-visual-builder', icon: Globe },
     { name: 'App Profiles', href: '/app-profiles', icon: Layers },
     { name: 'Users', href: '/users', icon: Users },
