@@ -237,9 +237,22 @@ export function findNativeElement(elements: NativeElement[], finder: NativeFinde
 // ─── Device interaction ────────────────────────────────────────────────────────
 
 async function dumpHierarchy(runner: MobileRunnerConfig): Promise<string> {
-  const cmd = adb(runner, 'shell uiautomator dump /sdcard/ui.xml 2>/dev/null') +
-    ` && ${ADB_ENV}adb ${deviceArg(runner)} shell cat /sdcard/ui.xml 2>/dev/null`;
-  const result = await execSSHWithConfig(cmd, runner, 20000);
+  // Plain `uiautomator dump` waits for the app to reach an idle state. Apps that
+  // render continuously — React Native (JS bridge / Animated loops), or anything
+  // with an indeterminate spinner — never idle, so plain dump fails with
+  // "could not get idle state" and writes nothing. `--compressed` uses the
+  // accessibility-compressed hierarchy and succeeds on those apps. So: clear any
+  // stale file, try plain (richest tree), and fall back to compressed when plain
+  // produced no valid hierarchy.
+  const dev = deviceArg(runner);
+  const script = [
+    'rm -f /sdcard/ui.xml',
+    'uiautomator dump /sdcard/ui.xml >/dev/null 2>&1',
+    'grep -q "<hierarchy" /sdcard/ui.xml 2>/dev/null || uiautomator dump --compressed /sdcard/ui.xml >/dev/null 2>&1',
+  ].join('; ');
+  const cmd = `${ADB_ENV}adb ${dev} shell '${script}' && ${ADB_ENV}adb ${dev} shell cat /sdcard/ui.xml 2>/dev/null`;
+  // Allow time for plain's ~10s idle-wait failure plus the compressed retry
+  const result = await execSSHWithConfig(cmd, runner, 30000);
   return result.output;
 }
 
