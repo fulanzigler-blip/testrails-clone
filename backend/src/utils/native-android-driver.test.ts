@@ -103,3 +103,53 @@ describe('findNativeElement', () => {
     expect(findNativeElement(els, { strategy: 'text', value: 'tidak ada' })).toBeNull();
   });
 });
+
+// React Native pattern: touchables are clickable/focusable containers whose label
+// is a child TextView; inputs are EditTexts with no own text, labelled by a
+// nearby TextView. The naive parser produced a button AND a duplicate text per
+// touchable, and labelled inputs by resource-id.
+const RN_FIXTURE = `<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node class="android.view.ViewGroup" resource-id="com.app:id/button_login" clickable="true" focusable="true" bounds="[40,800][1040,920]">
+    <node class="android.widget.TextView" text="Masuk" bounds="[460,840][620,880]" />
+  </node>
+  <node class="android.view.ViewGroup" resource-id="com.app:id/button_register_now" clickable="false" focusable="true" bounds="[40,1000][1040,1080]">
+    <node class="android.widget.TextView" text="Daftar yuk!" bounds="[440,1020][640,1060]" />
+  </node>
+  <node class="android.view.ViewGroup" clickable="true" focusable="true" content-desc="Jelajahi Fitur" bounds="[40,100][1040,200]">
+    <node class="android.widget.TextView" text="Jelajahi Fitur" bounds="[400,130][680,170]" />
+  </node>
+  <node class="android.widget.EditText" resource-id="com.app:id/input_email" clickable="true" focusable="true" bounds="[40,400][1040,520]" />
+  <node class="android.widget.TextView" text="Email" bounds="[60,420][260,470]" />
+</hierarchy>`;
+
+describe('parseNativeUiDump — React Native touchables & inputs', () => {
+  const els = parseNativeUiDump(RN_FIXTURE, { screenW: 1080, screenH: 2400 });
+  const byType = (t: string) => els.filter(e => e.elementType === t);
+
+  it('emits ONE button per touchable (no duplicate standalone text)', () => {
+    const masuk = els.filter(e => e.label === 'Masuk');
+    expect(masuk.length).toBe(1);
+    expect(masuk[0].elementType).toBe('button');
+    expect(masuk[0].finderStrategy).toBe('resource-id');
+    // the child "Masuk" TextView must NOT also appear as a standalone text
+    expect(byType('text').some(e => e.label === 'Masuk')).toBe(false);
+  });
+
+  it('treats a focusable-only touchable with a button-ish id as a button', () => {
+    const reg = els.find(e => e.label === 'Daftar yuk!');
+    expect(reg?.elementType).toBe('button');
+    expect(reg?.finderValue).toBe('com.app:id/button_register_now');
+  });
+
+  it('does not duplicate a self-described touchable (content-desc + child text)', () => {
+    expect(els.filter(e => e.label === 'Jelajahi Fitur').length).toBe(1);
+  });
+
+  it('labels an id-only input from its nearby label text', () => {
+    const input = byType('input')[0];
+    expect(input.label).toBe('Email');
+    expect(input.finderStrategy).toBe('resource-id');
+    expect(input.finderValue).toBe('com.app:id/input_email');
+  });
+});

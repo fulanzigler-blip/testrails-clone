@@ -63,17 +63,21 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
   // A labelless clickable container with no labelled child is emitted on pop
   // (icon-only row) only if it has a resource-id.
   interface OpenAncestor {
-    isClickable: boolean;
-    hasOwnLabel: boolean;
+    interactive: boolean;   // clickable/checkable, or focusable with a button-ish id
     bounds: { x1: number; y1: number; x2: number; y2: number };
     validBounds: boolean;
     resourceId: string;
     contentDesc: string;
     className: string;
-    claimed: boolean;
-    emittedSelf: boolean;   // already emitted (had own label) → children must not re-emit
+    claimed: boolean;       // a descendant text already gave it a label
+    claimedLabel: string;
+    emittedSelf: boolean;   // already emitted as a leaf → don't re-emit on pop
+    containsInput: boolean; // wraps an EditText → it's an input wrapper, not a button
   }
   const stack: OpenAncestor[] = [];
+  // RN/native touchables sometimes expose only focusable (+ a button-ish id) and
+  // not clickable; treat those as interactive too.
+  const BUTTONISH_ID = /butt?on|btn|tab\b|link|chip|pressable|touchable|cta|submit|action|menu|item|card/i;
 
   const pushElement = (e: {
     elementType: NativeElement['elementType'];
@@ -122,15 +126,19 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
   while ((m = tagRe.exec(xml)) !== null) {
     if (m[0] === '</node>') {
       const popped = stack.pop();
-      // Labelless clickable container nobody claimed → icon-only row; keep it if
-      // it at least has a resource-id to target.
-      if (popped && popped.isClickable && !popped.hasOwnLabel && !popped.claimed
-          && !popped.emittedSelf && popped.validBounds && popped.resourceId) {
-        pushElement({
-          elementType: 'button', bounds: popped.bounds, text: '', contentDesc: popped.contentDesc,
-          resourceId: popped.resourceId, className: popped.className,
-          clickable: true, checkable: false, isPassword: false,
-        });
+      // Emit exactly ONE button per interactive container on close: labelled by a
+      // claimed child text, else its own content-desc, else its resource-id.
+      // Skip input wrappers (those are represented by the EditText input) and
+      // already-emitted leaves.
+      if (popped && popped.interactive && !popped.emittedSelf && !popped.containsInput && popped.validBounds) {
+        const label = popped.claimedLabel || popped.contentDesc.split('\n')[0].trim();
+        if (label || popped.resourceId) {
+          pushElement({
+            elementType: 'button', bounds: popped.bounds, text: label, contentDesc: popped.contentDesc,
+            resourceId: popped.resourceId, className: popped.className,
+            clickable: true, checkable: false, isPassword: false,
+          });
+        }
       }
       continue;
     }
@@ -149,6 +157,7 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
     const resourceId = get('resource-id');
     const clickable = get('clickable') === 'true';
     const checkable = get('checkable') === 'true';
+    const focusable = get('focusable') === 'true';
     const isPassword = get('password') === 'true';
     const ownLabel = (text || contentDesc).trim();
 
@@ -162,6 +171,7 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
 
     const isEditText = /EditText|AutoCompleteTextView|SearchView/.test(className);
     const isTextView = /TextView|CheckedTextView/.test(className) && !isEditText;
+    const interactive = !isEditText && !isPassword && (clickable || checkable || (focusable && BUTTONISH_ID.test(resourceId)));
     const bounds = { x1, y1, x2, y2 };
     let emittedSelf = false;
 
@@ -169,29 +179,22 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
       if (isEditText || isPassword) {
         pushElement({ elementType: 'input', bounds, text, contentDesc, resourceId, className, clickable, checkable, isPassword });
         emittedSelf = true;
-      } else if (clickable || checkable) {
-        if (ownLabel) {
-          // Self-labelled clickable → emit now; children won't re-emit this row
+        // The nearest interactive ancestor is an input wrapper — not a button
+        const wrap = [...stack].reverse().find(a => a.interactive && !a.emittedSelf);
+        if (wrap) wrap.containsInput = true;
+      } else if (interactive) {
+        if (selfClosing && (ownLabel || resourceId)) {
+          // Interactive leaf (icon/labelled button) — emit now
           pushElement({ elementType: 'button', bounds, text, contentDesc, resourceId, className, clickable: true, checkable, isPassword });
           emittedSelf = true;
-        } else if (selfClosing) {
-          // Labelless clickable leaf (icon button) — keep only if it has an id
-          if (resourceId) {
-            pushElement({ elementType: 'button', bounds, text, contentDesc, resourceId, className, clickable: true, checkable, isPassword });
-            emittedSelf = true;
-          }
         }
-        // else: labelless clickable container → defer; a child claims it (or pop emits it)
+        // else: interactive container → defer; emit one button on close (pop)
       } else if (isTextView && text.trim().length >= 2) {
-        const anc = [...stack].reverse().find(a => a.isClickable && !a.claimed && !a.hasOwnLabel && !a.emittedSelf);
+        // A text inside an interactive (non-input) ancestor is that button's label,
+        // not a standalone text — claim it and suppress the standalone.
+        const anc = [...stack].reverse().find(a => a.interactive && !a.containsInput);
         if (anc) {
-          anc.claimed = true;
-          // Emit the ROW as button: tap the container, identify by child text
-          pushElement({
-            elementType: 'button', bounds: anc.validBounds ? anc.bounds : bounds,
-            text, contentDesc, resourceId: anc.resourceId || resourceId, className,
-            clickable: true, checkable: false, isPassword: false,
-          });
+          if (!anc.claimed) { anc.claimed = true; anc.claimedLabel = text.split('\n')[0].trim(); }
         } else {
           pushElement({ elementType: 'text', bounds, text, contentDesc, resourceId, className, clickable, checkable, isPassword });
         }
@@ -200,9 +203,33 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
 
     if (!selfClosing && !className.includes('DecorView')) {
       stack.push({
-        isClickable: clickable, hasOwnLabel: !!ownLabel, bounds, validBounds,
-        resourceId, contentDesc, className, claimed: false, emittedSelf,
+        interactive, bounds, validBounds, resourceId, contentDesc, className,
+        claimed: false, claimedLabel: '', emittedSelf, containsInput: false,
       });
+    }
+  }
+
+  // Associate a human label with inputs that only have an id-like label. A field's
+  // label/placeholder sits inside or just above the field and overlaps it
+  // horizontally; validation errors sit below. So require horizontal overlap +
+  // vertically inside-or-just-above, exclude error text, and pick the topmost.
+  const inputsNeedingLabel = elements.filter(e => e.elementType === 'input' && !e.text.trim() && !e.contentDesc.trim());
+  if (inputsNeedingLabel.length) {
+    const textEls = elements.filter(e => e.elementType === 'text');
+    const ERRORISH = /wajib|harus|required|invalid|tidak valid|min\.|maks|max /i;
+    for (const inp of inputsNeedingLabel) {
+      const b = inp.bounds;
+      let best: typeof textEls[number] | null = null, bestTop = Infinity;
+      for (const t of textEls) {
+        if (t.text.length > 30 || ERRORISH.test(t.text)) continue;
+        const overlapsX = t.bounds.x1 < b.x2 && t.bounds.x2 > b.x1;
+        const insideOrAbove = t.bounds.y2 <= b.y2 + 8 && t.bounds.y2 >= b.y1 - 140;
+        if (!overlapsX || !insideOrAbove) continue;
+        // Prefer the text closest to the field's top edge
+        const gap = Math.abs(t.bounds.y1 - b.y1);
+        if (gap < bestTop) { bestTop = gap; best = t; }
+      }
+      if (best) inp.label = best.text.split('\n')[0].slice(0, 80);
     }
   }
 
