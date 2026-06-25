@@ -851,7 +851,7 @@ const LiveViewPanel: React.FC<{
     setScanning(true); setError(''); setPickedEl(null); setPickPos(null); setScannedElements([]);
     if (!auto && intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     try {
-      const resp = await api.post('/integration-tests/screen-elements', { runnerId }, { timeout: 40000 });
+      const resp = await api.post('/integration-tests/screen-elements', { runnerId, platform: isFlutter ? 'flutter' : 'android' }, { timeout: 40000 });
       const els: LiveElement[] = resp.data?.data?.elements || [];
       const freshShot: string | undefined = resp.data?.data?.screenshot;
       if (freshShot) { setScreenshot(freshShot); setLastUpdated(Date.now()); prevScreenshotRef.current = freshShot; }

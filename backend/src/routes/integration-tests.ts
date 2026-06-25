@@ -23,6 +23,7 @@ import { hybridScanFlutterProject, mergeScanResults, HybridScannerConfig } from 
 import { execSSH, writeFileSSH, writeFileSSHWithRunner, execSSHWithConfig, execSSHBinary, type SSHRunnerConfig } from '../utils/ssh-client';
 import { discoverAppContext, captureHierarchy } from '../utils/flutter-scanner';
 import { generateDartCode } from '../utils/dart-codegen';
+import { androidNativeDriver } from '../utils/native-android-driver';
 import { startFlutterSession, stopFlutterSession, getSession, listSessions, vmServiceRpc } from '../utils/flutter-session';
 import { parseWidgetTree } from '../utils/flutter-vm-service';
 import type { AppContext } from '../utils/flutter-scanner';
@@ -1717,8 +1718,34 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
     onRequest: [fastify.authenticate],
   }, async (request: any, reply) => {
     try {
-      const { runnerId } = request.body as { runnerId?: string };
+      const { runnerId, platform } = request.body as { runnerId?: string; platform?: string };
       const runner = await resolveRunnerSSH(runnerId);
+
+      // Native platforms (android/ios): use the black-box UIAutomator parser — the
+      // same one the Element Catalog uses — so inputs/buttons/text are classified
+      // correctly (the Flutter source-scan below would mislabel a native app).
+      if (platform && platform !== 'flutter') {
+        const snap = await androidNativeDriver.captureScreen(runner);
+        const liveElements = snap.elements.map((e) => ({
+          text: e.label,
+          contentDesc: e.contentDesc,
+          resourceId: e.resourceId,
+          idShort: (e.resourceId || '').split('/').pop() || '',
+          className: e.className,
+          clickable: e.clickable,
+          isInput: e.elementType === 'input',
+          isCheckable: e.checkable,
+          bounds: `[${e.bounds.x1},${e.bounds.y1}][${e.bounds.x2},${e.bounds.y2}]`,
+          x1: e.bounds.x1, y1: e.bounds.y1, x2: e.bounds.x2, y2: e.bounds.y2,
+          selector: e.resourceId ? `[resource-id="${e.resourceId}"]` : `[text="${e.label}"]`,
+          elementType: e.elementType,
+          finderStrategy: e.finderStrategy,
+          finderValue: e.finderValue,
+        }));
+        logger.info(`[LiveView] Native scan: ${liveElements.filter(e => e.isInput).length} inputs, ${liveElements.filter(e => e.elementType === 'button').length} buttons, ${liveElements.filter(e => e.elementType === 'text').length} texts`);
+        return successResponse(reply, { elements: liveElements, screenshot: snap.screenshot }, undefined);
+      }
+
       const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
       const adbEnv =
         'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
