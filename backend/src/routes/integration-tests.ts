@@ -23,7 +23,25 @@ import { hybridScanFlutterProject, mergeScanResults, HybridScannerConfig } from 
 import { execSSH, writeFileSSH, writeFileSSHWithRunner, execSSHWithConfig, execSSHBinary, type SSHRunnerConfig } from '../utils/ssh-client';
 import { discoverAppContext, captureHierarchy } from '../utils/flutter-scanner';
 import { generateDartCode } from '../utils/dart-codegen';
-import { androidNativeDriver } from '../utils/native-android-driver';
+import { androidNativeDriver, parseAdbDevices, pickDevice } from '../utils/native-android-driver';
+
+// Resolve the Flutter test target device from `adb devices` on the runner,
+// preferring a connected real device over an emulator. Falls back to the
+// configured deviceId (or emulator-5554) when detection isn't possible.
+async function resolveFlutterDeviceId(runner: any): Promise<string> {
+  const fallback = runner?.deviceId || 'emulator-5554';
+  try {
+    const env = 'export ANDROID_HOME="$HOME/Library/Android/sdk" && export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ';
+    const r = await execSSHWithConfig(`${env}adb devices`, runner, 10000);
+    const chosen = pickDevice(parseAdbDevices(r.output), runner?.deviceId);
+    if (chosen && chosen !== runner?.deviceId) {
+      logger.info(`[IntegrationTest] Auto-selected device "${chosen}" (configured: "${runner?.deviceId || 'none'}")`);
+    }
+    return chosen || fallback;
+  } catch {
+    return fallback;
+  }
+}
 import { startFlutterSession, stopFlutterSession, getSession, listSessions, vmServiceRpc } from '../utils/flutter-session';
 import { parseWidgetTree } from '../utils/flutter-vm-service';
 import type { AppContext } from '../utils/flutter-scanner';
@@ -298,7 +316,7 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
   if (!runner) return executeTest(testFileName, noBuild);
 
   const projectPath = overrideProjectPath || runner.projectPath;
-  const deviceId = runner.deviceId || 'emulator-5554';
+  const deviceId = await resolveFlutterDeviceId(runner);
   const ts = Date.now();
   const scriptPath = `/tmp/run_test_${ts}.sh`;
   const tempKeyPath = `/tmp/gh_key_${ts}`;
