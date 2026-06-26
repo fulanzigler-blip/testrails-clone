@@ -25,6 +25,45 @@ function adb(runner: MobileRunnerConfig, cmd: string): string {
   return `${ADB_ENV}adb ${deviceArg(runner)} ${cmd}`;
 }
 
+/** Parse `adb devices` output into serials that are in the "device" state. */
+export function parseAdbDevices(output: string): string[] {
+  return output.split('\n').slice(1)
+    .map(l => l.trim())
+    .filter(l => /\sdevice$/.test(l))              // state "device" (skip offline/unauthorized)
+    .map(l => l.split(/\s+/)[0])
+    .filter(Boolean);
+}
+
+/** Choose the target device. A connected real device is preferred over an
+ *  emulator (the configured deviceId often defaults to one). An explicit
+ *  non-emulator config wins; otherwise prefer real → configured → first. */
+export function pickDevice(serials: string[], configured?: string): string {
+  if (serials.length === 0) return configured || '';
+  if (configured && !configured.startsWith('emulator-') && serials.includes(configured)) return configured;
+  const real = serials.find(s => !s.startsWith('emulator-'));
+  if (real) return real;
+  if (configured && serials.includes(configured)) return configured;
+  return serials[0];
+}
+
+async function resolveDeviceId(runner: MobileRunnerConfig): Promise<string> {
+  try {
+    const r = await execSSHWithConfig(`${ADB_ENV}adb devices`, runner, 10000);
+    return pickDevice(parseAdbDevices(r.output), runner.deviceId);
+  } catch {
+    return runner.deviceId || '';
+  }
+}
+
+/** Returns a runner copy with deviceId set to the auto-detected target. */
+async function withResolvedDevice(runner: MobileRunnerConfig): Promise<MobileRunnerConfig> {
+  const deviceId = await resolveDeviceId(runner);
+  if (deviceId && deviceId !== runner.deviceId) {
+    logger.info(`[NativeDriver] Auto-selected device "${deviceId}" (configured: "${runner.deviceId || 'none'}")`);
+  }
+  return deviceId === runner.deviceId ? runner : { ...runner, deviceId };
+}
+
 // ─── UIAutomator dump parser (pure — unit tested) ──────────────────────────────
 //
 // Native Android views ARE the accessibility tree, so every visible View shows
@@ -313,6 +352,7 @@ export class AndroidNativeDriver implements MobileDriver {
 
   /** List 3rd-party packages installed on the device (for the app picker). */
   async listApps(runner: MobileRunnerConfig): Promise<string[]> {
+    runner = await withResolvedDevice(runner);
     const result = await execSSHWithConfig(adb(runner, 'shell pm list packages -3'), runner, 15000);
     return result.output
       .split('\n')
@@ -322,6 +362,7 @@ export class AndroidNativeDriver implements MobileDriver {
   }
 
   async launchApp(runner: MobileRunnerConfig, appId: string): Promise<void> {
+    runner = await withResolvedDevice(runner);
     await execSSHWithConfig(
       adb(runner, `shell monkey -p ${appId} -c android.intent.category.LAUNCHER 1`),
       runner, 15000,
@@ -330,6 +371,7 @@ export class AndroidNativeDriver implements MobileDriver {
   }
 
   async captureScreen(runner: MobileRunnerConfig): Promise<ScreenSnapshot> {
+    runner = await withResolvedDevice(runner);
     const size = await getScreenSize(runner);
     const [xml, shot] = await Promise.all([dumpHierarchy(runner), screenshot(runner)]);
     const elements = parseNativeUiDump(xml, { screenW: size.w, screenH: size.h });
@@ -365,6 +407,7 @@ export class AndroidNativeDriver implements MobileDriver {
     const startTime = Date.now();
     const logs: string[] = [];
     const screenshots: string[] = [];
+    runner = await withResolvedDevice(runner);
     const size = await getScreenSize(runner);
 
     if (opts.appId) {

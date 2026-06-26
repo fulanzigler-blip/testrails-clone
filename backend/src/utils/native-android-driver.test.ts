@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseNativeUiDump, findNativeElement } from './native-android-driver';
+import { parseNativeUiDump, findNativeElement, parseAdbDevices, pickDevice } from './native-android-driver';
 
 const node = (attrs: Record<string, string>) => {
   const defaults: Record<string, string> = {
@@ -151,5 +151,37 @@ describe('parseNativeUiDump — React Native touchables & inputs', () => {
     expect(input.label).toBe('Email');
     expect(input.finderStrategy).toBe('resource-id');
     expect(input.finderValue).toBe('com.app:id/input_email');
+  });
+});
+
+describe('device auto-detection', () => {
+  const DEVICES = `List of devices attached
+emulator-5554\tdevice
+RF8M30ABCDE\tdevice
+0123offline\toffline
+`;
+
+  it('parses only devices in "device" state', () => {
+    expect(parseAdbDevices(DEVICES)).toEqual(['emulator-5554', 'RF8M30ABCDE']);
+  });
+
+  it('prefers a real device over an emulator (even when emulator is configured)', () => {
+    expect(pickDevice(['emulator-5554', 'RF8M30ABCDE'], 'emulator-5554')).toBe('RF8M30ABCDE');
+  });
+
+  it('autodetects the only connected device when config is stale', () => {
+    expect(pickDevice(['RF8M30ABCDE'], 'emulator-5554')).toBe('RF8M30ABCDE');
+  });
+
+  it('respects an explicit real-device config when it is connected', () => {
+    expect(pickDevice(['emulator-5554', 'RF8M30ABCDE', 'RF8M30FGHIJ'], 'RF8M30FGHIJ')).toBe('RF8M30FGHIJ');
+  });
+
+  it('falls back to the emulator when no real device is connected', () => {
+    expect(pickDevice(['emulator-5554'], 'emulator-5554')).toBe('emulator-5554');
+  });
+
+  it('returns the configured id when nothing is connected', () => {
+    expect(pickDevice([], 'emulator-5554')).toBe('emulator-5554');
   });
 });
