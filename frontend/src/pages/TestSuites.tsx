@@ -28,6 +28,8 @@ interface Suite {
   id: string
   name: string
   description?: string
+  projectId?: string
+  projectName?: string
   testCases: TestCase[]
   isAuto?: boolean           // auto-grouped suggestion
 }
@@ -123,6 +125,8 @@ const TestSuites: React.FC = () => {
   const { testCases } = useAppSelector(s => s.testCases)
 
   const [manualSuites, setManualSuites] = useState<Suite[]>([])
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
+  const [newProjectId, setNewProjectId] = useState('')
   const [activeSuiteId, setActiveSuiteId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [showAutoSuggestions, setShowAutoSuggestions] = useState(false)
@@ -140,8 +144,38 @@ const TestSuites: React.FC = () => {
 
   useEffect(() => { dispatch(fetchTestCases({ page: 1, perPage: 200 })) }, [dispatch])
 
+  // Load persisted suites + projects from the API (suites are stored in the DB,
+  // linked to a project — not kept only in local state).
+  const loadSuites = useCallback(async () => {
+    try {
+      const resp = await api.get('/test-suites', { params: { perPage: 200 } })
+      const list = resp.data?.data || resp.data || []
+      setManualSuites(list.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        projectId: s.projectId,
+        projectName: s.projectName,
+        testCases: [],   // filled from the test-case list (by suiteId) below
+      })))
+    } catch { /* leave existing */ }
+  }, [])
+
+  useEffect(() => {
+    loadSuites()
+    api.get('/projects', { params: { perPage: 200 } })
+      .then(r => setProjects((r.data?.data || r.data || []).map((p: any) => ({ id: p.id, name: p.name }))))
+      .catch(() => setProjects([]))
+  }, [loadSuites])
+
+  // Attach each suite's test cases by suiteId (kept in sync with the store)
+  const suitesWithCases: Suite[] = manualSuites.map(s => ({
+    ...s,
+    testCases: testCases.filter((tc: any) => tc.suiteId === s.id),
+  }))
+
   const autoSuites = autoGroup(testCases)
-  const allSuites = [...manualSuites, ...(showAutoSuggestions ? autoSuites : [])]
+  const allSuites = [...suitesWithCases, ...(showAutoSuggestions ? autoSuites : [])]
 
   const filteredSuites = search.trim()
     ? allSuites.filter(s => s.name.toLowerCase().includes(search.toLowerCase()))
@@ -166,22 +200,43 @@ const TestSuites: React.FC = () => {
     }
   }, [runningIds])
 
-  const handleCreateSuite = () => {
-    if (!newName.trim()) return
-    const suite: Suite = {
-      id: 'manual_' + Date.now(),
-      name: newName.trim(),
-      description: newDesc.trim() || `${selectedIds.length} test cases`,
-      testCases: testCases.filter(tc => selectedIds.includes(tc.id)),
-    }
-    setManualSuites(p => [suite, ...p])
-    setActiveSuiteId(suite.id)
+  const handleCreateSuite = async () => {
+    if (!newName.trim() || !newProjectId) return
     setCreating(false)
-    setNewName(''); setNewDesc(''); setSelectedIds([]); setCaseSearch('')
+    try {
+      // 1. Persist the suite (linked to a project)
+      const resp = await api.post('/test-suites', {
+        name: newName.trim(),
+        description: newDesc.trim() || undefined,
+        projectId: newProjectId,
+      })
+      const created = resp.data?.data || resp.data
+      // 2. Link selected test cases to the suite (TestCase.suiteId)
+      if (created?.id && selectedIds.length) {
+        await Promise.all(selectedIds.map(tcId =>
+          api.put(`/test-cases/${tcId}`, { suiteId: created.id }).catch(() => {})
+        ))
+      }
+      // 3. Refresh from the server so it survives navigation
+      await loadSuites()
+      await dispatch(fetchTestCases({ page: 1, perPage: 200 }))
+      if (created?.id) setActiveSuiteId(created.id)
+    } catch (err: any) {
+      alert(err?.response?.data?.error?.message || err?.message || 'Failed to create suite')
+    } finally {
+      setNewName(''); setNewDesc(''); setNewProjectId(''); setSelectedIds([]); setCaseSearch('')
+    }
   }
 
-  const handleDeleteSuite = (id: string) => {
-    setManualSuites(p => p.filter(s => s.id !== id))
+  const handleDeleteSuite = async (id: string) => {
+    if (id.startsWith('auto_')) { setManualSuites(p => p.filter(s => s.id !== id)); return }
+    try {
+      await api.delete(`/test-suites/${id}`)
+      await loadSuites()
+      await dispatch(fetchTestCases({ page: 1, perPage: 200 }))
+    } catch (err: any) {
+      alert(err?.response?.data?.error?.message || err?.message || 'Failed to delete suite')
+    }
     if (activeSuiteId === id) setActiveSuiteId(null)
   }
 
@@ -504,6 +559,18 @@ const TestSuites: React.FC = () => {
                 />
               </div>
               <div className="space-y-1.5">
+                <Label className="text-xs">Project <span className="text-red-500">*</span></Label>
+                <select
+                  value={newProjectId}
+                  onChange={e => setNewProjectId(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+                >
+                  <option value="">— Select project —</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                {projects.length === 0 && <p className="text-xs text-amber-600">No projects yet — create one in the Projects menu first.</p>}
+              </div>
+              <div className="space-y-1.5">
                 <Label className="text-xs">Description</Label>
                 <Input
                   value={newDesc}
@@ -548,7 +615,7 @@ const TestSuites: React.FC = () => {
             </div>
             <div className="flex justify-end gap-2 px-5 py-4 border-t bg-muted/20">
               <Button variant="outline" size="sm" onClick={() => setCreating(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleCreateSuite} disabled={!newName.trim()}>
+              <Button size="sm" onClick={handleCreateSuite} disabled={!newName.trim() || !newProjectId}>
                 <FolderPlus className="h-3.5 w-3.5 mr-1.5" /> Create Suite
               </Button>
             </div>
