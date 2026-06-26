@@ -389,12 +389,30 @@ export class AndroidNativeDriver implements MobileDriver {
     await new Promise(r => setTimeout(r, 2500));
   }
 
+  /** Foreground app package from the window manager — more reliable than parsing
+   *  node package= attrs (which compressed dumps sometimes omit or fill with the
+   *  launcher). Excludes launchers / system UI. */
+  private async foregroundPackage(runner: MobileRunnerConfig): Promise<string> {
+    try {
+      const r = await execSSHWithConfig(adb(runner, 'shell dumpsys window'), runner, 10000);
+      const m = r.output.match(/mCurrentFocus=Window\{[^}]*?([\w.]+)\/[\w.]+\}/)
+        || r.output.match(/mFocusedApp=ActivityRecord\{[^}]*?\s([\w.]+)\/[\w.]+/);
+      const pkg = m ? m[1] : '';
+      // Ignore launchers, system UI, and transient system dialogs (permission
+      // prompts, package installer, IME) — none of those are the app under test.
+      if (!pkg || /launcher|systemui|permissioncontroller|packageinstaller|inputmethod|^android$/.test(pkg)) return '';
+      return pkg;
+    } catch {
+      return '';
+    }
+  }
+
   async captureScreen(runner: MobileRunnerConfig): Promise<ScreenSnapshot> {
     runner = await withResolvedDevice(runner);
     const size = await getScreenSize(runner);
-    const [xml, shot] = await Promise.all([dumpHierarchy(runner), screenshot(runner)]);
+    const [xml, shot, fgPkg] = await Promise.all([dumpHierarchy(runner), screenshot(runner), this.foregroundPackage(runner)]);
     const elements = parseNativeUiDump(xml, { screenW: size.w, screenH: size.h });
-    const currentPackage = detectPackage(xml);
+    const currentPackage = fgPkg || detectPackage(xml);
     logger.info(`[NativeDriver] Screen captured: ${elements.length} elements (${elements.filter(e => e.elementType === 'input').length} inputs, ${elements.filter(e => e.elementType === 'button').length} buttons), pkg=${currentPackage || 'unknown'}`);
     return { screenshot: shot, elements, screenW: size.w, screenH: size.h, currentPackage };
   }
