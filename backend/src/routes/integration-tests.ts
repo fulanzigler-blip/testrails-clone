@@ -42,6 +42,20 @@ async function resolveFlutterDeviceId(runner: any): Promise<string> {
     return fallback;
   }
 }
+
+// Cached `-s <serial>` for the high-frequency live-view endpoints (screenshot is
+// polled). Resolves the real device via adb but caches per runner for 30s so we
+// don't run `adb devices` on every poll.
+const _deviceArgCache = new Map<string, { arg: string; ts: number }>();
+async function deviceArgFor(runner: any): Promise<string> {
+  const key = `${runner?.host}|${runner?.deviceId || ''}`;
+  const cached = _deviceArgCache.get(key);
+  if (cached && Date.now() - cached.ts < 30000) return cached.arg;
+  const id = await resolveFlutterDeviceId(runner);
+  const arg = id ? `-s ${id}` : '';
+  _deviceArgCache.set(key, { arg, ts: Date.now() });
+  return arg;
+}
 import { startFlutterSession, stopFlutterSession, getSession, listSessions, vmServiceRpc } from '../utils/flutter-session';
 import { parseWidgetTree } from '../utils/flutter-vm-service';
 import type { AppContext } from '../utils/flutter-scanner';
@@ -1650,7 +1664,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       const { runnerId } = request.query as { runnerId?: string };
       const runner = await resolveRunnerSSH(runnerId);
 
-      const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+      const deviceArg = await deviceArgFor(runner);
       const cmd =
         'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
         'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ' +
@@ -1679,7 +1693,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       }
 
       const runner = await resolveRunnerSSH(runnerId);
-      const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+      const deviceArg = await deviceArgFor(runner);
       const cmd =
         'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
         'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ' +
@@ -1702,7 +1716,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
     try {
       const { x, y, runnerId } = request.body as { x: number; y: number; runnerId?: string };
       const runner = await resolveRunnerSSH(runnerId);
-      const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+      const deviceArg = await deviceArgFor(runner);
       const adbEnv =
         'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
         'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ';
@@ -1764,7 +1778,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
         return successResponse(reply, { elements: liveElements, screenshot: snap.screenshot }, undefined);
       }
 
-      const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+      const deviceArg = await deviceArgFor(runner);
       const adbEnv =
         'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
         'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ';

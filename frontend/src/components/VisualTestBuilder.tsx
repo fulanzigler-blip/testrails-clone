@@ -1269,6 +1269,7 @@ const VisualTestBuilder: React.FC = () => {
 
   // List installed apps on the runner's device (native platforms)
   const loadDeviceApps = async () => {
+    if (platform === 'flutter') return;  // native app list only applies to android/ios
     setLoadingApps(true);
     try {
       const resp = await api.get('/native-tests/apps', { params: { runnerId: selectedRunner || undefined, platform } });
