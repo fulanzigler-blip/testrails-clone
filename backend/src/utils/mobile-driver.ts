@@ -47,6 +47,7 @@ export interface ScreenSnapshot {
   elements: NativeElement[];
   screenW: number;
   screenH: number;
+  currentPackage?: string;          // foreground app package detected from the dump
 }
 
 export interface NativeStep {

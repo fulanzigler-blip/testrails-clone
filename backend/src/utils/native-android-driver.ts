@@ -25,6 +25,24 @@ function adb(runner: MobileRunnerConfig, cmd: string): string {
   return `${ADB_ENV}adb ${deviceArg(runner)} ${cmd}`;
 }
 
+/** Detect the foreground app's package from a UIAutomator dump: the most common
+ *  package= among nodes, excluding system UI / launchers. Used so a recorded test
+ *  can relaunch the app under test even if the user scanned the "current screen"
+ *  without picking a package. */
+export function detectPackage(xml: string): string {
+  const counts = new Map<string, number>();
+  const re = /package="([^"]+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const pkg = m[1];
+    if (/^(android|com\.android\.systemui|com\.android\.launcher|com\.google\.android\.apps\.nexuslauncher|com\.huawei\.android\.launcher|com\.miui\.home|com\.sec\.android\.app\.launcher)/.test(pkg)) continue;
+    counts.set(pkg, (counts.get(pkg) || 0) + 1);
+  }
+  let best = '', bestN = 0;
+  for (const [pkg, n] of counts) if (n > bestN) { best = pkg; bestN = n; }
+  return best;
+}
+
 /** Parse `adb devices` output into serials that are in the "device" state. */
 export function parseAdbDevices(output: string): string[] {
   return output.split('\n').slice(1)
@@ -376,8 +394,9 @@ export class AndroidNativeDriver implements MobileDriver {
     const size = await getScreenSize(runner);
     const [xml, shot] = await Promise.all([dumpHierarchy(runner), screenshot(runner)]);
     const elements = parseNativeUiDump(xml, { screenW: size.w, screenH: size.h });
-    logger.info(`[NativeDriver] Screen captured: ${elements.length} elements (${elements.filter(e => e.elementType === 'input').length} inputs, ${elements.filter(e => e.elementType === 'button').length} buttons)`);
-    return { screenshot: shot, elements, screenW: size.w, screenH: size.h };
+    const currentPackage = detectPackage(xml);
+    logger.info(`[NativeDriver] Screen captured: ${elements.length} elements (${elements.filter(e => e.elementType === 'input').length} inputs, ${elements.filter(e => e.elementType === 'button').length} buttons), pkg=${currentPackage || 'unknown'}`);
+    return { screenshot: shot, elements, screenW: size.w, screenH: size.h, currentPackage };
   }
 
   /** Locate an element NOW (fresh dump) and return its tap point. */
@@ -414,6 +433,15 @@ export class AndroidNativeDriver implements MobileDriver {
     if (opts.appId) {
       logs.push(`Launching app: ${opts.appId}`);
       await this.launchApp(runner, opts.appId);
+      // Wait until the app has rendered something (cold start, esp. React Native,
+      // can take several seconds) before replaying the first step.
+      const readyStart = Date.now();
+      while (Date.now() - readyStart < 12000) {
+        const xml = await dumpHierarchy(runner);
+        if (parseNativeUiDump(xml, { screenW: size.w, screenH: size.h }).length > 0) break;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      logs.push(`  → App ready after ${((Date.now() - readyStart) / 1000).toFixed(1)}s`);
     }
 
     try {

@@ -110,15 +110,19 @@ export default async function nativeTestRoutes(fastify: FastifyInstance) {
         className: e.className,
         bounds: e.bounds,
       });
+      // The app under test: explicit pick, else the foreground package detected
+      // from the dump — so a recorded test can relaunch it before replaying.
+      const detectedAppId = body.appId || snap.currentPackage || '';
       const catalog = {
-        packageName: body.appId || 'current-screen',
+        packageName: detectedAppId || 'current-screen',
+        appId: detectedAppId || undefined,
         projectPath: '',
         platform: body.platform,
         scannedAt: new Date().toISOString(),
         source: 'native-uiautomator',
         screenshot: snap.screenshot,
         screens: [{
-          name: body.appId ? `${body.appId} — current screen` : 'Current screen',
+          name: detectedAppId ? `${detectedAppId} — current screen` : 'Current screen',
           inputs: snap.elements.filter(e => e.elementType === 'input').map(toItem),
           buttons: snap.elements.filter(e => e.elementType === 'button').map(toItem),
           texts: snap.elements.filter(e => e.elementType === 'text').map(toItem),

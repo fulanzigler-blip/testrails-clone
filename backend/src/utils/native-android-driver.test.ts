@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseNativeUiDump, findNativeElement, parseAdbDevices, pickDevice } from './native-android-driver';
+import { parseNativeUiDump, findNativeElement, parseAdbDevices, pickDevice, detectPackage } from './native-android-driver';
 
 const node = (attrs: Record<string, string>) => {
   const defaults: Record<string, string> = {
@@ -183,5 +183,25 @@ RF8M30ABCDE\tdevice
 
   it('returns the configured id when nothing is connected', () => {
     expect(pickDevice([], 'emulator-5554')).toBe('emulator-5554');
+  });
+});
+
+describe('detectPackage', () => {
+  it('returns the dominant app package, ignoring system UI', () => {
+    const xml = `<hierarchy>
+      <node package="com.android.systemui" text="" />
+      <node package="com.one.ifg.uat" text="Masuk" />
+      <node package="com.one.ifg.uat" text="Password" />
+      <node package="com.one.ifg.uat" text="Login" />
+    </hierarchy>`;
+    expect(detectPackage(xml)).toBe('com.one.ifg.uat');
+  });
+
+  it('ignores launcher packages', () => {
+    const xml = `<hierarchy>
+      <node package="com.huawei.android.launcher" />
+      <node package="com.huawei.android.launcher" />
+    </hierarchy>`;
+    expect(detectPackage(xml)).toBe('');
   });
 });

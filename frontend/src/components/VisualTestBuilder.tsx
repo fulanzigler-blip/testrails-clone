@@ -1336,8 +1336,13 @@ const VisualTestBuilder: React.FC = () => {
           runnerId: selectedRunner || undefined,
           appId: nativeAppId.trim() || undefined,
         }, { timeout: 120000 });
-        revealCatalog(resp.data?.data || resp.data);
-        if (nativeAppId.trim()) localStorage.setItem('vtb_native_app_id', nativeAppId.trim());
+        const data = resp.data?.data || resp.data;
+        revealCatalog(data);
+        // Auto-fill the app package from the detected foreground app, so the
+        // recorded test can relaunch it on run even if the user didn't pick one.
+        const detected = (nativeAppId.trim() || data?.appId || '').trim();
+        if (detected && detected !== nativeAppId) setNativeAppId(detected);
+        if (detected) localStorage.setItem('vtb_native_app_id', detected);
       } catch (err: any) {
         setScanError(err.response?.data?.error?.message || err.message || 'Scan failed');
       } finally {
