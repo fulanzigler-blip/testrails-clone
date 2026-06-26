@@ -24,6 +24,7 @@ import { execSSH, writeFileSSH, writeFileSSHWithRunner, execSSHWithConfig, execS
 import { discoverAppContext, captureHierarchy } from '../utils/flutter-scanner';
 import { generateDartCode } from '../utils/dart-codegen';
 import { androidNativeDriver, parseAdbDevices, pickDevice } from '../utils/native-android-driver';
+import { getMobileDriver } from '../utils/mobile-driver';
 
 // Resolve the Flutter test target device from `adb devices` on the runner,
 // preferring a connected real device over an emulator. Falls back to the
@@ -1223,6 +1224,31 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       if (runnerId) runner = await prisma.runner.findUnique({ where: { id: runnerId } });
       if (!runner) runner = await prisma.runner.findFirst({ where: { isDefault: true } });
       if (!runner) runner = await prisma.runner.findFirst({ orderBy: { createdAt: 'asc' } });
+
+      // Native test cases are saved as a JSON replay manifest (platform/appId/steps),
+      // not Dart. Detect and replay via the black-box driver — which launches the
+      // app (appId) before running, so re-run works even if the app was closed.
+      let nativeManifest: any = null;
+      try {
+        const parsed = JSON.parse(dartCode);
+        if (parsed && parsed.platform && parsed.platform !== 'flutter' && Array.isArray(parsed.steps)) nativeManifest = parsed;
+      } catch { /* not JSON → Flutter dart code */ }
+
+      if (nativeManifest) {
+        if (!runner) return errorResponses.badRequest(reply, 'No runner configured for native test');
+        logger.info(`[TestRun] Re-running NATIVE test case "${tc.title}" (platform=${nativeManifest.platform}, app=${nativeManifest.appId || 'none'}) on ${runner.name}`);
+        const driver = getMobileDriver(nativeManifest.platform);
+        const runnerCfg = {
+          host: runner.host,
+          username: runner.username,
+          sshKeyPath: runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519',
+          deviceId: runner.deviceId || '',
+        };
+        const result = await driver.runSteps(runnerCfg, nativeManifest.steps, { appId: nativeManifest.appId });
+        await prisma.testCase.update({ where: { id }, data: { status: result.success ? 'active' as const : 'draft' as const } });
+        logger.info(`[TestRun] Native test "${tc.title}" ${result.success ? 'passed' : 'failed'} in ${result.duration}ms`);
+        return successResponse(reply, { success: result.success, output: result.output, duration: result.duration, screenshots: result.screenshots, testCaseId: id, testCaseTitle: tc.title }, undefined);
+      }
 
       logger.info(`[TestRun] Re-running test case "${tc.title}" on runner: ${runner?.name || 'default'}`);
 
