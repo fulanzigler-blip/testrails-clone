@@ -2064,10 +2064,10 @@ const VisualTestBuilder: React.FC = () => {
                 <Button onClick={handleRun} disabled={running || !generatedCode} size="sm" variant="secondary">
                   {running ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />} Run Test
                 </Button>
-                {testResult && (
-                  <Button onClick={handleSaveAsTestCase} disabled={savingTestCase || savedTestCase} size="sm" variant="outline" className="border-blue-300 text-blue-600">
+                {generatedCode && (
+                  <Button onClick={handleSaveAsTestCase} disabled={savingTestCase || !!savedTestCase} size="sm" variant="outline" className="border-blue-300 text-blue-600">
                     {savingTestCase ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <FileText className="w-3 h-3 mr-1" />}
-                    {savedTestCase ? '✓ Saved!' : 'Save as Test Case'}
+                    {savedTestCase ? '✓ Saved!' : testResult ? 'Save as Test Case' : 'Save (no run)'}
                   </Button>
                 )}
                 {platform === 'flutter' && (
