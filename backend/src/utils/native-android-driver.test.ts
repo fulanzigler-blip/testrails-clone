@@ -200,7 +200,8 @@ describe('parseNativeUiDump — icon-only clickable controls', () => {
     expect(icon).toBeDefined();
     expect(icon!.elementType).toBe('button');
     expect(icon!.finderStrategy).toBe('bounds');
-    expect(icon!.finderValue).toBe('924,180');
+    // screen-relative fraction (cx=924/1080, cy=180/2340), not absolute pixels
+    expect(icon!.finderValue).toBe('0.8556,0.0769');
   });
 
   it('still skips a full-width identityless clickable (decorative wrapper)', () => {

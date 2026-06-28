@@ -152,12 +152,17 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
     const label = firstLine || idShort || e.labelHint || e.className.split('.').pop() || 'element';
     const cx = Math.round((e.bounds.x1 + e.bounds.x2) / 2);
     const cy = Math.round((e.bounds.y1 + e.bounds.y2) / 2);
+    // Store the bounds finder as a fraction of the screen (0..1) instead of
+    // absolute pixels — survives a different device resolution as long as the
+    // control keeps its relative position. Replay multiplies by the live size.
+    const rx = (cx / screenW).toFixed(4);
+    const ry = (cy / screenH).toFixed(4);
 
     const finders: NativeFinder[] = [];
     if (e.resourceId) finders.push({ strategy: 'resource-id', value: e.resourceId });
     if (e.contentDesc) finders.push({ strategy: 'content-desc', value: e.contentDesc.split('\n')[0].trim() });
     if (e.text.trim()) finders.push({ strategy: 'text', value: e.text.split('\n')[0].trim() });
-    finders.push({ strategy: 'bounds', value: `${cx},${cy}` });
+    finders.push({ strategy: 'bounds', value: `${rx},${ry}` });
     const primary = finders[0];
 
     elements.push({
@@ -442,8 +447,15 @@ export class AndroidNativeDriver implements MobileDriver {
 
     for (const f of [finder, ...fallbacks]) {
       if (f.strategy === 'bounds') {
-        const [x, y] = f.value.split(',').map(Number);
-        if (!isNaN(x) && !isNaN(y)) return { x, y, via: `bounds(${f.value})` };
+        const [vx, vy] = f.value.split(',').map(Number);
+        if (!isNaN(vx) && !isNaN(vy)) {
+          // Fractions (0..1) are screen-relative → scale to the live size;
+          // values > 1 are legacy absolute pixels.
+          const isRel = vx >= 0 && vx <= 1 && vy >= 0 && vy <= 1;
+          const x = isRel ? Math.round(vx * size.w) : Math.round(vx);
+          const y = isRel ? Math.round(vy * size.h) : Math.round(vy);
+          return { x, y, via: `bounds(${f.value}${isRel ? ' rel' : ''})` };
+        }
         continue;
       }
       const el = findNativeElement(elements, f);
