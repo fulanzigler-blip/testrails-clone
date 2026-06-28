@@ -65,6 +65,9 @@ export function countUnlabeledInteractive(xml: string, opts: { screenW?: number;
     const x1 = +bm[1], y1 = +bm[2], x2 = +bm[3], y2 = +bm[4];
     if (x2 <= x1 || y2 <= y1) continue;
     if ((x2 - x1) >= screenW * 0.97 && (y2 - y1) >= screenH * 0.92) continue;
+    // Skip slivers too small to be a real tap target (scrollbars, indicators,
+    // edge artifacts) — both dimensions must be at least ~min touch size.
+    if ((x2 - x1) < 48 || (y2 - y1) < 48) continue;
     count++;
   }
   return count;
