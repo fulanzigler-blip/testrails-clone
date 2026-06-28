@@ -186,6 +186,29 @@ RF8M30ABCDE\tdevice
   });
 });
 
+describe('parseNativeUiDump — icon-only clickable controls', () => {
+  // A language toggle / icon button: clickable, no text/id/content-desc, NAF.
+  const ICON_FIXTURE = `<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node class="android.view.ViewGroup" clickable="true" focusable="true" bounds="[816,120][1032,240]" />
+  <node class="android.view.View" clickable="true" bounds="[0,900][1080,1000]" />
+</hierarchy>`;
+
+  it('emits a small icon control (no text/id) as a button with a bounds finder', () => {
+    const els = parseNativeUiDump(ICON_FIXTURE, { screenW: 1080, screenH: 2340 });
+    const icon = els.find(e => e.bounds.x1 === 816 && e.bounds.y1 === 120);
+    expect(icon).toBeDefined();
+    expect(icon!.elementType).toBe('button');
+    expect(icon!.finderStrategy).toBe('bounds');
+    expect(icon!.finderValue).toBe('924,180');
+  });
+
+  it('still skips a full-width identityless clickable (decorative wrapper)', () => {
+    const els = parseNativeUiDump(ICON_FIXTURE, { screenW: 1080, screenH: 2340 });
+    expect(els.some(e => e.bounds.x1 === 0 && e.bounds.y1 === 900)).toBe(false);
+  });
+});
+
 describe('detectPackage', () => {
   it('returns the dominant app package, ignoring system UI', () => {
     const xml = `<hierarchy>

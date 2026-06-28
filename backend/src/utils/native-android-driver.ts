@@ -141,6 +141,7 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
     bounds: { x1: number; y1: number; x2: number; y2: number };
     text: string; contentDesc: string; resourceId: string; className: string;
     clickable: boolean; checkable: boolean; isPassword: boolean;
+    labelHint?: string;   // display label when there's no text/id (icon controls)
   }) => {
     const key = `${e.elementType}:${e.bounds.x1},${e.bounds.y1},${e.bounds.x2},${e.bounds.y2}`;
     if (seenBounds.has(key)) return;
@@ -148,7 +149,7 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
 
     const idShort = e.resourceId.split('/').pop() || '';
     const firstLine = (e.text || e.contentDesc).split('\n')[0].trim();
-    const label = firstLine || idShort || e.className.split('.').pop() || 'element';
+    const label = firstLine || idShort || e.labelHint || e.className.split('.').pop() || 'element';
     const cx = Math.round((e.bounds.x1 + e.bounds.x2) / 2);
     const cy = Math.round((e.bounds.y1 + e.bounds.y2) / 2);
 
@@ -189,11 +190,20 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
       // already-emitted leaves.
       if (popped && popped.interactive && !popped.emittedSelf && !popped.containsInput && popped.validBounds) {
         const label = popped.claimedLabel || popped.contentDesc.split('\n')[0].trim();
+        const pw = popped.bounds.x2 - popped.bounds.x1, ph = popped.bounds.y2 - popped.bounds.y1;
+        const smallControl = pw <= screenW * 0.5 && ph <= screenH * 0.2;
         if (label || popped.resourceId) {
           pushElement({
             elementType: 'button', bounds: popped.bounds, text: label, contentDesc: popped.contentDesc,
             resourceId: popped.resourceId, className: popped.className,
             clickable: true, checkable: false, isPassword: false,
+          });
+        } else if (smallControl) {
+          // Small clickable container with no label/id (icon control, e.g. toggle)
+          pushElement({
+            elementType: 'button', bounds: popped.bounds, text: '', contentDesc: '',
+            resourceId: '', className: popped.className,
+            clickable: true, checkable: false, isPassword: false, labelHint: 'Icon button',
           });
         }
       }
@@ -240,9 +250,16 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
         const wrap = [...stack].reverse().find(a => a.interactive && !a.emittedSelf);
         if (wrap) wrap.containsInput = true;
       } else if (interactive) {
+        const w = x2 - x1, h = y2 - y1;
+        const smallControl = w <= screenW * 0.5 && h <= screenH * 0.2;
         if (selfClosing && (ownLabel || resourceId)) {
           // Interactive leaf (icon/labelled button) — emit now
           pushElement({ elementType: 'button', bounds, text, contentDesc, resourceId, className, clickable: true, checkable, isPassword });
+          emittedSelf = true;
+        } else if (selfClosing && smallControl) {
+          // Icon/flag control with no text/id/desc (e.g. a language toggle) —
+          // still a real tap target; emit with a bounds finder so it's usable.
+          pushElement({ elementType: 'button', bounds, text: '', contentDesc, resourceId, className, clickable: true, checkable, isPassword, labelHint: 'Icon button' });
           emittedSelf = true;
         }
         // else: interactive container → defer; emit one button on close (pop)
