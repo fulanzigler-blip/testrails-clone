@@ -43,6 +43,33 @@ export function detectPackage(xml: string): string {
   return best;
 }
 
+/** Count interactive LEAF controls that have no identity at all (no text,
+ *  content-desc, or resource-id) — e.g. an icon/toggle the dev never labelled.
+ *  These can't be automated reliably; surfaced as a warning so the dev adds a
+ *  testID / accessibilityLabel. Containers are excluded (their child usually
+ *  provides a label); near-fullscreen nodes are excluded (decorative roots). */
+export function countUnlabeledInteractive(xml: string, opts: { screenW?: number; screenH?: number } = {}): number {
+  const screenW = opts.screenW ?? 1080;
+  const screenH = opts.screenH ?? 1920;
+  let count = 0;
+  const leafRe = /<node\s+([^>]*?)\/>/g;  // self-closing = leaf
+  let m: RegExpExecArray | null;
+  while ((m = leafRe.exec(xml)) !== null) {
+    const a = m[1];
+    const g = (k: string) => { const r = new RegExp(`\\b${k}="([^"]*)"`).exec(a); return r ? r[1] : ''; };
+    const interactive = g('clickable') === 'true' || g('checkable') === 'true';
+    if (!interactive) continue;
+    if (g('text').trim() || g('content-desc').trim() || g('resource-id').trim()) continue;
+    const bm = BOUNDS_RE.exec(g('bounds'));
+    if (!bm) continue;
+    const x1 = +bm[1], y1 = +bm[2], x2 = +bm[3], y2 = +bm[4];
+    if (x2 <= x1 || y2 <= y1) continue;
+    if ((x2 - x1) >= screenW * 0.97 && (y2 - y1) >= screenH * 0.92) continue;
+    count++;
+  }
+  return count;
+}
+
 /** Parse `adb devices` output into serials that are in the "device" state. */
 export function parseAdbDevices(output: string): string[] {
   return output.split('\n').slice(1)
@@ -413,8 +440,9 @@ export class AndroidNativeDriver implements MobileDriver {
     const [xml, shot, fgPkg] = await Promise.all([dumpHierarchy(runner), screenshot(runner), this.foregroundPackage(runner)]);
     const elements = parseNativeUiDump(xml, { screenW: size.w, screenH: size.h });
     const currentPackage = fgPkg || detectPackage(xml);
-    logger.info(`[NativeDriver] Screen captured: ${elements.length} elements (${elements.filter(e => e.elementType === 'input').length} inputs, ${elements.filter(e => e.elementType === 'button').length} buttons), pkg=${currentPackage || 'unknown'}`);
-    return { screenshot: shot, elements, screenW: size.w, screenH: size.h, currentPackage };
+    const unlabeledInteractive = countUnlabeledInteractive(xml, { screenW: size.w, screenH: size.h });
+    logger.info(`[NativeDriver] Screen captured: ${elements.length} elements (${elements.filter(e => e.elementType === 'input').length} inputs, ${elements.filter(e => e.elementType === 'button').length} buttons), pkg=${currentPackage || 'unknown'}, unlabeled=${unlabeledInteractive}`);
+    return { screenshot: shot, elements, screenW: size.w, screenH: size.h, currentPackage, unlabeledInteractive };
   }
 
   /** Locate an element NOW (fresh dump) and return its tap point. */

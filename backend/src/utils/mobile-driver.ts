@@ -48,6 +48,7 @@ export interface ScreenSnapshot {
   screenW: number;
   screenH: number;
   currentPackage?: string;          // foreground app package detected from the dump
+  unlabeledInteractive?: number;    // clickable controls with no id/label (warn)
 }
 
 export interface NativeStep {

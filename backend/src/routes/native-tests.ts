@@ -120,6 +120,7 @@ export default async function nativeTestRoutes(fastify: FastifyInstance) {
         platform: body.platform,
         scannedAt: new Date().toISOString(),
         source: 'native-uiautomator',
+        unlabeledInteractive: snap.unlabeledInteractive || 0,
         screenshot: snap.screenshot,
         screens: [{
           name: detectedAppId ? `${detectedAppId} — current screen` : 'Current screen',

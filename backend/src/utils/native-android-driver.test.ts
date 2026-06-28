@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseNativeUiDump, findNativeElement, parseAdbDevices, pickDevice, detectPackage } from './native-android-driver';
+import { parseNativeUiDump, findNativeElement, parseAdbDevices, pickDevice, detectPackage, countUnlabeledInteractive } from './native-android-driver';
 
 const node = (attrs: Record<string, string>) => {
   const defaults: Record<string, string> = {
@@ -183,6 +183,25 @@ RF8M30ABCDE\tdevice
 
   it('returns the configured id when nothing is connected', () => {
     expect(pickDevice([], 'emulator-5554')).toBe('emulator-5554');
+  });
+});
+
+describe('countUnlabeledInteractive', () => {
+  const XML = `<hierarchy>
+    <node class="android.view.ViewGroup" clickable="true" bounds="[816,120][1032,240]" />
+    <node class="android.widget.Button" resource-id="com.app:id/ok" clickable="true" bounds="[40,560][1040,660]" />
+    <node class="android.widget.TextView" text="Hello" clickable="false" bounds="[40,200][600,260]" />
+    <node class="android.widget.ImageButton" content-desc="Back" clickable="true" bounds="[0,0][120,120]" />
+  </hierarchy>`;
+
+  it('counts only interactive leaves with no id/label', () => {
+    // only the first node (clickable, no text/desc/id) qualifies
+    expect(countUnlabeledInteractive(XML, { screenW: 1080, screenH: 2340 })).toBe(1);
+  });
+
+  it('returns 0 when every control is labelled', () => {
+    const ok = `<hierarchy><node class="android.widget.Button" resource-id="x" clickable="true" bounds="[0,0][100,100]" /></hierarchy>`;
+    expect(countUnlabeledInteractive(ok)).toBe(0);
   });
 });
 

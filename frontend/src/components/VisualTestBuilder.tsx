@@ -50,6 +50,7 @@ interface ElementCatalog {
   responseModels?: Array<{ fieldName: string; fieldType: string; modelClass: string; sourceFile: string }>;
   dynamicContentHints?: Array<{ screenFile: string; screenName: string; widgetPattern: string; description: string; responseFields: any[] }>;
   source?: 'ssh' | 'hybrid' | 'native-uiautomator';
+  unlabeledInteractive?: number;   // clickable controls with no id/label (native)
 }
 
 interface TestStep {
@@ -1865,6 +1866,17 @@ const VisualTestBuilder: React.FC = () => {
                 </Badge>
               )}
             </div>
+
+            {/* Warn about interactive controls with no id/label — can't be automated reliably */}
+            {!!catalog.unlabeledInteractive && catalog.unlabeledInteractive > 0 && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2 text-xs">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  <strong>{catalog.unlabeledInteractive}</strong> interactive element{catalog.unlabeledInteractive > 1 ? 's have' : ' has'} no id/label and {catalog.unlabeledInteractive > 1 ? "weren't" : "wasn't"} added to the catalog.
+                  Ask the developer to set a <code className="bg-amber-100 px-1 rounded">testID</code> / <code className="bg-amber-100 px-1 rounded">accessibilityLabel</code> (Android <code className="bg-amber-100 px-1 rounded">resource-id</code> / <code className="bg-amber-100 px-1 rounded">contentDescription</code>) so they can be automated reliably.
+                </span>
+              </div>
+            )}
 
             {/* Credentials (Flutter login-test convenience; native enters text via steps) */}
             {platform === 'flutter' && (
