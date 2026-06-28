@@ -1405,6 +1405,9 @@ const VisualTestBuilder: React.FC = () => {
 
   const handleGenerate = async () => {
     if (steps.length === 0) { setError('Add at least one step'); return; }
+    // New generation = a new test case can be saved again (reset prior save state)
+    setSavedTestCase(null);
+    setTestResult(null);
 
     if (platform !== 'flutter') {
       // Native: the "code" is a replay manifest (JSON steps), executed by the
