@@ -1863,22 +1863,24 @@ const VisualTestBuilder: React.FC = () => {
               )}
             </div>
 
-            {/* Credentials */}
-            {catalog.auth?.credentials?.length ? (
-              <div className="flex gap-2 mb-4">
-                <Label className="text-sm self-center">Credentials:</Label>
-                {catalog.auth.credentials.map((c, i) => (
-                  <Button key={i} variant={credentials.email === c.email ? 'default' : 'outline'} size="sm"
-                    onClick={() => setCredentials({ email: c.email, password: c.password })}>
-                    {c.role}: {c.email}
-                  </Button>
-                ))}
-              </div>
-            ) : (
-              <div className="flex gap-2 mb-4">
-                <Input placeholder="Email" className="w-48" value={credentials.email} onChange={e => setCredentials(p => ({...p, email: e.target.value}))} />
-                <Input placeholder="Password" className="w-48" value={credentials.password} onChange={e => setCredentials(p => ({...p, password: e.target.value}))} />
-              </div>
+            {/* Credentials (Flutter login-test convenience; native enters text via steps) */}
+            {platform === 'flutter' && (
+              catalog.auth?.credentials?.length ? (
+                <div className="flex gap-2 mb-4">
+                  <Label className="text-sm self-center">Credentials:</Label>
+                  {catalog.auth.credentials.map((c, i) => (
+                    <Button key={i} variant={credentials.email === c.email ? 'default' : 'outline'} size="sm"
+                      onClick={() => setCredentials({ email: c.email, password: c.password })}>
+                      {c.role}: {c.email}
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex gap-2 mb-4">
+                  <Input placeholder="Email" className="w-48" value={credentials.email} onChange={e => setCredentials(p => ({...p, email: e.target.value}))} />
+                  <Input placeholder="Password" className="w-48" value={credentials.password} onChange={e => setCredentials(p => ({...p, password: e.target.value}))} />
+                </div>
+              )
             )}
 
             {/* Screen-by-screen element list */}
