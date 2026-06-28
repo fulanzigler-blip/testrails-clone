@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { Bell, LayoutDashboard, ClipboardList, Play, FolderTree, Users, BarChart3, Settings, LogOut, FolderOpen, Cpu, Smartphone, Globe, Plus, Layers } from 'lucide-react'
 import { useAppSelector } from '../store/hooks'
@@ -48,6 +48,23 @@ const Layout: React.FC = () => {
     localStorage.removeItem('refresh_token')
     window.location.href = '/login'
   }
+
+  // Idle auto-logout: sign out after a period of no user activity, even if the
+  // refresh token is still valid. Resets on any interaction.
+  useEffect(() => {
+    const IDLE_MS = 30 * 60 * 1000 // 30 minutes
+    let timer: number
+    const doLogout = () => {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      window.location.href = '/login?reason=idle'
+    }
+    const reset = () => { window.clearTimeout(timer); timer = window.setTimeout(doLogout, IDLE_MS) }
+    const events = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click']
+    events.forEach(e => window.addEventListener(e, reset, { passive: true }))
+    reset()
+    return () => { window.clearTimeout(timer); events.forEach(e => window.removeEventListener(e, reset)) }
+  }, [])
 
   return (
     <div className="flex min-h-screen bg-background">

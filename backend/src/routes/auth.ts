@@ -8,7 +8,7 @@ import {
   resetPasswordSchema,
   unlockAccountSchema,
 } from '../types/schemas';
-import { hashPassword, verifyPassword, generateAccessToken, generateRefreshToken } from '../utils/auth';
+import { hashPassword, verifyPassword, generateAccessToken, generateRefreshToken, refreshTokenTtlSeconds } from '../utils/auth';
 import {
   validatePasswordStrength,
   generateSecureToken,
@@ -208,7 +208,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       const accessToken = generateAccessToken(fastify, user.id, true, user.role);
       const refreshToken = generateRefreshToken(fastify, user.id);
 
-      await redis.set(`refresh_token:${user.id}`, refreshToken, 'EX', 7 * 24 * 60 * 60);
+      await redis.set(`refresh_token:${user.id}`, refreshToken, 'EX', refreshTokenTtlSeconds());
 
       logger.info(`User logged in: ${user.email} from IP ${ip}`);
 

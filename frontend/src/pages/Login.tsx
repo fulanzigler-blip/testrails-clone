@@ -54,6 +54,9 @@ const Login: React.FC = () => {
           <CardHeader className="space-y-1 text-center">
             <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
             <CardDescription>Sign in to your VET Engine account</CardDescription>
+            {new URLSearchParams(window.location.search).get('reason') === 'idle' && (
+              <p className="text-xs text-amber-600 mt-1">Your session expired due to inactivity. Please sign in again.</p>
+            )}
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">

@@ -51,6 +51,17 @@ export function generateRefreshToken(fastify: FastifyInstance, userId: string): 
   );
 }
 
+/** Refresh-token lifetime in seconds, parsed from REFRESH_TOKEN_EXPIRES_IN
+ *  (supports Nd / Nh / Nm / Ns). Keeps the Redis TTL in sync with the JWT exp. */
+export function refreshTokenTtlSeconds(): number {
+  const v = (process.env.REFRESH_TOKEN_EXPIRES_IN || '7d').trim();
+  const m = v.match(/^(\d+)\s*([dhms])$/i);
+  if (!m) return 7 * 24 * 60 * 60;
+  const n = parseInt(m[1], 10);
+  const unit = m[2].toLowerCase();
+  return n * (unit === 'd' ? 86400 : unit === 'h' ? 3600 : unit === 'm' ? 60 : 1);
+}
+
 // Verify and decode token
 export async function verifyToken(
   fastify: FastifyInstance,
