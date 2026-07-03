@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, LayoutDashboard, TestTube, Play, FolderTree, Users, BarChart3, Settings, LogOut, FolderOpen, Smartphone, Cpu, Wrench, Scan, Globe, Plus, Layers } from 'lucide-react'
+import { Bell, LayoutDashboard, ClipboardList, Play, FolderTree, Users, BarChart3, Settings, LogOut, FolderOpen, Cpu, Smartphone, Globe, Plus, Layers } from 'lucide-react'
 import { useAppSelector } from '../store/hooks'
 import { Badge } from './ui/badge'
 import NotificationsDrawer from './NotificationsDrawer'
@@ -24,7 +24,7 @@ const Layout: React.FC = () => {
       navigate('/web-visual-builder')
     } else if (config.type === 'mobile') {
       sessionStorage.setItem('mobile_config', JSON.stringify(config))
-      navigate('/page-automation')
+      navigate('/visual-test-builder')
     } else if (config.type === 'manual') {
       navigate('/test-runs')
     }
@@ -33,13 +33,11 @@ const Layout: React.FC = () => {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Projects', href: '/projects', icon: FolderOpen },
-    { name: 'Test Cases', href: '/test-cases', icon: TestTube },
+    { name: 'Test Cases', href: '/test-cases', icon: ClipboardList },
     { name: 'Test Runs', href: '/test-runs', icon: Play },
     { name: 'Test Suites', href: '/test-suites', icon: FolderTree },
-    { name: 'Page Automation', href: '/page-automation', icon: Smartphone },
-    { name: 'Visual Test Builder', href: '/visual-test-builder', icon: Wrench },
+    { name: 'Mobile Test Builder', href: '/visual-test-builder', icon: Smartphone },
     { name: 'Web Visual Builder', href: '/web-visual-builder', icon: Globe },
-    { name: 'Hybrid Scanner', href: '/hybrid-scan', icon: Scan },
     { name: 'App Profiles', href: '/app-profiles', icon: Layers },
     { name: 'Users', href: '/users', icon: Users },
     { name: 'Reports', href: '/reports', icon: BarChart3 },
@@ -51,15 +49,42 @@ const Layout: React.FC = () => {
     window.location.href = '/login'
   }
 
+  // Idle auto-logout: sign out after a period of no user activity, even if the
+  // refresh token is still valid. Resets on any interaction.
+  useEffect(() => {
+    const IDLE_MS = 30 * 60 * 1000 // 30 minutes
+    let timer: number
+    const doLogout = () => {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      window.location.href = '/login?reason=idle'
+    }
+    const reset = () => { window.clearTimeout(timer); timer = window.setTimeout(doLogout, IDLE_MS) }
+    const events = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click']
+    events.forEach(e => window.addEventListener(e, reset, { passive: true }))
+    reset()
+    return () => { window.clearTimeout(timer); events.forEach(e => window.removeEventListener(e, reset)) }
+  }, [])
+
   return (
     <div className="flex min-h-screen bg-background">
       {/* Sidebar */}
       <aside className="w-64 border-r bg-card">
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="flex h-16 items-center border-b px-6">
-            <TestTube className="h-6 w-6 text-primary mr-2" />
-            <span className="text-xl font-bold">TestRails</span>
+          <div className="flex h-16 items-center border-b px-6 gap-2.5">
+            <svg viewBox="0 0 120 120" className="h-8 w-8 shrink-0" aria-hidden="true">
+              <defs>
+                <linearGradient id="vetSidebar" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stopColor="#6366f1" />
+                  <stop offset="1" stopColor="#a855f7" />
+                </linearGradient>
+              </defs>
+              <rect width="120" height="120" rx="28" fill="url(#vetSidebar)" />
+              <path d="M22 60 C40 36, 80 36, 98 60 C80 84, 40 84, 22 60 Z" fill="none" stroke="#fff" strokeWidth="6" strokeLinejoin="round" />
+              <path d="M51 47 L73 60 L51 73 Z" fill="#fff" />
+            </svg>
+            <span className="text-xl font-bold leading-none">VET <span className="font-medium text-muted-foreground">Engine</span></span>
           </div>
 
           {/* New Test Run CTA */}
@@ -130,7 +155,7 @@ const Layout: React.FC = () => {
         {/* Header */}
         <header className="h-16 border-b bg-card flex items-center justify-between px-6">
           <h1 className="text-lg font-semibold">
-            {navigation.find((item) => item.href === location.pathname)?.name || 'TestRails'}
+            {navigation.find((item) => item.href === location.pathname)?.name || 'VET Engine'}
           </h1>
           <div className="flex items-center gap-4">
             <button className="relative rounded-full p-2 hover:bg-muted transition-colors" onClick={() => setDrawerOpen(true)}>

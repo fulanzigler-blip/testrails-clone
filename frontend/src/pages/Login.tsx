@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
-import { TestTube } from 'lucide-react'
 
 const Login: React.FC = () => {
   const navigate = useNavigate()
@@ -34,13 +33,30 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/50">
       <div className="w-full max-w-md">
-        <div className="flex items-center justify-center mb-8">
-          <TestTube className="h-12 w-12 text-primary" />
+        <div className="flex flex-col items-center gap-3 mb-8">
+          <svg viewBox="0 0 120 120" className="h-16 w-16" aria-hidden="true">
+            <defs>
+              <linearGradient id="vetLogin" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stopColor="#6366f1" />
+                <stop offset="1" stopColor="#a855f7" />
+              </linearGradient>
+            </defs>
+            <rect width="120" height="120" rx="28" fill="url(#vetLogin)" />
+            <path d="M22 60 C40 36, 80 36, 98 60 C80 84, 40 84, 22 60 Z" fill="none" stroke="#fff" strokeWidth="6" strokeLinejoin="round" />
+            <path d="M51 47 L73 60 L51 73 Z" fill="#fff" />
+          </svg>
+          <div className="text-center">
+            <div className="text-2xl font-bold tracking-wide leading-none">VET</div>
+            <div className="text-sm text-muted-foreground mt-1">Visual Exploratory Test Engine</div>
+          </div>
         </div>
         <Card>
           <CardHeader className="space-y-1 text-center">
             <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
-            <CardDescription>Sign in to your TestRails account</CardDescription>
+            <CardDescription>Sign in to your VET Engine account</CardDescription>
+            {new URLSearchParams(window.location.search).get('reason') === 'idle' && (
+              <p className="text-xs text-amber-600 mt-1">Your session expired due to inactivity. Please sign in again.</p>
+            )}
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">

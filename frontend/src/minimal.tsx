@@ -7,7 +7,7 @@ import './App.css'
 function MinimalApp() {
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <h1 style={{ color: '#333' }}>TestRails Clone</h1>
+      <h1 style={{ color: '#333' }}>VET Engine</h1>
       <div style={{ marginBottom: '20px', padding: '15px', border: '1px solid #ddd', borderRadius: '5px' }}>
         <h2 style={{ margin: '0 0 10px 0' }}>API Status: <span style={{ color: 'green' }}>✅ Connected</span></h2>
         <p style={{ margin: '5px 0' }}>
@@ -81,7 +81,7 @@ function MinimalApp() {
 function SimpleApp() {
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <h1 style={{ color: '#333' }}>TestRails Clone - Simple API Test</h1>
+      <h1 style={{ color: '#333' }}>VET Engine - Simple API Test</h1>
       <div style={{ marginBottom: '20px', padding: '15px', border: '1px solid #ddd', borderRadius: '5px' }}>
         <h2 style={{ margin: '0 0 10px 0' }}>Quick Login Test</h2>
         <button

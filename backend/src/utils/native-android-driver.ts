@@ -25,6 +25,93 @@ function adb(runner: MobileRunnerConfig, cmd: string): string {
   return `${ADB_ENV}adb ${deviceArg(runner)} ${cmd}`;
 }
 
+/** Detect the foreground app's package from a UIAutomator dump: the most common
+ *  package= among nodes, excluding system UI / launchers. Used so a recorded test
+ *  can relaunch the app under test even if the user scanned the "current screen"
+ *  without picking a package. */
+export function detectPackage(xml: string): string {
+  const counts = new Map<string, number>();
+  const re = /package="([^"]+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const pkg = m[1];
+    if (/^(android|com\.android\.systemui|com\.android\.launcher|com\.google\.android\.apps\.nexuslauncher|com\.huawei\.android\.launcher|com\.miui\.home|com\.sec\.android\.app\.launcher)/.test(pkg)) continue;
+    counts.set(pkg, (counts.get(pkg) || 0) + 1);
+  }
+  let best = '', bestN = 0;
+  for (const [pkg, n] of counts) if (n > bestN) { best = pkg; bestN = n; }
+  return best;
+}
+
+/** Count interactive LEAF controls that have no identity at all (no text,
+ *  content-desc, or resource-id) — e.g. an icon/toggle the dev never labelled.
+ *  These can't be automated reliably; surfaced as a warning so the dev adds a
+ *  testID / accessibilityLabel. Containers are excluded (their child usually
+ *  provides a label); near-fullscreen nodes are excluded (decorative roots). */
+export function countUnlabeledInteractive(xml: string, opts: { screenW?: number; screenH?: number } = {}): number {
+  const screenW = opts.screenW ?? 1080;
+  const screenH = opts.screenH ?? 1920;
+  let count = 0;
+  const leafRe = /<node\s+([^>]*?)\/>/g;  // self-closing = leaf
+  let m: RegExpExecArray | null;
+  while ((m = leafRe.exec(xml)) !== null) {
+    const a = m[1];
+    const g = (k: string) => { const r = new RegExp(`\\b${k}="([^"]*)"`).exec(a); return r ? r[1] : ''; };
+    const interactive = g('clickable') === 'true' || g('checkable') === 'true';
+    if (!interactive) continue;
+    if (g('text').trim() || g('content-desc').trim() || g('resource-id').trim()) continue;
+    const bm = BOUNDS_RE.exec(g('bounds'));
+    if (!bm) continue;
+    const x1 = +bm[1], y1 = +bm[2], x2 = +bm[3], y2 = +bm[4];
+    if (x2 <= x1 || y2 <= y1) continue;
+    if ((x2 - x1) >= screenW * 0.97 && (y2 - y1) >= screenH * 0.92) continue;
+    // Skip slivers too small to be a real tap target (scrollbars, indicators,
+    // edge artifacts) — both dimensions must be at least ~min touch size.
+    if ((x2 - x1) < 48 || (y2 - y1) < 48) continue;
+    count++;
+  }
+  return count;
+}
+
+/** Parse `adb devices` output into serials that are in the "device" state. */
+export function parseAdbDevices(output: string): string[] {
+  return output.split('\n').slice(1)
+    .map(l => l.trim())
+    .filter(l => /\sdevice$/.test(l))              // state "device" (skip offline/unauthorized)
+    .map(l => l.split(/\s+/)[0])
+    .filter(Boolean);
+}
+
+/** Choose the target device. A connected real device is preferred over an
+ *  emulator (the configured deviceId often defaults to one). An explicit
+ *  non-emulator config wins; otherwise prefer real → configured → first. */
+export function pickDevice(serials: string[], configured?: string): string {
+  if (serials.length === 0) return configured || '';
+  if (configured && !configured.startsWith('emulator-') && serials.includes(configured)) return configured;
+  const real = serials.find(s => !s.startsWith('emulator-'));
+  if (real) return real;
+  if (configured && serials.includes(configured)) return configured;
+  return serials[0];
+}
+
+async function resolveDeviceId(runner: MobileRunnerConfig): Promise<string> {
+  try {
+    const r = await execSSHWithConfig(`${ADB_ENV}adb devices`, runner, 10000);
+    return pickDevice(parseAdbDevices(r.output), runner.deviceId);
+  } catch {
+    return runner.deviceId || '';
+  }
+}
+
+/** Returns a runner copy with deviceId set to the auto-detected target. */
+async function withResolvedDevice(runner: MobileRunnerConfig): Promise<MobileRunnerConfig> {
+  const deviceId = await resolveDeviceId(runner);
+  if (deviceId && deviceId !== runner.deviceId) {
+    logger.info(`[NativeDriver] Auto-selected device "${deviceId}" (configured: "${runner.deviceId || 'none'}")`);
+  }
+  return deviceId === runner.deviceId ? runner : { ...runner, deviceId };
+}
+
 // ─── UIAutomator dump parser (pure — unit tested) ──────────────────────────────
 //
 // Native Android views ARE the accessibility tree, so every visible View shows
@@ -63,17 +150,21 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
   // A labelless clickable container with no labelled child is emitted on pop
   // (icon-only row) only if it has a resource-id.
   interface OpenAncestor {
-    isClickable: boolean;
-    hasOwnLabel: boolean;
+    interactive: boolean;   // clickable/checkable, or focusable with a button-ish id
     bounds: { x1: number; y1: number; x2: number; y2: number };
     validBounds: boolean;
     resourceId: string;
     contentDesc: string;
     className: string;
-    claimed: boolean;
-    emittedSelf: boolean;   // already emitted (had own label) → children must not re-emit
+    claimed: boolean;       // a descendant text already gave it a label
+    claimedLabel: string;
+    emittedSelf: boolean;   // already emitted as a leaf → don't re-emit on pop
+    containsInput: boolean; // wraps an EditText → it's an input wrapper, not a button
   }
   const stack: OpenAncestor[] = [];
+  // RN/native touchables sometimes expose only focusable (+ a button-ish id) and
+  // not clickable; treat those as interactive too.
+  const BUTTONISH_ID = /butt?on|btn|tab\b|link|chip|pressable|touchable|cta|submit|action|menu|item|card/i;
 
   const pushElement = (e: {
     elementType: NativeElement['elementType'];
@@ -122,15 +213,19 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
   while ((m = tagRe.exec(xml)) !== null) {
     if (m[0] === '</node>') {
       const popped = stack.pop();
-      // Labelless clickable container nobody claimed → icon-only row; keep it if
-      // it at least has a resource-id to target.
-      if (popped && popped.isClickable && !popped.hasOwnLabel && !popped.claimed
-          && !popped.emittedSelf && popped.validBounds && popped.resourceId) {
-        pushElement({
-          elementType: 'button', bounds: popped.bounds, text: '', contentDesc: popped.contentDesc,
-          resourceId: popped.resourceId, className: popped.className,
-          clickable: true, checkable: false, isPassword: false,
-        });
+      // Emit exactly ONE button per interactive container on close: labelled by a
+      // claimed child text, else its own content-desc, else its resource-id.
+      // Skip input wrappers (those are represented by the EditText input) and
+      // already-emitted leaves.
+      if (popped && popped.interactive && !popped.emittedSelf && !popped.containsInput && popped.validBounds) {
+        const label = popped.claimedLabel || popped.contentDesc.split('\n')[0].trim();
+        if (label || popped.resourceId) {
+          pushElement({
+            elementType: 'button', bounds: popped.bounds, text: label, contentDesc: popped.contentDesc,
+            resourceId: popped.resourceId, className: popped.className,
+            clickable: true, checkable: false, isPassword: false,
+          });
+        }
       }
       continue;
     }
@@ -149,6 +244,7 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
     const resourceId = get('resource-id');
     const clickable = get('clickable') === 'true';
     const checkable = get('checkable') === 'true';
+    const focusable = get('focusable') === 'true';
     const isPassword = get('password') === 'true';
     const ownLabel = (text || contentDesc).trim();
 
@@ -162,6 +258,7 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
 
     const isEditText = /EditText|AutoCompleteTextView|SearchView/.test(className);
     const isTextView = /TextView|CheckedTextView/.test(className) && !isEditText;
+    const interactive = !isEditText && !isPassword && (clickable || checkable || (focusable && BUTTONISH_ID.test(resourceId)));
     const bounds = { x1, y1, x2, y2 };
     let emittedSelf = false;
 
@@ -169,29 +266,22 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
       if (isEditText || isPassword) {
         pushElement({ elementType: 'input', bounds, text, contentDesc, resourceId, className, clickable, checkable, isPassword });
         emittedSelf = true;
-      } else if (clickable || checkable) {
-        if (ownLabel) {
-          // Self-labelled clickable → emit now; children won't re-emit this row
+        // The nearest interactive ancestor is an input wrapper — not a button
+        const wrap = [...stack].reverse().find(a => a.interactive && !a.emittedSelf);
+        if (wrap) wrap.containsInput = true;
+      } else if (interactive) {
+        if (selfClosing && (ownLabel || resourceId)) {
+          // Interactive leaf (icon/labelled button) — emit now
           pushElement({ elementType: 'button', bounds, text, contentDesc, resourceId, className, clickable: true, checkable, isPassword });
           emittedSelf = true;
-        } else if (selfClosing) {
-          // Labelless clickable leaf (icon button) — keep only if it has an id
-          if (resourceId) {
-            pushElement({ elementType: 'button', bounds, text, contentDesc, resourceId, className, clickable: true, checkable, isPassword });
-            emittedSelf = true;
-          }
         }
-        // else: labelless clickable container → defer; a child claims it (or pop emits it)
+        // else: interactive container → defer; emit one button on close (pop)
       } else if (isTextView && text.trim().length >= 2) {
-        const anc = [...stack].reverse().find(a => a.isClickable && !a.claimed && !a.hasOwnLabel && !a.emittedSelf);
+        // A text inside an interactive (non-input) ancestor is that button's label,
+        // not a standalone text — claim it and suppress the standalone.
+        const anc = [...stack].reverse().find(a => a.interactive && !a.containsInput);
         if (anc) {
-          anc.claimed = true;
-          // Emit the ROW as button: tap the container, identify by child text
-          pushElement({
-            elementType: 'button', bounds: anc.validBounds ? anc.bounds : bounds,
-            text, contentDesc, resourceId: anc.resourceId || resourceId, className,
-            clickable: true, checkable: false, isPassword: false,
-          });
+          if (!anc.claimed) { anc.claimed = true; anc.claimedLabel = text.split('\n')[0].trim(); }
         } else {
           pushElement({ elementType: 'text', bounds, text, contentDesc, resourceId, className, clickable, checkable, isPassword });
         }
@@ -200,9 +290,33 @@ export function parseNativeUiDump(xml: string, opts: { screenW?: number; screenH
 
     if (!selfClosing && !className.includes('DecorView')) {
       stack.push({
-        isClickable: clickable, hasOwnLabel: !!ownLabel, bounds, validBounds,
-        resourceId, contentDesc, className, claimed: false, emittedSelf,
+        interactive, bounds, validBounds, resourceId, contentDesc, className,
+        claimed: false, claimedLabel: '', emittedSelf, containsInput: false,
       });
+    }
+  }
+
+  // Associate a human label with inputs that only have an id-like label. A field's
+  // label/placeholder sits inside or just above the field and overlaps it
+  // horizontally; validation errors sit below. So require horizontal overlap +
+  // vertically inside-or-just-above, exclude error text, and pick the topmost.
+  const inputsNeedingLabel = elements.filter(e => e.elementType === 'input' && !e.text.trim() && !e.contentDesc.trim());
+  if (inputsNeedingLabel.length) {
+    const textEls = elements.filter(e => e.elementType === 'text');
+    const ERRORISH = /wajib|harus|required|invalid|tidak valid|min\.|maks|max /i;
+    for (const inp of inputsNeedingLabel) {
+      const b = inp.bounds;
+      let best: typeof textEls[number] | null = null, bestTop = Infinity;
+      for (const t of textEls) {
+        if (t.text.length > 30 || ERRORISH.test(t.text)) continue;
+        const overlapsX = t.bounds.x1 < b.x2 && t.bounds.x2 > b.x1;
+        const insideOrAbove = t.bounds.y2 <= b.y2 + 8 && t.bounds.y2 >= b.y1 - 140;
+        if (!overlapsX || !insideOrAbove) continue;
+        // Prefer the text closest to the field's top edge
+        const gap = Math.abs(t.bounds.y1 - b.y1);
+        if (gap < bestTop) { bestTop = gap; best = t; }
+      }
+      if (best) inp.label = best.text.split('\n')[0].slice(0, 80);
     }
   }
 
@@ -237,9 +351,23 @@ export function findNativeElement(elements: NativeElement[], finder: NativeFinde
 // ─── Device interaction ────────────────────────────────────────────────────────
 
 async function dumpHierarchy(runner: MobileRunnerConfig): Promise<string> {
-  const cmd = adb(runner, 'shell uiautomator dump /sdcard/ui.xml 2>/dev/null') +
-    ` && ${ADB_ENV}adb ${deviceArg(runner)} shell cat /sdcard/ui.xml 2>/dev/null`;
-  const result = await execSSHWithConfig(cmd, runner, 20000);
+  // `--compressed` is the primary path: it returns immediately and reliably,
+  // whereas plain `uiautomator dump` first waits ~10s for the app to go idle —
+  // React Native (JS bridge / Animated loops) and indeterminate spinners never
+  // idle, so plain fails with "could not get idle state" AND that 10s stall lets
+  // transient UI (e.g. "field required" validation) disappear before the dump
+  // runs. Compressed keeps every accessibility-relevant node (inputs, buttons,
+  // text, validation messages) — verified capturing validation that plain misses
+  // entirely. Plain is only a fallback for the rare device where compressed is
+  // empty.
+  const dev = deviceArg(runner);
+  const script = [
+    'rm -f /sdcard/ui.xml',
+    'uiautomator dump --compressed /sdcard/ui.xml >/dev/null 2>&1',
+    'grep -q "<hierarchy" /sdcard/ui.xml 2>/dev/null || uiautomator dump /sdcard/ui.xml >/dev/null 2>&1',
+  ].join('; ');
+  const cmd = `${ADB_ENV}adb ${dev} shell '${script}' && ${ADB_ENV}adb ${dev} shell cat /sdcard/ui.xml 2>/dev/null`;
+  const result = await execSSHWithConfig(cmd, runner, 30000);
   return result.output;
 }
 
@@ -273,6 +401,7 @@ export class AndroidNativeDriver implements MobileDriver {
 
   /** List 3rd-party packages installed on the device (for the app picker). */
   async listApps(runner: MobileRunnerConfig): Promise<string[]> {
+    runner = await withResolvedDevice(runner);
     const result = await execSSHWithConfig(adb(runner, 'shell pm list packages -3'), runner, 15000);
     return result.output
       .split('\n')
@@ -282,6 +411,7 @@ export class AndroidNativeDriver implements MobileDriver {
   }
 
   async launchApp(runner: MobileRunnerConfig, appId: string): Promise<void> {
+    runner = await withResolvedDevice(runner);
     await execSSHWithConfig(
       adb(runner, `shell monkey -p ${appId} -c android.intent.category.LAUNCHER 1`),
       runner, 15000,
@@ -289,12 +419,33 @@ export class AndroidNativeDriver implements MobileDriver {
     await new Promise(r => setTimeout(r, 2500));
   }
 
+  /** Foreground app package from the window manager — more reliable than parsing
+   *  node package= attrs (which compressed dumps sometimes omit or fill with the
+   *  launcher). Excludes launchers / system UI. */
+  private async foregroundPackage(runner: MobileRunnerConfig): Promise<string> {
+    try {
+      const r = await execSSHWithConfig(adb(runner, 'shell dumpsys window'), runner, 10000);
+      const m = r.output.match(/mCurrentFocus=Window\{[^}]*?([\w.]+)\/[\w.]+\}/)
+        || r.output.match(/mFocusedApp=ActivityRecord\{[^}]*?\s([\w.]+)\/[\w.]+/);
+      const pkg = m ? m[1] : '';
+      // Ignore launchers, system UI, and transient system dialogs (permission
+      // prompts, package installer, IME) — none of those are the app under test.
+      if (!pkg || /launcher|systemui|permissioncontroller|packageinstaller|inputmethod|^android$/.test(pkg)) return '';
+      return pkg;
+    } catch {
+      return '';
+    }
+  }
+
   async captureScreen(runner: MobileRunnerConfig): Promise<ScreenSnapshot> {
+    runner = await withResolvedDevice(runner);
     const size = await getScreenSize(runner);
-    const [xml, shot] = await Promise.all([dumpHierarchy(runner), screenshot(runner)]);
+    const [xml, shot, fgPkg] = await Promise.all([dumpHierarchy(runner), screenshot(runner), this.foregroundPackage(runner)]);
     const elements = parseNativeUiDump(xml, { screenW: size.w, screenH: size.h });
-    logger.info(`[NativeDriver] Screen captured: ${elements.length} elements (${elements.filter(e => e.elementType === 'input').length} inputs, ${elements.filter(e => e.elementType === 'button').length} buttons)`);
-    return { screenshot: shot, elements, screenW: size.w, screenH: size.h };
+    const currentPackage = fgPkg || detectPackage(xml);
+    const unlabeledInteractive = countUnlabeledInteractive(xml, { screenW: size.w, screenH: size.h });
+    logger.info(`[NativeDriver] Screen captured: ${elements.length} elements (${elements.filter(e => e.elementType === 'input').length} inputs, ${elements.filter(e => e.elementType === 'button').length} buttons), pkg=${currentPackage || 'unknown'}, unlabeled=${unlabeledInteractive}`);
+    return { screenshot: shot, elements, screenW: size.w, screenH: size.h, currentPackage, unlabeledInteractive };
   }
 
   /** Locate an element NOW (fresh dump) and return its tap point. */
@@ -325,11 +476,21 @@ export class AndroidNativeDriver implements MobileDriver {
     const startTime = Date.now();
     const logs: string[] = [];
     const screenshots: string[] = [];
+    runner = await withResolvedDevice(runner);
     const size = await getScreenSize(runner);
 
     if (opts.appId) {
       logs.push(`Launching app: ${opts.appId}`);
       await this.launchApp(runner, opts.appId);
+      // Wait until the app has rendered something (cold start, esp. React Native,
+      // can take several seconds) before replaying the first step.
+      const readyStart = Date.now();
+      while (Date.now() - readyStart < 12000) {
+        const xml = await dumpHierarchy(runner);
+        if (parseNativeUiDump(xml, { screenW: size.w, screenH: size.h }).length > 0) break;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      logs.push(`  → App ready after ${((Date.now() - readyStart) / 1000).toFixed(1)}s`);
     }
 
     try {

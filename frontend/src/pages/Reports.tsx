@@ -26,7 +26,7 @@ const Reports: React.FC = () => {
   }, [dispatch, dateRange])
 
   const trendChartData =
-    summary?.trendData.map((d) => ({
+    summary?.trendData?.map((d) => ({
       name: d.date,
       passed: d.passed,
       failed: d.failed,
@@ -46,7 +46,7 @@ const Reports: React.FC = () => {
   ]
 
   const topFailures =
-    summary?.topFailures.map((f) => ({
+    summary?.topFailures?.map((f) => ({
       test_case_title: f.title,
       failure_count: f.failCount,
       percentage: f.failCount,

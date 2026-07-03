@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseNativeUiDump, findNativeElement } from './native-android-driver';
+import { parseNativeUiDump, findNativeElement, parseAdbDevices, pickDevice, detectPackage, countUnlabeledInteractive } from './native-android-driver';
 
 const node = (attrs: Record<string, string>) => {
   const defaults: Record<string, string> = {
@@ -101,5 +101,126 @@ describe('findNativeElement', () => {
 
   it('returns null when nothing matches', () => {
     expect(findNativeElement(els, { strategy: 'text', value: 'tidak ada' })).toBeNull();
+  });
+});
+
+// React Native pattern: touchables are clickable/focusable containers whose label
+// is a child TextView; inputs are EditTexts with no own text, labelled by a
+// nearby TextView. The naive parser produced a button AND a duplicate text per
+// touchable, and labelled inputs by resource-id.
+const RN_FIXTURE = `<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node class="android.view.ViewGroup" resource-id="com.app:id/button_login" clickable="true" focusable="true" bounds="[40,800][1040,920]">
+    <node class="android.widget.TextView" text="Masuk" bounds="[460,840][620,880]" />
+  </node>
+  <node class="android.view.ViewGroup" resource-id="com.app:id/button_register_now" clickable="false" focusable="true" bounds="[40,1000][1040,1080]">
+    <node class="android.widget.TextView" text="Daftar yuk!" bounds="[440,1020][640,1060]" />
+  </node>
+  <node class="android.view.ViewGroup" clickable="true" focusable="true" content-desc="Jelajahi Fitur" bounds="[40,100][1040,200]">
+    <node class="android.widget.TextView" text="Jelajahi Fitur" bounds="[400,130][680,170]" />
+  </node>
+  <node class="android.widget.EditText" resource-id="com.app:id/input_email" clickable="true" focusable="true" bounds="[40,400][1040,520]" />
+  <node class="android.widget.TextView" text="Email" bounds="[60,420][260,470]" />
+</hierarchy>`;
+
+describe('parseNativeUiDump — React Native touchables & inputs', () => {
+  const els = parseNativeUiDump(RN_FIXTURE, { screenW: 1080, screenH: 2400 });
+  const byType = (t: string) => els.filter(e => e.elementType === t);
+
+  it('emits ONE button per touchable (no duplicate standalone text)', () => {
+    const masuk = els.filter(e => e.label === 'Masuk');
+    expect(masuk.length).toBe(1);
+    expect(masuk[0].elementType).toBe('button');
+    expect(masuk[0].finderStrategy).toBe('resource-id');
+    // the child "Masuk" TextView must NOT also appear as a standalone text
+    expect(byType('text').some(e => e.label === 'Masuk')).toBe(false);
+  });
+
+  it('treats a focusable-only touchable with a button-ish id as a button', () => {
+    const reg = els.find(e => e.label === 'Daftar yuk!');
+    expect(reg?.elementType).toBe('button');
+    expect(reg?.finderValue).toBe('com.app:id/button_register_now');
+  });
+
+  it('does not duplicate a self-described touchable (content-desc + child text)', () => {
+    expect(els.filter(e => e.label === 'Jelajahi Fitur').length).toBe(1);
+  });
+
+  it('labels an id-only input from its nearby label text', () => {
+    const input = byType('input')[0];
+    expect(input.label).toBe('Email');
+    expect(input.finderStrategy).toBe('resource-id');
+    expect(input.finderValue).toBe('com.app:id/input_email');
+  });
+});
+
+describe('device auto-detection', () => {
+  const DEVICES = `List of devices attached
+emulator-5554\tdevice
+RF8M30ABCDE\tdevice
+0123offline\toffline
+`;
+
+  it('parses only devices in "device" state', () => {
+    expect(parseAdbDevices(DEVICES)).toEqual(['emulator-5554', 'RF8M30ABCDE']);
+  });
+
+  it('prefers a real device over an emulator (even when emulator is configured)', () => {
+    expect(pickDevice(['emulator-5554', 'RF8M30ABCDE'], 'emulator-5554')).toBe('RF8M30ABCDE');
+  });
+
+  it('autodetects the only connected device when config is stale', () => {
+    expect(pickDevice(['RF8M30ABCDE'], 'emulator-5554')).toBe('RF8M30ABCDE');
+  });
+
+  it('respects an explicit real-device config when it is connected', () => {
+    expect(pickDevice(['emulator-5554', 'RF8M30ABCDE', 'RF8M30FGHIJ'], 'RF8M30FGHIJ')).toBe('RF8M30FGHIJ');
+  });
+
+  it('falls back to the emulator when no real device is connected', () => {
+    expect(pickDevice(['emulator-5554'], 'emulator-5554')).toBe('emulator-5554');
+  });
+
+  it('returns the configured id when nothing is connected', () => {
+    expect(pickDevice([], 'emulator-5554')).toBe('emulator-5554');
+  });
+});
+
+describe('countUnlabeledInteractive', () => {
+  const XML = `<hierarchy>
+    <node class="android.view.ViewGroup" clickable="true" bounds="[816,120][1032,240]" />
+    <node class="android.widget.Button" resource-id="com.app:id/ok" clickable="true" bounds="[40,560][1040,660]" />
+    <node class="android.widget.TextView" text="Hello" clickable="false" bounds="[40,200][600,260]" />
+    <node class="android.widget.ImageButton" content-desc="Back" clickable="true" bounds="[0,0][120,120]" />
+  </hierarchy>`;
+
+  it('counts only interactive leaves with no id/label', () => {
+    // only the first node (clickable, no text/desc/id) qualifies
+    expect(countUnlabeledInteractive(XML, { screenW: 1080, screenH: 2340 })).toBe(1);
+  });
+
+  it('returns 0 when every control is labelled', () => {
+    const ok = `<hierarchy><node class="android.widget.Button" resource-id="x" clickable="true" bounds="[0,0][100,100]" /></hierarchy>`;
+    expect(countUnlabeledInteractive(ok)).toBe(0);
+  });
+});
+
+describe('detectPackage', () => {
+  it('returns the dominant app package, ignoring system UI', () => {
+    const xml = `<hierarchy>
+      <node package="com.android.systemui" text="" />
+      <node package="com.one.ifg.uat" text="Masuk" />
+      <node package="com.one.ifg.uat" text="Password" />
+      <node package="com.one.ifg.uat" text="Login" />
+    </hierarchy>`;
+    expect(detectPackage(xml)).toBe('com.one.ifg.uat');
+  });
+
+  it('ignores launcher packages', () => {
+    const xml = `<hierarchy>
+      <node package="com.huawei.android.launcher" />
+      <node package="com.huawei.android.launcher" />
+    </hierarchy>`;
+    expect(detectPackage(xml)).toBe('');
   });
 });

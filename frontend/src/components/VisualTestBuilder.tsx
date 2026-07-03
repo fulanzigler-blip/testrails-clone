@@ -50,6 +50,7 @@ interface ElementCatalog {
   responseModels?: Array<{ fieldName: string; fieldType: string; modelClass: string; sourceFile: string }>;
   dynamicContentHints?: Array<{ screenFile: string; screenName: string; widgetPattern: string; description: string; responseFields: any[] }>;
   source?: 'ssh' | 'hybrid' | 'native-uiautomator';
+  unlabeledInteractive?: number;   // clickable controls with no id/label (native)
 }
 
 interface TestStep {
@@ -851,7 +852,7 @@ const LiveViewPanel: React.FC<{
     setScanning(true); setError(''); setPickedEl(null); setPickPos(null); setScannedElements([]);
     if (!auto && intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     try {
-      const resp = await api.post('/integration-tests/screen-elements', { runnerId }, { timeout: 40000 });
+      const resp = await api.post('/integration-tests/screen-elements', { runnerId, platform: isFlutter ? 'flutter' : 'android' }, { timeout: 40000 });
       const els: LiveElement[] = resp.data?.data?.elements || [];
       const freshShot: string | undefined = resp.data?.data?.screenshot;
       if (freshShot) { setScreenshot(freshShot); setLastUpdated(Date.now()); prevScreenshotRef.current = freshShot; }
@@ -1269,6 +1270,7 @@ const VisualTestBuilder: React.FC = () => {
 
   // List installed apps on the runner's device (native platforms)
   const loadDeviceApps = async () => {
+    if (platform === 'flutter') return;  // native app list only applies to android/ios
     setLoadingApps(true);
     try {
       const resp = await api.get('/native-tests/apps', { params: { runnerId: selectedRunner || undefined, platform } });
@@ -1335,8 +1337,13 @@ const VisualTestBuilder: React.FC = () => {
           runnerId: selectedRunner || undefined,
           appId: nativeAppId.trim() || undefined,
         }, { timeout: 120000 });
-        revealCatalog(resp.data?.data || resp.data);
-        if (nativeAppId.trim()) localStorage.setItem('vtb_native_app_id', nativeAppId.trim());
+        const data = resp.data?.data || resp.data;
+        revealCatalog(data);
+        // Auto-fill the app package from the detected foreground app, so the
+        // recorded test can relaunch it on run even if the user didn't pick one.
+        const detected = (nativeAppId.trim() || data?.appId || '').trim();
+        if (detected && detected !== nativeAppId) setNativeAppId(detected);
+        if (detected) localStorage.setItem('vtb_native_app_id', detected);
       } catch (err: any) {
         setScanError(err.response?.data?.error?.message || err.message || 'Scan failed');
       } finally {
@@ -1399,6 +1406,9 @@ const VisualTestBuilder: React.FC = () => {
 
   const handleGenerate = async () => {
     if (steps.length === 0) { setError('Add at least one step'); return; }
+    // New generation = a new test case can be saved again (reset prior save state)
+    setSavedTestCase(null);
+    setTestResult(null);
 
     if (platform !== 'flutter') {
       // Native: the "code" is a replay manifest (JSON steps), executed by the
@@ -1546,7 +1556,7 @@ const VisualTestBuilder: React.FC = () => {
     <div className="space-y-4">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Visual Test Builder</h1>
+        <h1 className="text-2xl font-bold">Mobile Test Builder</h1>
         <p className="text-muted-foreground">Scan your mobile app (Flutter, native Android), pick elements, compose test scenarios</p>
       </div>
 
@@ -1857,22 +1867,35 @@ const VisualTestBuilder: React.FC = () => {
               )}
             </div>
 
-            {/* Credentials */}
-            {catalog.auth?.credentials?.length ? (
-              <div className="flex gap-2 mb-4">
-                <Label className="text-sm self-center">Credentials:</Label>
-                {catalog.auth.credentials.map((c, i) => (
-                  <Button key={i} variant={credentials.email === c.email ? 'default' : 'outline'} size="sm"
-                    onClick={() => setCredentials({ email: c.email, password: c.password })}>
-                    {c.role}: {c.email}
-                  </Button>
-                ))}
+            {/* Warn about interactive controls with no id/label — can't be automated reliably */}
+            {!!catalog.unlabeledInteractive && catalog.unlabeledInteractive > 0 && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2 text-xs">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  <strong>{catalog.unlabeledInteractive}</strong> interactive element{catalog.unlabeledInteractive > 1 ? 's have' : ' has'} no id/label and {catalog.unlabeledInteractive > 1 ? "weren't" : "wasn't"} added to the catalog.
+                  Ask the developer to set a <code className="bg-amber-100 px-1 rounded">testID</code> / <code className="bg-amber-100 px-1 rounded">accessibilityLabel</code> (Android <code className="bg-amber-100 px-1 rounded">resource-id</code> / <code className="bg-amber-100 px-1 rounded">contentDescription</code>) so they can be automated reliably.
+                </span>
               </div>
-            ) : (
-              <div className="flex gap-2 mb-4">
-                <Input placeholder="Email" className="w-48" value={credentials.email} onChange={e => setCredentials(p => ({...p, email: e.target.value}))} />
-                <Input placeholder="Password" className="w-48" value={credentials.password} onChange={e => setCredentials(p => ({...p, password: e.target.value}))} />
-              </div>
+            )}
+
+            {/* Credentials (Flutter login-test convenience; native enters text via steps) */}
+            {platform === 'flutter' && (
+              catalog.auth?.credentials?.length ? (
+                <div className="flex gap-2 mb-4">
+                  <Label className="text-sm self-center">Credentials:</Label>
+                  {catalog.auth.credentials.map((c, i) => (
+                    <Button key={i} variant={credentials.email === c.email ? 'default' : 'outline'} size="sm"
+                      onClick={() => setCredentials({ email: c.email, password: c.password })}>
+                      {c.role}: {c.email}
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex gap-2 mb-4">
+                  <Input placeholder="Email" className="w-48" value={credentials.email} onChange={e => setCredentials(p => ({...p, email: e.target.value}))} />
+                  <Input placeholder="Password" className="w-48" value={credentials.password} onChange={e => setCredentials(p => ({...p, password: e.target.value}))} />
+                </div>
+              )
             )}
 
             {/* Screen-by-screen element list */}
@@ -2058,10 +2081,10 @@ const VisualTestBuilder: React.FC = () => {
                 <Button onClick={handleRun} disabled={running || !generatedCode} size="sm" variant="secondary">
                   {running ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />} Run Test
                 </Button>
-                {testResult && (
-                  <Button onClick={handleSaveAsTestCase} disabled={savingTestCase || savedTestCase} size="sm" variant="outline" className="border-blue-300 text-blue-600">
+                {generatedCode && (
+                  <Button onClick={handleSaveAsTestCase} disabled={savingTestCase || !!savedTestCase} size="sm" variant="outline" className="border-blue-300 text-blue-600">
                     {savingTestCase ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <FileText className="w-3 h-3 mr-1" />}
-                    {savedTestCase ? '✓ Saved!' : 'Save as Test Case'}
+                    {savedTestCase ? '✓ Saved!' : testResult ? 'Save as Test Case' : 'Save (no run)'}
                   </Button>
                 )}
                 {platform === 'flutter' && (

@@ -75,6 +75,7 @@ Three places use `buildTypeFinder()` in `integration-tests.ts` (tap, enter_text,
 - Native finders: resource-id → content-desc → text (contains, case-insensitive — dynamic data) → bounds center
 - Routes `/api/v1/native-tests`: GET /apps (pm list packages -3), POST /scan, /screen, /run
 - Native "generated code" = JSON replay manifest (steps), not compiled code
+- React Native / never-idle apps: plain `uiautomator dump` fails with "could not get idle state" (RN renders continuously). `dumpHierarchy` clears stale file, tries plain, falls back to `uiautomator dump --compressed`. Verified on a real RN app (0 → 95 nodes). RN testID → resource-id; <Text> → TextView with text, so the parser handles RN like any native app.
 - `AppProfile.platform` (default "flutter") + `AppProfile.appId` columns added (applied via psql)
 - Unit tests: `native-android-driver.test.ts` (dump parser fixtures)
 

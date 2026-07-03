@@ -23,6 +23,40 @@ import { hybridScanFlutterProject, mergeScanResults, HybridScannerConfig } from 
 import { execSSH, writeFileSSH, writeFileSSHWithRunner, execSSHWithConfig, execSSHBinary, type SSHRunnerConfig } from '../utils/ssh-client';
 import { discoverAppContext, captureHierarchy } from '../utils/flutter-scanner';
 import { generateDartCode } from '../utils/dart-codegen';
+import { androidNativeDriver, parseAdbDevices, pickDevice } from '../utils/native-android-driver';
+import { getMobileDriver } from '../utils/mobile-driver';
+
+// Resolve the Flutter test target device from `adb devices` on the runner,
+// preferring a connected real device over an emulator. Falls back to the
+// configured deviceId (or emulator-5554) when detection isn't possible.
+async function resolveFlutterDeviceId(runner: any): Promise<string> {
+  const fallback = runner?.deviceId || 'emulator-5554';
+  try {
+    const env = 'export ANDROID_HOME="$HOME/Library/Android/sdk" && export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ';
+    const r = await execSSHWithConfig(`${env}adb devices`, runner, 10000);
+    const chosen = pickDevice(parseAdbDevices(r.output), runner?.deviceId);
+    if (chosen && chosen !== runner?.deviceId) {
+      logger.info(`[IntegrationTest] Auto-selected device "${chosen}" (configured: "${runner?.deviceId || 'none'}")`);
+    }
+    return chosen || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+// Cached `-s <serial>` for the high-frequency live-view endpoints (screenshot is
+// polled). Resolves the real device via adb but caches per runner for 30s so we
+// don't run `adb devices` on every poll.
+const _deviceArgCache = new Map<string, { arg: string; ts: number }>();
+async function deviceArgFor(runner: any): Promise<string> {
+  const key = `${runner?.host}|${runner?.deviceId || ''}`;
+  const cached = _deviceArgCache.get(key);
+  if (cached && Date.now() - cached.ts < 30000) return cached.arg;
+  const id = await resolveFlutterDeviceId(runner);
+  const arg = id ? `-s ${id}` : '';
+  _deviceArgCache.set(key, { arg, ts: Date.now() });
+  return arg;
+}
 import { startFlutterSession, stopFlutterSession, getSession, listSessions, vmServiceRpc } from '../utils/flutter-session';
 import { parseWidgetTree } from '../utils/flutter-vm-service';
 import type { AppContext } from '../utils/flutter-scanner';
@@ -297,7 +331,7 @@ async function executeTestWithRunner(testFileName: string, noBuild: boolean, run
   if (!runner) return executeTest(testFileName, noBuild);
 
   const projectPath = overrideProjectPath || runner.projectPath;
-  const deviceId = runner.deviceId || 'emulator-5554';
+  const deviceId = await resolveFlutterDeviceId(runner);
   const ts = Date.now();
   const scriptPath = `/tmp/run_test_${ts}.sh`;
   const tempKeyPath = `/tmp/gh_key_${ts}`;
@@ -1191,6 +1225,31 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       if (!runner) runner = await prisma.runner.findFirst({ where: { isDefault: true } });
       if (!runner) runner = await prisma.runner.findFirst({ orderBy: { createdAt: 'asc' } });
 
+      // Native test cases are saved as a JSON replay manifest (platform/appId/steps),
+      // not Dart. Detect and replay via the black-box driver — which launches the
+      // app (appId) before running, so re-run works even if the app was closed.
+      let nativeManifest: any = null;
+      try {
+        const parsed = JSON.parse(dartCode);
+        if (parsed && parsed.platform && parsed.platform !== 'flutter' && Array.isArray(parsed.steps)) nativeManifest = parsed;
+      } catch { /* not JSON → Flutter dart code */ }
+
+      if (nativeManifest) {
+        if (!runner) return errorResponses.badRequest(reply, 'No runner configured for native test');
+        logger.info(`[TestRun] Re-running NATIVE test case "${tc.title}" (platform=${nativeManifest.platform}, app=${nativeManifest.appId || 'none'}) on ${runner.name}`);
+        const driver = getMobileDriver(nativeManifest.platform);
+        const runnerCfg = {
+          host: runner.host,
+          username: runner.username,
+          sshKeyPath: runner.sshKeyPath || '/home/clawdbot/.ssh/id_ed25519',
+          deviceId: runner.deviceId || '',
+        };
+        const result = await driver.runSteps(runnerCfg, nativeManifest.steps, { appId: nativeManifest.appId });
+        await prisma.testCase.update({ where: { id }, data: { status: result.success ? 'active' as const : 'draft' as const } });
+        logger.info(`[TestRun] Native test "${tc.title}" ${result.success ? 'passed' : 'failed'} in ${result.duration}ms`);
+        return successResponse(reply, { success: result.success, output: result.output, duration: result.duration, screenshots: result.screenshots, testCaseId: id, testCaseTitle: tc.title }, undefined);
+      }
+
       logger.info(`[TestRun] Re-running test case "${tc.title}" on runner: ${runner?.name || 'default'}`);
 
       // Write test file
@@ -1631,7 +1690,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       const { runnerId } = request.query as { runnerId?: string };
       const runner = await resolveRunnerSSH(runnerId);
 
-      const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+      const deviceArg = await deviceArgFor(runner);
       const cmd =
         'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
         'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ' +
@@ -1660,7 +1719,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
       }
 
       const runner = await resolveRunnerSSH(runnerId);
-      const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+      const deviceArg = await deviceArgFor(runner);
       const cmd =
         'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
         'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ' +
@@ -1683,7 +1742,7 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
     try {
       const { x, y, runnerId } = request.body as { x: number; y: number; runnerId?: string };
       const runner = await resolveRunnerSSH(runnerId);
-      const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+      const deviceArg = await deviceArgFor(runner);
       const adbEnv =
         'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
         'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ';
@@ -1717,9 +1776,35 @@ export default async function integrationTestRoutes(fastify: FastifyInstance) {
     onRequest: [fastify.authenticate],
   }, async (request: any, reply) => {
     try {
-      const { runnerId } = request.body as { runnerId?: string };
+      const { runnerId, platform } = request.body as { runnerId?: string; platform?: string };
       const runner = await resolveRunnerSSH(runnerId);
-      const deviceArg = runner.deviceId ? `-s ${runner.deviceId}` : '';
+
+      // Native platforms (android/ios): use the black-box UIAutomator parser — the
+      // same one the Element Catalog uses — so inputs/buttons/text are classified
+      // correctly (the Flutter source-scan below would mislabel a native app).
+      if (platform && platform !== 'flutter') {
+        const snap = await androidNativeDriver.captureScreen(runner);
+        const liveElements = snap.elements.map((e) => ({
+          text: e.label,
+          contentDesc: e.contentDesc,
+          resourceId: e.resourceId,
+          idShort: (e.resourceId || '').split('/').pop() || '',
+          className: e.className,
+          clickable: e.clickable,
+          isInput: e.elementType === 'input',
+          isCheckable: e.checkable,
+          bounds: `[${e.bounds.x1},${e.bounds.y1}][${e.bounds.x2},${e.bounds.y2}]`,
+          x1: e.bounds.x1, y1: e.bounds.y1, x2: e.bounds.x2, y2: e.bounds.y2,
+          selector: e.resourceId ? `[resource-id="${e.resourceId}"]` : `[text="${e.label}"]`,
+          elementType: e.elementType,
+          finderStrategy: e.finderStrategy,
+          finderValue: e.finderValue,
+        }));
+        logger.info(`[LiveView] Native scan: ${liveElements.filter(e => e.isInput).length} inputs, ${liveElements.filter(e => e.elementType === 'button').length} buttons, ${liveElements.filter(e => e.elementType === 'text').length} texts`);
+        return successResponse(reply, { elements: liveElements, screenshot: snap.screenshot }, undefined);
+      }
+
+      const deviceArg = await deviceArgFor(runner);
       const adbEnv =
         'export ANDROID_HOME="$HOME/Library/Android/sdk" && ' +
         'export PATH="$ANDROID_HOME/platform-tools:/usr/local/bin:/opt/homebrew/bin:$PATH" && ';

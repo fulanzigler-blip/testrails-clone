@@ -11,7 +11,10 @@ export default async function projectRoutes(fastify: FastifyInstance) {
   }, async (request: any, reply) => {
     try {
       const organizationId = request.organizationId;
-      const { page = 1, perPage = 20, search } = request.query as any;
+      const { search } = request.query as any;
+      // Query params arrive as strings — coerce to Int, else Prisma's take/skip throw
+      const page = Math.max(parseInt((request.query as any).page) || 1, 1);
+      const perPage = Math.min(Math.max(parseInt((request.query as any).perPage) || 20, 1), 200);
 
       const where: any = { organizationId };
       if (search) {
