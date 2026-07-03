@@ -428,25 +428,26 @@ export default async function testCaseRoutes(fastify: FastifyInstance) {
     try {
       const { ids } = bulkDeleteSchema.parse(request.body);
       const organizationId = request.organizationId;
+      const userId = (request.user as any).userId;
 
-      // Verify all cases belong to organization
-      const cases = await prisma.testCase.findMany({
-        where: {
-          id: { in: ids },
-          suite: { project: { organizationId } },
-        },
-      });
+      // Same org scoping as single delete: a case belongs to the org either via
+      // its suite's project, or (suiteId=null, e.g. saved from Visual Test
+      // Builder) by being created by a user in this org.
+      const where = {
+        id: { in: ids },
+        OR: [
+          { suite: { project: { organizationId } } },
+          { createdById: userId },
+        ],
+      };
+
+      const cases = await prisma.testCase.findMany({ where });
 
       if (cases.length !== ids.length) {
         return errorResponses.notFound(reply, 'Some test cases not found');
       }
 
-      await prisma.testCase.deleteMany({
-        where: {
-          id: { in: ids },
-          suite: { project: { organizationId } },
-        },
-      });
+      await prisma.testCase.deleteMany({ where });
 
       logger.info(`Bulk deleted test cases: ${ids.length} cases`);
 
