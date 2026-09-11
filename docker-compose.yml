@@ -28,8 +28,10 @@ services:
       dockerfile: Dockerfile
     container_name: testrails-frontend
     restart: unless-stopped
+    volumes:
+      - ./custom-nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "3002:80"
+      - "100.70.44.19:3002:80"
     networks:
       - testrails-network
     depends_on:
