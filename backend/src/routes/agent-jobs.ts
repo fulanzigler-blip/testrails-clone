@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
-import { successResponse, errorResponses } from '../utils/response';
+import { successResponse, errorResponses, errorResponse } from '../utils/response';
 import { randomUUID } from 'crypto';
 import Redis from 'ioredis';
 
@@ -16,6 +16,26 @@ function redis(): Redis {
 
 // ─── GET /agent-jobs — list (filter by status/type) ──────────────────────
 export default async function agentJobRoutes(fastify: FastifyInstance) {
+
+  // worker token OR user JWT (workers only hold shared token)
+  const workerOrUserAuth = async (req: any, reply: any) => {
+    const wt = req.headers["x-worker-token"];
+    if (process.env.AGENT_WORKER_TOKEN && wt === process.env.AGENT_WORKER_TOKEN) {
+      (req as any).workerId = (req.headers["x-worker-id"] as string) || "worker-unknown";
+      return;
+    }
+    await fastify.authenticate(req, reply);
+  };
+
+  const requireClaimer = async (req: any, reply: any) => {
+    const job = await prisma.agentJob.findUnique({ where: { id: (req.params as any).id } });
+    if (!job) return errorResponses.notFound(reply, "Job");
+    const wid = (req as any).workerId;
+    if (wid && job.claimedBy !== wid) {
+      return errorResponse(reply, "JOB_NOT_CLAIMED_BY_WORKER", "job is claimed by another worker", 403);
+    }
+  };
+
   // LIST
   fastify.get('/agent-jobs', { onRequest: [fastify.authenticate] }, async (req: any, reply) => {
     try {
@@ -107,7 +127,7 @@ export default async function agentJobRoutes(fastify: FastifyInstance) {
   });
 
   // HEARTBEAT / STATUS — worker updates running state
-  fastify.patch('/agent-jobs/:id', { onRequest: [fastify.authenticate] }, async (req: any, reply) => {
+  fastify.patch('/agent-jobs/:id', { preHandler: [workerOrUserAuth, requireClaimer] }, async (req: any, reply) => {
     try {
       const { id } = req.params as { id: string };
       const body = req.body as Record<string, any>;
@@ -125,7 +145,7 @@ export default async function agentJobRoutes(fastify: FastifyInstance) {
   });
 
   // SWEEP — requeue stale claims (no heartbeat for 60s); call via cron
-  fastify.post('/agent-jobs/sweep', { onRequest: [fastify.authenticate] }, async (_req, reply) => {
+  fastify.post('/agent-jobs/sweep', { onRequest: [workerOrUserAuth] }, async (_req, reply) => {
     try {
       const cutoff = new Date(Date.now() - STALE_CLAIM_SECONDS * 1000);
       const stale = await prisma.agentJob.findMany({
