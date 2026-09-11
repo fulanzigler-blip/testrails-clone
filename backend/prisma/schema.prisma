@@ -483,3 +483,47 @@ model AppProfile {
 
   @@map("app_profiles")
 }
+
+// ─── Agent–Engine contract v0.2 (docs/AGENT_CONTRACT.md) ────────────────
+enum AgentJobType {
+  explore
+  replay
+  repair
+  audit
+}
+
+enum AgentJobStatus {
+  queued
+  claimed
+  running
+  awaiting_approval
+  done
+  failed
+}
+
+model AgentJob {
+  id             String         @id @default(uuid())
+  type           AgentJobType
+  status         AgentJobStatus @default(queued)
+  priority       Int            @default(5)
+  appId          String?        @map("app_id")
+  platform       String         @default("android") // android | ios | web
+  target         Json           @default("{}") // {package, baseUrl, screens[]}
+  credentialsRef String?        @map("credentials_ref") // vault ref, never inline
+  guardrails     Json           @default("{}")
+  runnerId       String?        @map("runner_id")
+  deviceId       String?        @map("device_id")
+  requestedBy    String?        @map("requested_by")
+  claimedBy      String?        @map("claimed_by") // worker id
+  claimedAt      DateTime?      @map("claimed_at")
+  heartbeatAt    DateTime?      @map("heartbeat_at")
+  summary        String?
+  artifactIds    Json           @default("[]") @map("artifact_ids")
+  result         Json           @default("{}")
+  error          String?
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  @@index([status, priority, createdAt])
+  @@map("agent_jobs")
+}

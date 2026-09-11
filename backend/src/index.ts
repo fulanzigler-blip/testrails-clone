@@ -32,6 +32,7 @@ import integrationTestRoutes from './routes/integration-tests';
 import webIntegrationRoutes from './routes/web-integration-tests';
 import nativeTestRoutes from './routes/native-tests';
 import appProfileRoutes from './routes/app-profiles';
+import agentJobRoutes from './routes/agent-jobs';
 
 // Create Fastify instance
 const fastify = Fastify({
@@ -279,6 +280,7 @@ async function registerRoutes() {
   await fastify.register(webIntegrationRoutes, { prefix: '/api/v1/web-tests' });
   await fastify.register(nativeTestRoutes, { prefix: '/api/v1/native-tests' });
   await fastify.register(appProfileRoutes, { prefix: '/api/v1' });
+  await fastify.register(agentJobRoutes, { prefix: '/api/v1' });
 }
 
 // Start server
