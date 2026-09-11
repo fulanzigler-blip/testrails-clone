@@ -127,7 +127,7 @@ export default async function agentJobRoutes(fastify: FastifyInstance) {
   });
 
   // HEARTBEAT / STATUS — worker updates running state
-  fastify.patch('/agent-jobs/:id', { preHandler: [workerOrUserAuth, requireClaimer] }, async (req: any, reply) => {
+  fastify.patch('/agent-jobs/:id', { preHandler: [workerOrUserAuth, requireClaimer], bodyLimit: 15 * 1024 * 1024 }, async (req: any, reply) => {
     try {
       const { id } = req.params as { id: string };
       const body = req.body as Record<string, any>;
